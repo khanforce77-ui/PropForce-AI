@@ -145,3 +145,203 @@ describe('platform admin', () => {
     expect(JSON.stringify(users.body)).not.toMatch(/passwordHash|password_hash/);
   });
 });
+
+async function platformAdmin(email = 'root@platform.test') {
+  const admin = await createOwner(email, 'Platform HQ');
+  await t.owner.user.update({ where: { id: admin.userId }, data: { isPlatformAdmin: true } });
+  return admin;
+}
+
+async function setFlag(key: string, enabled: boolean) {
+  await t.owner.featureFlag.update({ where: { key }, data: { enabled } });
+}
+
+describe('platform controls', () => {
+  it('approval queue: new agencies wait, cannot publish or invite, then get approved or rejected', async () => {
+    const admin = await platformAdmin();
+    await setFlag('platform.require_agency_approval', true);
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    const done = await http().post('/v1/agency/onboarding/complete').set(a.h).expect(200);
+    expect(done.body).toMatchObject({ status: 'pending', approvalStatus: 'pending' });
+
+    const blocked = await http()
+      .post('/v1/invitations')
+      .set(a.h)
+      .send({ email: 'x@a.test', role: 'agent' })
+      .expect(403);
+    expect(blocked.body.code).toBe('AGENCY_AWAITING_APPROVAL');
+
+    // Agents of other agencies cannot use the platform routes.
+    await http().post(`/v1/platform/agencies/${a.tenantId}/approve`).set(a.auth).expect(403);
+
+    const approved = await http()
+      .post(`/v1/platform/agencies/${a.tenantId}/approve`)
+      .set(admin.auth)
+      .expect(200);
+    expect(approved.body).toMatchObject({ status: 'active', approvalStatus: 'approved' });
+    await http()
+      .post('/v1/invitations')
+      .set(a.h)
+      .send({ email: 'x@a.test', role: 'agent' })
+      .expect(201);
+
+    const b = await createOwner('owner@b.test', 'Bravo Homes');
+    await http().post('/v1/agency/onboarding/complete').set(b.h).expect(200);
+    await http()
+      .post(`/v1/platform/agencies/${b.tenantId}/reject`)
+      .set(admin.auth)
+      .send({ reason: 'Trade licence could not be confirmed' })
+      .expect(200);
+    const after = await http().get('/v1/agency').set(b.h).expect(403);
+    expect(after.body.code).toBeDefined();
+    const me = await http().get('/v1/me').set(b.auth).expect(200);
+    expect(me.body.memberships[0].agency).toMatchObject({
+      status: 'cancelled',
+      approvalStatus: 'rejected',
+      statusReason: 'Trade licence could not be confirmed',
+    });
+
+    // Both sides of the record: the agency's audit log and the platform audit log.
+    const tenantAudit = await t.owner.auditLog.findMany({
+      where: { tenantId: a.tenantId, actorType: 'platform' },
+    });
+    expect(tenantAudit.map((r) => r.action)).toEqual(['platform.agency_approved']);
+    const log = await http().get('/v1/platform/audit-log').set(admin.auth).expect(200);
+    expect(log.body.data.map((r: { action: string }) => r.action)).toEqual([
+      'platform.agency_rejected',
+      'platform.agency_approved',
+    ]);
+    expect(log.body.data[0].after.by).toBe('root@platform.test');
+  });
+
+  it('suspends and reactivates an agency', async () => {
+    const admin = await platformAdmin();
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    await http().post('/v1/agency/onboarding/complete').set(a.h).expect(200);
+    await http()
+      .post(`/v1/platform/agencies/${a.tenantId}/suspend`)
+      .set(admin.auth)
+      .send({ reason: 'Unpaid invoice' })
+      .expect(200);
+    expect((await http().get('/v1/agency').set(a.h).expect(403)).body.code).toBe(
+      'TENANT_SUSPENDED',
+    );
+    await http()
+      .post(`/v1/platform/agencies/${a.tenantId}/suspend`)
+      .set(admin.auth)
+      .send({ reason: 'again' })
+      .expect(409);
+    const back = await http()
+      .post(`/v1/platform/agencies/${a.tenantId}/reactivate`)
+      .set(admin.auth)
+      .expect(200);
+    expect(back.body).toMatchObject({ status: 'active', statusReason: null });
+    await http().get('/v1/agency').set(a.h).expect(200);
+  });
+
+  it('enforces plan limits for seats and listings', async () => {
+    const admin = await platformAdmin();
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    await http()
+      .patch(`/v1/platform/agencies/${a.tenantId}`)
+      .set(admin.auth)
+      .send({ plan: 'starter', seatLimit: 2, listingLimit: 1 })
+      .expect(200);
+    await http()
+      .post('/v1/invitations')
+      .set(a.h)
+      .send({ email: 'one@a.test', role: 'agent' })
+      .expect(201);
+    // Re-inviting the same person replaces their pending invitation, so it still fits.
+    await http()
+      .post('/v1/invitations')
+      .set(a.h)
+      .send({ email: 'one@a.test', role: 'agent' })
+      .expect(201);
+    const seat = await http()
+      .post('/v1/invitations')
+      .set(a.h)
+      .send({ email: 'two@a.test', role: 'agent' })
+      .expect(409);
+    expect(seat.body.code).toBe('PLAN_LIMIT_REACHED');
+
+    const listing = {
+      listingType: 'sale',
+      propertyType: 'apartment',
+      emirate: 'Dubai',
+    };
+    await http().post('/v1/properties').set(a.h).send(listing).expect(201);
+    expect((await http().post('/v1/properties').set(a.h).send(listing).expect(409)).body.code).toBe(
+      'PLAN_LIMIT_REACHED',
+    );
+
+    await http()
+      .patch(`/v1/platform/agencies/${a.tenantId}`)
+      .set(admin.auth)
+      .send({ seatLimit: 0 })
+      .expect(400);
+    await http()
+      .patch(`/v1/platform/agencies/${a.tenantId}`)
+      .set(admin.auth)
+      .send({ listingLimit: null })
+      .expect(200);
+    await http().post('/v1/properties').set(a.h).send(listing).expect(201);
+  });
+
+  it('suspends a user everywhere at once, and reactivates them', async () => {
+    const admin = await platformAdmin();
+    const a = await createOwner('owner@a.test', 'Alpha Realty', false);
+    await http()
+      .post(`/v1/platform/users/${admin.userId}/suspend`)
+      .set(admin.auth)
+      .send({ reason: 'self' })
+      .expect(403);
+    await http()
+      .post(`/v1/platform/users/${a.userId}/suspend`)
+      .set(admin.auth)
+      .send({ reason: 'Reported for spam' })
+      .expect(200);
+    // The existing access token stops working immediately; signing in again is refused.
+    await http().get('/v1/me').set(a.auth).expect(401);
+    const login = await http()
+      .post('/v1/auth/login')
+      .send({ email: a.email, password: a.password })
+      .expect(403);
+    expect(login.body.code).toBe('ACCOUNT_SUSPENDED');
+
+    await http().post(`/v1/platform/users/${a.userId}/reactivate`).set(admin.auth).expect(200);
+    await http().post('/v1/auth/login').send({ email: a.email, password: a.password }).expect(200);
+  });
+
+  it('turns sign-ups off and on', async () => {
+    const admin = await platformAdmin();
+    const flags = await http().get('/v1/platform/settings').set(admin.auth).expect(200);
+    expect(flags.body.data.map((f: { key: string }) => f.key)).toEqual(
+      expect.arrayContaining([
+        'platform.allow_signups',
+        'platform.require_agency_approval',
+        'voice.outbound_calls',
+      ]),
+    );
+    await http()
+      .patch('/v1/platform/settings/platform.allow_signups')
+      .set(admin.auth)
+      .send({ enabled: false })
+      .expect(200);
+    const closed = await http()
+      .post('/v1/auth/register')
+      .send(registration({ email: 'late@c.test' }))
+      .expect(403);
+    expect(closed.body.code).toBe('SIGNUPS_CLOSED');
+    await http()
+      .patch('/v1/platform/settings/platform.allow_signups')
+      .set(admin.auth)
+      .send({ enabled: true })
+      .expect(200);
+    await http()
+      .patch('/v1/platform/settings/nope')
+      .set(admin.auth)
+      .send({ enabled: true })
+      .expect(404);
+  });
+});

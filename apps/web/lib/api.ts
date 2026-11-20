@@ -68,7 +68,15 @@ export type LoginResponse = TokenResponse | { mfaRequired: true; mfaToken: strin
 export interface Membership {
   id: string;
   role: Role;
-  agency: { id: string; name: string; slug: string; emirate: string; status: string };
+  agency: {
+    id: string;
+    name: string;
+    slug: string;
+    emirate: string;
+    status: string;
+    approvalStatus?: 'not_required' | 'pending' | 'approved' | 'rejected';
+    statusReason?: string | null;
+  };
 }
 export interface MeResponse {
   user: {
@@ -195,6 +203,11 @@ export interface PlatformAgency {
   owner: { fullName: string; email: string } | null;
   members: number;
   listings: number;
+  approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
+  statusReason: string | null;
+  plan: string;
+  seatLimit: number | null;
+  listingLimit: number | null;
 }
 
 export interface PlatformUser {
@@ -204,5 +217,25 @@ export interface PlatformUser {
   createdAt: string;
   emailVerifiedAt: string | null;
   lastLoginAt: string | null;
+  isPlatformAdmin: boolean;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
   memberships: { role: Role; agency: { id: string; name: string } }[];
+}
+
+export interface PlatformSetting {
+  key: string;
+  description: string | null;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export interface PlatformAuditEntry {
+  id: string;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  createdAt: string;
 }
