@@ -13,6 +13,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { CrmModule } from './crm/crm.module';
 import { PlatformModule } from './platform/platform.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { PortalModule } from './portal/portal.module';
 
 @Module({})
 export class AppModule {
@@ -53,6 +54,7 @@ export class AppModule {
         CrmModule,
         PlatformModule,
         WhatsAppModule,
+        PortalModule,
       ],
     };
   }

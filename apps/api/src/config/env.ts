@@ -49,6 +49,13 @@ const envSchema = z.object({
     .default('v21.0'),
   /** `fake` records sends in memory (development/test only). Default: fake locally, meta when deployed. */
   WHATSAPP_PROVIDER: z.enum(['meta', 'fake']).optional(),
+  /** Public URL of the property portal website (apps/portal), used in WhatsApp messages. */
+  PORTAL_PUBLIC_URL: z.url().default('http://localhost:3100'),
+  /**
+   * Shared secret the portal's server sends so the API can trust the visitor IP it forwards
+   * (used only for rate limiting). Without it, the API uses the connecting IP.
+   */
+  PORTAL_API_KEY: z.string().min(32).optional(),
 });
 
 export interface AppConfig {
@@ -69,6 +76,7 @@ export interface AppConfig {
   refreshTokenTtlDays: number;
   email: { smtpUrl?: string; from: string };
   authRateLimitPerMinute: number;
+  portal: { publicUrl: string; apiKey?: string };
   /** Undefined only in development/test, where a fixed, clearly non-secret key is used. */
   dataEncryptionKey?: Buffer;
   /** Cookies are Secure everywhere except local development and tests over plain HTTP. */
@@ -147,6 +155,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     refreshTokenTtlDays: e.REFRESH_TOKEN_TTL_DAYS,
     email: { ...(e.SMTP_URL ? { smtpUrl: e.SMTP_URL } : {}), from: e.EMAIL_FROM },
     authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
+    portal: {
+      publicUrl: e.PORTAL_PUBLIC_URL.replace(/\/$/, ''),
+      ...(e.PORTAL_API_KEY ? { apiKey: e.PORTAL_API_KEY } : {}),
+    },
     ...(encryptionKey ? { dataEncryptionKey: encryptionKey } : {}),
     secureCookies: deployed,
     whatsapp: {

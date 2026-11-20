@@ -109,3 +109,19 @@ export async function findWhatsAppAccountForWebhook(prisma: PrismaClient, phoneN
     });
   });
 }
+
+/**
+ * Runs `fn` as the anonymous public portal: read-only visibility of published listings (active,
+ * fresh, permitted, assigned to an active agent of an active agency) across all agencies, and the
+ * right to add enquiries and contact clicks for those listings. Nothing else tenant-scoped is
+ * visible. Callers must still pick only public columns.
+ */
+export async function withPublicPortal<T>(
+  prisma: PrismaClient,
+  fn: (tx: TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await setLocal(tx, 'app.public_portal', 'on');
+    return fn(tx);
+  });
+}
