@@ -228,3 +228,12 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: `/app/admin` tabs (Overview with approval queue, Agencies, Users, Settings, Activity) with inline reason forms. Agencies see "waiting for approval" on the dashboard, and a suspended/rejected notice with the reason instead of their pages.
 - Tests: 5 new API tests, 1 extended Playwright flow (turn approval on, new agency waits, approve, suspend with reason, owner sees notice, activity log).
 - Plans are free-text labels for now; billing and plan catalogue come in Phase 3.
+
+## PR · CRM: contacts, leads and consent (Phase 1)
+
+- Database (`20261121010000_crm`): `contact` (phone in E.164, unique per agency; must have a phone or email; `do_not_contact`), append-only `consent_record` (channel × purpose, granted/withdrawn, how it was captured), `lead` (intent, stage, budget/bedroom ranges with checks, follow-up date, optional listing), append-only `lead_activity` timeline. All tenant-isolated with forced RLS and composite `(id, tenant_id)` foreign keys.
+- API: `/v1/contacts` (list/search, create with consent given at capture, update, erase for managers), `/v1/contacts/:id/consents`, `/v1/leads` (list/board filters, create, update, `stage`, `assign` for managers, `notes`, delete for managers), `/v1/crm/summary`. Agents see only their own contacts and the leads assigned to them; managers, admins and owners see everything. Duplicate checks do not reveal other agents' contacts.
+- Consent: `mayContact(tx, contactId, channel, purpose)` in `apps/api/src/crm/consent.ts` is the check every outbound message must pass. It fails closed (no record, withdrawn or do-not-contact all mean no).
+- Web: Contacts list with add form (consent ticks plus "how did they agree"), contact page (consent grid with history, record/withdraw, leads, erase), Leads board by stage, lead page (stage changes, lost reason, follow-up, assignment, notes timeline), dashboard lead counts.
+- Tests: 7 db tests, 10 API tests, 1 Playwright flow.
+- Not yet: bulk import, matching leads to listings, WhatsApp/portal leads flowing in automatically (Phase 2 and portal threads will use these tables).
