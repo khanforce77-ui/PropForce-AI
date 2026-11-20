@@ -87,3 +87,22 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Agency stays `pending` until onboarding (PR 6).
 - Email templates are plain text.
 - Login for suspended memberships/agencies is handled when tenant selection lands (PR 5).
+
+## Phase 1 · PR 4 · Two-factor authentication (TOTP) (2026-11-20)
+
+**Built**
+
+- `POST /v1/me/mfa/totp/setup` → secret and `otpauth://` URI (for QR code); `POST /v1/me/mfa/totp/confirm` with a first code → enables MFA and returns 10 one-time recovery codes, shown once.
+- Login with MFA on: `POST /v1/auth/login` returns `{ mfaRequired, mfaToken }` (5-minute signed challenge, no session yet); `POST /v1/auth/mfa/verify` with a TOTP code or a recovery code creates the session.
+- TOTP codes cannot be replayed: the last accepted time step is stored and checked atomically. Recovery codes are single use.
+- `POST /v1/me/mfa/disable` needs the password and a valid second factor. `GET /v1/me/mfa` shows status and remaining recovery codes.
+- TOTP secrets encrypted at rest with AES-256-GCM (key `DATA_ENCRYPTION_KEY`, required in staging/production, bound to the user id as associated data). Recovery codes stored as HMAC-SHA256.
+- `GET /v1/me` now includes `user.mfaEnabled` and `mfaRequired` (true for owners/admins).
+- Stricter rate limits on MFA endpoints (5/min).
+
+**Tested**: 8 MFA API tests (enrolment, wrong first code, encrypted storage, duplicate enrolment, login second step, replay rejection, forged/misused challenge tokens, recovery code single use, disable rules) and 4 encryption unit tests (round trip, fresh IV, tamper and AAD mismatch, wrong key). 42 API tests total.
+
+**Not yet done / known issues**
+
+- Mandatory MFA for owners/admins is reported by `/me` but enforced on tenant routes in PR 5 (tenant selection), since no tenant routes exist yet.
+- Key rotation for `DATA_ENCRYPTION_KEY` (ciphertexts carry a version byte for this) has no tooling yet.

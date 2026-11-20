@@ -57,6 +57,31 @@ export class JwtService implements OnModuleInit {
       .sign(this.privateKey);
   }
 
+  /** Short-lived token proving the password step passed; exchanged for a session after MFA. */
+  async signMfaChallenge(userId: string): Promise<string> {
+    return new SignJWT({ purpose: 'mfa' })
+      .setProtectedHeader({ alg: ALG })
+      .setSubject(userId)
+      .setIssuer(this.config.jwt.issuer)
+      .setAudience('propforce-mfa')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(this.privateKey);
+  }
+
+  async verifyMfaChallenge(token: string): Promise<string | null> {
+    try {
+      const { payload } = await jwtVerify(token, this.publicKey, {
+        algorithms: [ALG],
+        issuer: this.config.jwt.issuer,
+        audience: 'propforce-mfa',
+      });
+      return payload.purpose === 'mfa' && typeof payload.sub === 'string' ? payload.sub : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Returns claims, or null for any invalid, expired or malformed token. */
   async verify(token: string): Promise<AccessTokenClaims | null> {
     try {

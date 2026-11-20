@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { createPrismaClient, type PrismaClient } from '@propforce/db';
 import { vi, type MockInstance } from 'vitest';
 import { createApp } from '../src/bootstrap';
@@ -72,3 +73,15 @@ export const registration = (overrides: Record<string, unknown> = {}) => ({
   acceptTerms: true,
   ...overrides,
 });
+
+/** Clears in-memory rate-limit counters so each test starts fresh (all tests share one IP). */
+export function resetRateLimits(app: INestApplication): void {
+  const storage = app.get(ThrottlerStorage, { strict: false });
+  if (!(storage instanceof ThrottlerStorageService))
+    throw new Error('Unexpected throttler storage');
+  storage.storage.clear();
+  // Hit timestamps live in a separate internal map in @nestjs/throttler v6.
+  const internal = storage as unknown as { hitExpirations?: Map<string, unknown> };
+  if (!(internal.hitExpirations instanceof Map)) throw new Error('Throttler internals changed');
+  internal.hitExpirations.clear();
+}

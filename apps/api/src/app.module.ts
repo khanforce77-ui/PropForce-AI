@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({})
 export class AppModule {
@@ -39,6 +40,7 @@ export class AppModule {
         }),
         DatabaseModule,
         EmailModule,
+        SecurityModule,
         HealthModule,
         AuthModule,
       ],

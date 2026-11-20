@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './env';
 
+const KEY = Buffer.alloc(32, 7).toString('base64');
+
 describe('loadConfig', () => {
   it('applies defaults', () => {
     const c = loadConfig({});
@@ -21,7 +23,23 @@ describe('loadConfig', () => {
   it('requires JWT keys and SMTP outside development and test', () => {
     expect(() => loadConfig({ NODE_ENV: 'production', SMTP_URL: 'smtp://x' })).toThrow('JWT keys');
     expect(() =>
-      loadConfig({ NODE_ENV: 'staging', JWT_PRIVATE_KEY: 'a', JWT_PUBLIC_KEY: 'b' }),
+      loadConfig({
+        NODE_ENV: 'production',
+        JWT_PRIVATE_KEY: 'a',
+        JWT_PUBLIC_KEY: 'b',
+        SMTP_URL: 'smtp://x',
+      }),
+    ).toThrow('DATA_ENCRYPTION_KEY');
+    expect(() => loadConfig({ DATA_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') })).toThrow(
+      '32 bytes',
+    );
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'staging',
+        JWT_PRIVATE_KEY: 'a',
+        JWT_PUBLIC_KEY: 'b',
+        DATA_ENCRYPTION_KEY: KEY,
+      }),
     ).toThrow('SMTP_URL');
   });
 
@@ -33,6 +51,7 @@ describe('loadConfig', () => {
         JWT_PRIVATE_KEY: 'a',
         JWT_PUBLIC_KEY: 'b',
         SMTP_URL: 'smtp://x',
+        DATA_ENCRYPTION_KEY: KEY,
       }).secureCookies,
     ).toBe(true);
   });
