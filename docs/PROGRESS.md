@@ -61,3 +61,29 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Platform tables (`user`, `session`, `mfa_factor`) have no RLS by design; access must stay inside the auth module.
 - PgBouncer transaction pooling not tested yet (planned before staging).
 - Production DB login role is created by infrastructure tooling, not by `setup-local-roles`.
+
+## Phase 1 · PR 3 · Registration, email verification, login and sessions (2026-11-20)
+
+**Built**
+
+- `POST /v1/auth/register`: creates user (Argon2id password hash), agency (status `pending`), settings, owner membership and an audit entry inside the new tenant context; emails a verification link. Emirate must be in `SUPPORTED_EMIRATES`. Same response for existing emails (a notice is emailed instead) so accounts cannot be enumerated.
+- `POST /v1/auth/verify-email`, `/resend-verification`: single-use, hashed, 24-hour tokens; a new link invalidates the old one.
+- `POST /v1/auth/login`: generic error for wrong password and unknown email (with a dummy hash to even out timing); unverified emails blocked.
+- Access tokens: EdDSA JWT (15 min) bound to a session row, so logout/refresh/reset revoke them immediately.
+- Refresh tokens: httpOnly, SameSite=Strict cookie scoped to `/v1/auth`, rotated on every use, family revoked on reuse; refresh/logout require the `x-propforce-csrf: 1` header.
+- `POST /v1/auth/password/forgot` and `/password/reset`: 30-minute single-use token; reset signs out all sessions.
+- `GET /v1/me`, `GET /v1/me/sessions`, `DELETE /v1/me/sessions/:id`.
+- Rate limiting on auth routes (in-memory, per IP); stricter on resend and forgot.
+- Email port with SMTP adapter (Mailpit locally) and a log-only fallback when SMTP is not configured.
+- `/health/ready` now checks the database (503 when down).
+- Config now requires JWT keys and SMTP in staging/production.
+
+**Tested** (28 API tests against real Postgres): every flow above, including token reuse, expiry, refresh-token theft detection, session revocation across users, input validation with unknown-field rejection, rate limiting (429), cookie flags.
+
+**Not yet done / known issues**
+
+- MFA (PR 4). Owners/admins can sign in without MFA until then.
+- Rate limiter storage is in-memory; must move to Redis before running more than one API replica. `trust proxy` must be configured behind the load balancer so limits use the client IP.
+- Agency stays `pending` until onboarding (PR 6).
+- Email templates are plain text.
+- Login for suspended memberships/agencies is handled when tenant selection lands (PR 5).
