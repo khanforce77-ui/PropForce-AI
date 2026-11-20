@@ -107,8 +107,8 @@ ALTER TABLE "portal_enquiry" ADD CONSTRAINT "portal_enquiry_fields_check" CHECK 
 -- ───── Public portal: read-only view of published listings ─────
 -- The public website has no user and no tenant. A transaction opts in with
 -- app.public_portal = 'on' (only withPublicPortal does this) and then sees, across agencies:
---   * agencies that are active,
---   * active memberships (the agents) of those agencies,
+--   * agencies that are active and approved (or need no approval),
+--   * active memberships (the agents) of those agencies whose user is not suspended,
 --   * listings that are active, not deleted, still fresh, assigned to an active agent of an
 --     active agency, and carry an unexpired advertising permit,
 --   * unexpired permits.
@@ -120,10 +120,19 @@ CREATE FUNCTION app_is_public_portal() RETURNS boolean
 GRANT EXECUTE ON FUNCTION app_is_public_portal() TO propforce_app;
 
 CREATE POLICY public_portal_read ON "agency" FOR SELECT
-  USING (app_is_public_portal() AND status = 'active');
+  USING (
+    app_is_public_portal()
+    AND status = 'active'
+    AND approval_status IN ('not_required', 'approved')
+  );
 
+-- "user" has no row-level security; the subquery only checks the platform suspension flag.
 CREATE POLICY public_portal_read ON "membership" FOR SELECT
-  USING (app_is_public_portal() AND status = 'active');
+  USING (
+    app_is_public_portal()
+    AND status = 'active'
+    AND EXISTS (SELECT 1 FROM "user" u WHERE u.id = membership.user_id AND u.suspended_at IS NULL)
+  );
 
 CREATE POLICY public_portal_read ON "property_permit" FOR SELECT
   USING (app_is_public_portal() AND valid_until >= current_date);

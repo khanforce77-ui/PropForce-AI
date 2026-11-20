@@ -114,6 +114,18 @@ describe('public portal visibility', () => {
     expect(count).toBe(0);
   });
 
+  it('hides agencies awaiting or refused approval, and agents whose user is suspended', async () => {
+    await listing(a, 'A-1');
+    const pb = await listing(b, 'B-1');
+    await owner.agency.update({ where: { id: a.agencyId }, data: { approvalStatus: 'pending' } });
+    expect(await withPublicPortal(app, (tx) => tx.property.count())).toBe(1);
+    await owner.agency.update({ where: { id: a.agencyId }, data: { approvalStatus: 'approved' } });
+    await owner.user.update({ where: { id: b.ownerUserId }, data: { suspendedAt: new Date() } });
+    const ids = await withPublicPortal(app, (tx) => tx.property.findMany({ select: { id: true } }));
+    expect(ids).toHaveLength(1);
+    expect(ids[0]?.id).not.toBe(pb.id);
+  });
+
   it('exposes nothing else tenant-scoped', async () => {
     await listing(a, 'A-1');
     const [teams, invitations, audit, settings, projects, enquiries] = await withPublicPortal(
