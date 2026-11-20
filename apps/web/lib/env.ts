@@ -3,8 +3,15 @@ import { parseEmirateList } from '@propforce/contracts';
 /**
  * Public (browser-visible) configuration. Only NEXT_PUBLIC_* values may appear here;
  * secrets must never be read in web code.
+ *
+ * Next.js inlines only literal `process.env.NEXT_PUBLIC_*` reads into the browser bundle; in the
+ * browser `process.env` itself is empty, so the default must read the variable by name.
  */
-export function getPublicApiUrl(env: Record<string, string | undefined> = process.env): string {
+export function getPublicApiUrl(
+  env: Record<string, string | undefined> = {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  },
+): string {
   const raw = env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
   // "same-origin": the API is served from the web app's own domain under /v1 (Vercel services).
   if (raw === 'same-origin') {
