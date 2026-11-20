@@ -11,6 +11,15 @@ export default function AgencyPickerPage() {
   const memberships = me?.memberships ?? [];
   return (
     <AuthShell title="Choose an agency">
+      {me?.user.isPlatformAdmin ? (
+        <Link
+          href="/app/admin"
+          className="mb-4 flex items-center justify-between rounded-lg border border-primary px-4 py-3 hover:bg-muted"
+        >
+          <span className="font-medium">Platform admin dashboard</span>
+          <span className="text-xs text-muted-foreground">All agencies</span>
+        </Link>
+      ) : null}
       {memberships.length === 0 ? (
         <Alert tone="info">
           You are not a member of any agency yet. Ask your agency admin for an invitation.

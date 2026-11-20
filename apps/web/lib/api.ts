@@ -71,7 +71,13 @@ export interface Membership {
   agency: { id: string; name: string; slug: string; emirate: string; status: string };
 }
 export interface MeResponse {
-  user: { id: string; email: string; fullName: string; mfaEnabled: boolean };
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    mfaEnabled: boolean;
+    isPlatformAdmin?: boolean;
+  };
   mfaRequired: boolean;
   memberships: Membership[];
 }
@@ -162,4 +168,41 @@ export interface DashboardSummary {
     needsVerification: number;
   };
   team: { activeMembers: number; pendingInvitations: number };
+}
+
+// ───── platform admin ─────
+
+export interface PlatformSummary {
+  agencies: {
+    total: number;
+    active: number;
+    pending: number;
+    suspended: number;
+    newThisWeek: number;
+  };
+  users: { total: number; verified: number; newThisWeek: number };
+  listings: { total: number; live: number; draft: number };
+}
+
+export interface PlatformAgency {
+  id: string;
+  name: string;
+  emirate: string;
+  status: string;
+  orn: string | null;
+  createdAt: string;
+  onboardedAt: string | null;
+  owner: { fullName: string; email: string } | null;
+  members: number;
+  listings: number;
+}
+
+export interface PlatformUser {
+  id: string;
+  fullName: string;
+  email: string;
+  createdAt: string;
+  emailVerifiedAt: string | null;
+  lastLoginAt: string | null;
+  memberships: { role: Role; agency: { id: string; name: string } }[];
 }

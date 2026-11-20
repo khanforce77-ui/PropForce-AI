@@ -211,3 +211,11 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 
 - Google adapter NOT run against Google (no OAuth client yet).
 - API routes (`/calendar/google/connect|callback`, `/availability`, `/viewings`), the `calendar_connection` and `viewing` tables, encrypted token storage and the AI tool handlers come with the wiring PR.
+
+## PR · Platform admin dashboard
+
+- Database: `app_is_platform_admin()` and read-only `platform_admin_read` SELECT policies on `agency`, `membership` and `property`. Visibility needs both an opt-in (`withPlatformAdmin`) and the user's `is_platform_admin` flag, checked by the database itself. There are no write policies, so a platform admin cannot change agency data through this path.
+- API: `GET /v1/platform/summary|agencies|users` behind `PlatformAdminGuard` (flag plus two-factor required). `/v1/me` now returns `isPlatformAdmin`, and platform admins must use two-factor.
+- Web: `/app/admin` platform dashboard showing agency, user and listing counts, an agencies table and recent sign-ups. Platform admins land there after sign-in, and the agency dashboard stays reachable.
+- Tests: 4 db tests (visibility, no flag, no opt-in, read-only), 1 API test, 1 Playwright flow.
+- The flag is set only directly in the database; there is no API to grant it.
