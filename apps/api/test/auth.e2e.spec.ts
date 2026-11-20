@@ -210,9 +210,13 @@ describe('login and sessions', () => {
   it('rejects missing, malformed and forged access tokens', async () => {
     await http().get('/v1/me').expect(401);
     await http().get('/v1/me').set('Authorization', 'Bearer not-a-jwt').expect(401);
-    const forged =
-      'eyJhbGciOiJub25lIn0.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDAiLCJzaWQiOiJ4In0.';
-    await http().get('/v1/me').set('Authorization', `Bearer ${forged}`).expect(401);
+    // Unsigned ("alg: none") token for a real session id, built at runtime.
+    const body = await registerVerified();
+    await login(body.email, body.password);
+    const session = await t.owner.session.findFirstOrThrow();
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const unsigned = `${b64({ alg: 'none' })}.${b64({ sub: session.userId, sid: session.id })}.`;
+    await http().get('/v1/me').set('Authorization', `Bearer ${unsigned}`).expect(401);
   });
 
   it('refresh requires the CSRF header', async () => {
