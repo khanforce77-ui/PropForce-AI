@@ -69,4 +69,22 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   await page.getByRole('link', { name: 'Dashboard' }).click();
   const stats = page.getByRole('region', { name: 'Listings at a glance' });
   await expect(stats.getByRole('link', { name: /^Live listings/ })).toContainText('Live listings1');
+
+  // The live listing is on the public portal under this agent; adding a WhatsApp number makes it
+  // reachable from there.
+  await page.getByRole('link', { name: 'Property portal' }).click();
+  await expect(page.getByRole('heading', { name: 'Your public contact details' })).toBeVisible();
+  await page.getByLabel('WhatsApp').fill('050 123 4567');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Contact details saved.')).toBeVisible();
+  await expect(page.getByLabel('WhatsApp')).toHaveValue('+971501234567');
+
+  const res = await page.request.get('http://localhost:4000/v1/public/listings', {
+    params: { q: 'Marina Gate 1' },
+  });
+  const body = (await res.json()) as {
+    data: { building: string; agent: { name: string; canWhatsapp: boolean } }[];
+  };
+  const mine = body.data.find((l) => l.agent.name === owner.name);
+  expect(mine).toMatchObject({ building: 'Marina Gate 1', agent: { canWhatsapp: true } });
 });

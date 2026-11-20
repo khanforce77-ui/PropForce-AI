@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Home, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import { Building2, Globe, Home, LayoutDashboard, LogOut, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
@@ -35,6 +35,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   const nav = [
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/listings`, label: 'Listings', icon: Home },
+    { href: `${base}/portal`, label: 'Property portal', icon: Globe },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
   ];
 

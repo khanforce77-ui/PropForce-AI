@@ -137,14 +137,16 @@ model Agency {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  settings    AgencySettings?
-  memberships Membership[]
-  teams       Team[]
-  invitations Invitation[]
-  auditLogs   AuditLog[]
-  projects    Project[]
-  properties  Property[]
-  permits     PropertyPermit[]
+  settings        AgencySettings?
+  memberships     Membership[]
+  teams           Team[]
+  invitations     Invitation[]
+  auditLogs       AuditLog[]
+  projects        Project[]
+  properties      Property[]
+  permits         PropertyPermit[]
+  portalEnquiries PortalEnquiry[]
+  portalContacts  PortalContactEvent[]
 
   @@map("agency")
 }
@@ -194,22 +196,28 @@ enum MembershipStatus {
 }
 
 model Membership {
-  id        String           @id @default(uuid(7)) @db.Uuid
-  tenantId  String           @map("tenant_id") @db.Uuid
-  userId    String           @map("user_id") @db.Uuid
-  teamId    String?          @map("team_id") @db.Uuid
-  role      Role
-  status    MembershipStatus @default(active)
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  teamId          String?          @map("team_id") @db.Uuid
+  role            Role
+  status          MembershipStatus @default(active)
   /// Broker Registration Number; optional, entered by the agency.
-  brn       String?
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  brn             String?
+  /// Number shown to the public for calls about this agent's listings (E.164, e.g. +971501234567).
+  publicPhoneE164 String?          @map("public_phone_e164")
+  /// WhatsApp number for click-to-chat from the public portal (E.164).
+  whatsappE164    String?          @map("whatsapp_e164")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   team   Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   assignedProperties Property[]
+  portalEnquiries    PortalEnquiry[]
+  portalContacts     PortalContactEvent[]
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -374,11 +382,13 @@ model Property {
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agency   Agency           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agency          Agency               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // Composite keys: the database refuses a project or agent from another agency.
-  project  Project?         @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
-  assigned Membership?      @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
-  permits  PropertyPermit[]
+  project         Project?             @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  assigned        Membership?          @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  permits         PropertyPermit[]
+  portalEnquiries PortalEnquiry[]
+  portalContacts  PortalContactEvent[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -406,4 +416,88 @@ model PropertyPermit {
   @@unique([tenantId, authority, permitNumber])
   @@index([propertyId])
   @@map("property_permit")
+}
+
+// ───────────────────────────── Public portal ─────────────────────────────
+// The public website (apps/portal) reads published listings through a read-only, row-level
+// security view that is only switched on by withPublicPortal. Enquiries and contact clicks are
+// written into the listing's agency, assigned to the listing's agent.
+
+enum PortalEnquiryStatus {
+  new
+  contacted
+  converted
+  spam
+  closed
+}
+
+enum PortalContactChannel {
+  whatsapp
+  call
+}
+
+/// An enquiry a visitor sent from the public portal about a listing.
+model PortalEnquiry {
+  id               String              @id @default(uuid(7)) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  propertyId       String              @map("property_id") @db.Uuid
+  /// The agent the listing was assigned to when the enquiry arrived.
+  membershipId     String              @map("membership_id") @db.Uuid
+  fullName         String              @map("full_name")
+  phoneE164        String              @map("phone_e164")
+  email            String?             @db.Citext
+  message          String
+  status           PortalEnquiryStatus @default(new)
+  /// Consent to be contacted about this enquiry (required) and to receive marketing (optional).
+  consentContact   Boolean             @map("consent_contact")
+  consentMarketing Boolean             @default(false) @map("consent_marketing")
+  /// The exact wording the visitor agreed to, kept as evidence of consent.
+  consentText      String              @map("consent_text")
+  consentAt        DateTime            @map("consent_at") @db.Timestamptz(3)
+  /// Keyed hash of the visitor's IP address; the raw IP is never stored.
+  ipHash           String?             @map("ip_hash")
+  userAgent        String?             @map("user_agent")
+  /// Set once the CRM turns this enquiry into a lead.
+  leadId           String?             @map("lead_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property   @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  agent    Membership @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, membershipId, createdAt(sort: Desc)])
+  @@index([tenantId, propertyId])
+  @@map("portal_enquiry")
+}
+
+/// A visitor clicked WhatsApp or Call on a public listing.
+model PortalContactEvent {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  tenantId     String               @map("tenant_id") @db.Uuid
+  propertyId   String               @map("property_id") @db.Uuid
+  membershipId String               @map("membership_id") @db.Uuid
+  channel      PortalContactChannel
+  ipHash       String?              @map("ip_hash")
+  userAgent    String?              @map("user_agent")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency   Agency     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property   @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  agent    Membership @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, membershipId, createdAt(sort: Desc)])
+  @@map("portal_contact_event")
+}
+
+/// Rate-limit hits for public endpoints. Holds only keyed hashes, no tenant data.
+model PublicRateHit {
+  id        BigInt   @id @default(autoincrement())
+  bucket    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([bucket, createdAt])
+  @@map("public_rate_hit")
 }

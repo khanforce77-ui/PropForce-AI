@@ -11,6 +11,7 @@ import { SecurityModule } from './security/security.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { PlatformModule } from './platform/platform.module';
+import { PortalModule } from './portal/portal.module';
 
 @Module({})
 export class AppModule {
@@ -49,6 +50,7 @@ export class AppModule {
         TenancyModule,
         InventoryModule,
         PlatformModule,
+        PortalModule,
       ],
     };
   }
