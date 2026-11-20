@@ -183,6 +183,10 @@ model Agency {
   projects    Project[]
   properties  Property[]
   permits     PropertyPermit[]
+  contacts    Contact[]
+  consents    ConsentRecord[]
+  leads       Lead[]
+  leadEvents  LeadActivity[]
 
   @@map("agency")
 }
@@ -248,6 +252,8 @@ model Membership {
   team   Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   assignedProperties Property[]
+  ownedContacts      Contact[]
+  assignedLeads      Lead[]
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -417,6 +423,7 @@ model Property {
   project  Project?         @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
   assigned Membership?      @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
   permits  PropertyPermit[]
+  leads    Lead[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -444,4 +451,170 @@ model PropertyPermit {
   @@unique([tenantId, authority, permitNumber])
   @@index([propertyId])
   @@map("property_permit")
+}
+
+// ───────────────────────── CRM ─────────────────────────
+
+enum ContactSource {
+  manual
+  import
+  whatsapp
+  portal
+  referral
+  website
+  walk_in
+  other
+}
+
+enum ConsentChannel {
+  whatsapp
+  sms
+  email
+  phone_call
+}
+
+/// service = replies and updates the contact asked for; marketing = promotions and new listings.
+enum ConsentPurpose {
+  service
+  marketing
+}
+
+enum ConsentStatus {
+  granted
+  withdrawn
+}
+
+enum LeadIntent {
+  buy
+  rent
+  sell
+  let
+}
+
+enum LeadStage {
+  new
+  contacted
+  qualified
+  viewing
+  negotiating
+  won
+  lost
+}
+
+enum LeadActivityType {
+  note
+  stage_changed
+  assigned
+  created
+}
+
+model Contact {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  fullName          String        @map("full_name")
+  /// E.164, e.g. +971501234567. Unique within the agency.
+  phoneE164         String?       @map("phone_e164")
+  email             String?       @db.Citext
+  nationality       String?
+  preferredLanguage String?       @map("preferred_language")
+  source            ContactSource @default(manual)
+  /// Agent responsible for the relationship.
+  ownerMembershipId String?       @map("owner_membership_id") @db.Uuid
+  tags              String[]      @default([])
+  notes             String?
+  /// Hard stop: never contact on any channel, whatever consent says.
+  doNotContact      Boolean       @default(false) @map("do_not_contact")
+  createdBy         String        @map("created_by") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner    Membership?     @relation(fields: [ownerMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  consents ConsentRecord[]
+  leads    Lead[]
+
+  @@unique([tenantId, phoneE164])
+  @@unique([id, tenantId])
+  @@index([tenantId, email])
+  @@index([tenantId, ownerMembershipId])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("contact")
+}
+
+/// Append-only consent history. The latest row per (contact, channel, purpose) is the current state.
+model ConsentRecord {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  contactId  String         @map("contact_id") @db.Uuid
+  channel    ConsentChannel
+  purpose    ConsentPurpose
+  status     ConsentStatus
+  /// How it was captured, e.g. "verbal on call", "web form", "WhatsApp reply STOP".
+  method     String
+  /// Optional evidence: form id, message id, call note.
+  evidence   String?
+  recordedBy String?        @map("recorded_by") @db.Uuid
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency  Agency  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, contactId, channel, purpose, createdAt(sort: Desc)])
+  @@map("consent_record")
+}
+
+model Lead {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  tenantId             String         @map("tenant_id") @db.Uuid
+  contactId            String         @map("contact_id") @db.Uuid
+  intent               LeadIntent
+  stage                LeadStage      @default(new)
+  assignedMembershipId String?        @map("assigned_membership_id") @db.Uuid
+  /// The listing the lead first asked about, if any.
+  propertyId           String?        @map("property_id") @db.Uuid
+  source               ContactSource  @default(manual)
+  emirate              String?
+  communities          String[]       @default([])
+  propertyTypes        PropertyType[] @default([]) @map("property_types")
+  bedroomsMin          Int?           @map("bedrooms_min")
+  bedroomsMax          Int?           @map("bedrooms_max")
+  budgetMin            Decimal?       @map("budget_min") @db.Decimal(14, 2)
+  budgetMax            Decimal?       @map("budget_max") @db.Decimal(14, 2)
+  nextFollowUpAt       DateTime?      @map("next_follow_up_at") @db.Timestamptz(3)
+  lostReason           String?        @map("lost_reason")
+  closedAt             DateTime?      @map("closed_at") @db.Timestamptz(3)
+  createdBy            String         @map("created_by") @db.Uuid
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency     Agency         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact    Contact        @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  assigned   Membership?    @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  property   Property?      @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  activities LeadActivity[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, stage])
+  @@index([tenantId, assignedMembershipId, stage])
+  @@index([tenantId, contactId])
+  @@index([tenantId, nextFollowUpAt])
+  @@map("lead")
+}
+
+model LeadActivity {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  leadId      String           @map("lead_id") @db.Uuid
+  type        LeadActivityType
+  body        String?
+  fromValue   String?          @map("from_value")
+  toValue     String?          @map("to_value")
+  actorUserId String?          @map("actor_user_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead   @relation(fields: [leadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, leadId, createdAt(sort: Desc)])
+  @@map("lead_activity")
 }

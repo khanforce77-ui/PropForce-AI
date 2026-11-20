@@ -1,6 +1,14 @@
 'use client';
 
-import { Building2, Home, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import {
+  Building2,
+  Contact,
+  Home,
+  KanbanSquare,
+  LayoutDashboard,
+  LogOut,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
@@ -36,6 +44,8 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   const nav = [
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/listings`, label: 'Listings', icon: Home },
+    { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
+    { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
   ];
 
