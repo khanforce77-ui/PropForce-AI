@@ -6,6 +6,7 @@ import {
   refreshCookieFrom,
   registration,
   resetDatabase,
+  resetRateLimits,
   tokenFrom,
   type TestApp,
 } from './helpers';
@@ -27,6 +28,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDatabase(t.owner);
+  resetRateLimits(app);
   t.emails.length = 0;
 });
 

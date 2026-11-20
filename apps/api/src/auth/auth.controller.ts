@@ -21,11 +21,16 @@ import { AuthGuard, CurrentAuth } from './auth.guard';
 import {
   emailOnlySchema,
   loginSchema,
+  mfaDisableSchema,
+  mfaLoginSchema,
+  totpConfirmSchema,
   registerSchema,
   resetPasswordSchema,
   tokenSchema,
 } from './auth.schemas';
 import { AuthService, type ClientInfo, type IssuedTokens } from './auth.service';
+import { JwtService } from './jwt.service';
+import { MfaService } from './mfa.service';
 
 export const REFRESH_COOKIE = 'pf_refresh';
 const REFRESH_COOKIE_PATH = '/v1/auth';
@@ -42,6 +47,8 @@ const clientInfo = (req: Request): ClientInfo => ({
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly jwt: JwtService,
+    private readonly mfa: MfaService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -74,7 +81,31 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { email, password } = parseBody(loginSchema, body);
-    return this.issue(res, await this.auth.login(email, password, clientInfo(req)));
+    const result = await this.auth.login(email, password, clientInfo(req));
+    if (result.mfaRequired) {
+      res.setHeader('Cache-Control', 'no-store');
+      return { mfaRequired: true, mfaToken: result.mfaToken };
+    }
+    return this.issue(res, result.tokens);
+  }
+
+  /** Second login step: exchange the MFA challenge token plus a code for a session. */
+  @Post('mfa/verify')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async verifyMfa(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { mfaToken, code, recoveryCode } = parseBody(mfaLoginSchema, body);
+    const userId = await this.jwt.verifyMfaChallenge(mfaToken);
+    if (!userId) throw new AppError(401, 'AUTH_MFA_CHALLENGE_INVALID', 'Please sign in again.');
+    await this.mfa.verifyForLogin(userId, {
+      ...(code ? { code } : {}),
+      ...(recoveryCode ? { recoveryCode } : {}),
+    });
+    return this.issue(res, await this.auth.startSession(userId, clientInfo(req)));
   }
 
   @Post('refresh')
@@ -152,9 +183,50 @@ export class AuthController {
 }
 
 @Controller('me')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, ThrottlerGuard)
 export class MeController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly mfa: MfaService,
+  ) {}
+
+  @Post('mfa/totp/setup')
+  @HttpCode(200)
+  async totpSetup(@CurrentAuth() a: { userId: string }, @Res({ passthrough: true }) res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.mfa.beginTotpSetup(a.userId);
+  }
+
+  @Post('mfa/totp/confirm')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async totpConfirm(
+    @CurrentAuth() a: { userId: string },
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.mfa.confirmTotpSetup(a.userId, parseBody(totpConfirmSchema, body).code);
+  }
+
+  @Post('mfa/disable')
+  @HttpCode(204)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async mfaDisable(@CurrentAuth() a: { userId: string }, @Body() body: unknown): Promise<void> {
+    const { password, code, recoveryCode } = parseBody(mfaDisableSchema, body);
+    await this.mfa.disable(a.userId, password, {
+      ...(code ? { code } : {}),
+      ...(recoveryCode ? { recoveryCode } : {}),
+    });
+  }
+
+  @Get('mfa')
+  async mfaStatus(@CurrentAuth() a: { userId: string }) {
+    return {
+      enabled: await this.mfa.isEnabled(a.userId),
+      recoveryCodesRemaining: await this.mfa.remainingRecoveryCodes(a.userId),
+    };
+  }
 
   @Get()
   me(@CurrentAuth() a: { userId: string }) {

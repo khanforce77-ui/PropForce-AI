@@ -27,6 +27,12 @@ const envSchema = z.object({
   SMTP_URL: z.string().optional(),
   EMAIL_FROM: z.string().default('PropForce AI <no-reply@propforce.local>'),
 
+  /**
+   * 32-byte key (base64) for encrypting secrets at rest (TOTP seeds, later OAuth tokens).
+   * Required outside development and test. In production this comes from the secrets manager.
+   */
+  DATA_ENCRYPTION_KEY: z.string().optional(),
+
   /** Requests per minute for sensitive auth endpoints, per client IP. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
 });
@@ -49,6 +55,8 @@ export interface AppConfig {
   refreshTokenTtlDays: number;
   email: { smtpUrl?: string; from: string };
   authRateLimitPerMinute: number;
+  /** Undefined only in development/test, where a fixed, clearly non-secret key is used. */
+  dataEncryptionKey?: Buffer;
   /** Cookies are Secure everywhere except local development and tests over plain HTTP. */
   secureCookies: boolean;
 }
@@ -65,6 +73,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (deployed && (!e.JWT_PRIVATE_KEY || !e.JWT_PUBLIC_KEY)) {
     throw new Error(
       'Invalid environment configuration: JWT keys are required in staging/production',
+    );
+  }
+  const encryptionKey = e.DATA_ENCRYPTION_KEY
+    ? Buffer.from(e.DATA_ENCRYPTION_KEY, 'base64')
+    : undefined;
+  if (encryptionKey && encryptionKey.length !== 32) {
+    throw new Error(
+      'Invalid environment configuration: DATA_ENCRYPTION_KEY must be 32 bytes (base64)',
+    );
+  }
+  if (deployed && !encryptionKey) {
+    throw new Error(
+      'Invalid environment configuration: DATA_ENCRYPTION_KEY is required in staging/production',
     );
   }
   if (deployed && !e.SMTP_URL) {
@@ -92,6 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     refreshTokenTtlDays: e.REFRESH_TOKEN_TTL_DAYS,
     email: { ...(e.SMTP_URL ? { smtpUrl: e.SMTP_URL } : {}), from: e.EMAIL_FROM },
     authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
+    ...(encryptionKey ? { dataEncryptionKey: encryptionKey } : {}),
     secureCookies: deployed,
   };
 }

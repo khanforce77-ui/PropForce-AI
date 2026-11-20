@@ -24,6 +24,9 @@ export interface IssuedTokens {
   refreshTokenExpiresAt: Date;
 }
 
+export type LoginResult =
+  { mfaRequired: false; tokens: IssuedTokens } | { mfaRequired: true; mfaToken: string };
+
 const invalidCredentials = () =>
   new AppError(401, 'AUTH_INVALID_CREDENTIALS', 'Email or password is incorrect.');
 const invalidSession = () => new AppError(401, 'AUTH_SESSION_INVALID', 'Please sign in again.');
@@ -129,7 +132,7 @@ export class AuthService {
     await this.sendVerification(user.id, user.email);
   }
 
-  async login(email: string, password: string, client: ClientInfo): Promise<IssuedTokens> {
+  async login(email: string, password: string, client: ClientInfo): Promise<LoginResult> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user?.passwordHash) {
       await verifyPassword(await getDummyHash(), password);
@@ -139,8 +142,20 @@ export class AuthService {
     if (!user.emailVerifiedAt) {
       throw new AppError(403, 'AUTH_EMAIL_UNVERIFIED', 'Please verify your email address first.');
     }
-    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    return this.createSession(user.id, randomUUID(), client);
+    const mfaEnabled =
+      (await this.prisma.mfaFactor.count({
+        where: { userId: user.id, type: 'totp', verifiedAt: { not: null } },
+      })) > 0;
+    if (mfaEnabled) {
+      return { mfaRequired: true, mfaToken: await this.jwt.signMfaChallenge(user.id) };
+    }
+    return { mfaRequired: false, tokens: await this.startSession(user.id, client) };
+  }
+
+  /** Completes a login once every required factor has been checked. */
+  async startSession(userId: string, client: ClientInfo): Promise<IssuedTokens> {
+    await this.prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
+    return this.createSession(userId, randomUUID(), client);
   }
 
   /**
@@ -229,6 +244,10 @@ export class AuthService {
       where: { id: userId },
       select: { id: true, email: true, fullName: true, locale: true, emailVerifiedAt: true },
     });
+    const mfaEnabled =
+      (await this.prisma.mfaFactor.count({
+        where: { userId, type: 'totp', verifiedAt: { not: null } },
+      })) > 0;
     const memberships = await withUser(this.prisma, { userId }, (tx) =>
       tx.membership.findMany({
         where: { userId, status: 'active' },
@@ -240,7 +259,9 @@ export class AuthService {
         orderBy: { createdAt: 'asc' },
       }),
     );
-    return { user, memberships };
+    // Owners and admins must use two-factor authentication. Enforced on tenant routes (PR 5).
+    const mfaRequired = memberships.some((m) => m.role === 'owner' || m.role === 'admin');
+    return { user: { ...user, mfaEnabled }, mfaRequired, memberships };
   }
 
   async listSessions(userId: string, currentSessionId: string) {

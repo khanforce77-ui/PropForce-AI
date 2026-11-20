@@ -27,7 +27,8 @@
     "jose": "^6.2.18",
     "cookie-parser": "^1.4.7",
     "nodemailer": "^10.6.1",
-    "@nestjs/throttler": "^6.8.0"
+    "@nestjs/throttler": "^6.8.0",
+    "otpauth": "^9.6.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.6.0",

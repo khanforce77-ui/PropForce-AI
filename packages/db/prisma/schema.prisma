@@ -93,6 +93,8 @@ model MfaFactor {
   codeHash        String?       @map("code_hash")
   verifiedAt      DateTime?     @map("verified_at") @db.Timestamptz(3)
   usedAt          DateTime?     @map("used_at") @db.Timestamptz(3)
+  /// Last accepted TOTP time step, so a code cannot be replayed within its window.
+  lastUsedStep    BigInt?       @map("last_used_step")
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
