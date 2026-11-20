@@ -142,19 +142,24 @@ model Agency {
   teams       Team[]
   invitations Invitation[]
   auditLogs   AuditLog[]
+  projects    Project[]
+  properties  Property[]
+  permits     PropertyPermit[]
 
   @@map("agency")
 }
 
 model AgencySettings {
-  tenantId             String   @id @map("tenant_id") @db.Uuid
-  branding             Json     @default("{}")
-  aiSettings           Json     @default("{}") @map("ai_settings")
-  listingFreshnessDays Int      @default(14) @map("listing_freshness_days")
+  tenantId               String   @id @map("tenant_id") @db.Uuid
+  branding               Json     @default("{}")
+  aiSettings             Json     @default("{}") @map("ai_settings")
+  listingFreshnessDays   Int      @default(14) @map("listing_freshness_days")
+  /// When true, a listing can only go live with an unexpired advertising permit on file.
+  requirePermitToPublish Boolean  @default(true) @map("require_permit_to_publish")
   /// Outbound AI voice calling stays off until compliance approvals are verified by a platform admin.
-  outboundVoiceEnabled Boolean  @default(false) @map("outbound_voice_enabled")
-  retentionPolicy      Json     @default("{}") @map("retention_policy")
-  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outboundVoiceEnabled   Boolean  @default(false) @map("outbound_voice_enabled")
+  retentionPolicy        Json     @default("{}") @map("retention_policy")
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -204,7 +209,10 @@ model Membership {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   team   Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
+  assignedProperties Property[]
+
   @@unique([tenantId, userId])
+  @@unique([id, tenantId])
   @@index([userId])
   @@map("membership")
 }
@@ -254,4 +262,148 @@ model AuditLog {
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, entityType, entityId])
   @@map("audit_log")
+}
+
+// ───────────────────────────── Inventory ─────────────────────────────
+
+enum ListingType {
+  sale
+  rent
+}
+
+enum PropertyType {
+  apartment
+  villa
+  townhouse
+  penthouse
+  office
+  retail
+  commercial
+  land
+  other
+}
+
+enum Completion {
+  ready
+  off_plan
+}
+
+enum PropertyStatus {
+  draft
+  active
+  under_offer
+  sold
+  rented
+  archived
+}
+
+enum Furnishing {
+  unfurnished
+  semi_furnished
+  furnished
+}
+
+enum RentPeriod {
+  yearly
+  monthly
+}
+
+/// An off-plan or completed development that listings can belong to.
+model Project {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  name         String
+  developer    String?
+  emirate      String
+  community    String?
+  handoverDate DateTime? @map("handover_date") @db.Date
+  /// Milestones, e.g. [{ "milestone": "On booking", "percent": 20 }]
+  paymentPlan  Json?     @map("payment_plan")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency     Agency     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  properties Property[]
+
+  @@unique([tenantId, name])
+  @@unique([id, tenantId])
+  @@map("project")
+}
+
+model Property {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  tenantId             String         @map("tenant_id") @db.Uuid
+  /// Agency-facing reference, unique within the agency.
+  reference            String
+  listingType          ListingType    @map("listing_type")
+  propertyType         PropertyType   @map("property_type")
+  completion           Completion     @default(ready)
+  status               PropertyStatus @default(draft)
+  projectId            String?        @map("project_id") @db.Uuid
+  assignedMembershipId String?        @map("assigned_membership_id") @db.Uuid
+  title                String?
+  emirate              String
+  community            String?
+  subCommunity         String?        @map("sub_community")
+  building             String?
+  unitNo               String?        @map("unit_no")
+  /// 0 = studio
+  bedrooms             Int?
+  bathrooms            Int?
+  areaSqft             Decimal?       @map("area_sqft") @db.Decimal(10, 2)
+  price                Decimal?       @db.Decimal(14, 2)
+  /// Only for rentals.
+  rentPeriod           RentPeriod?    @map("rent_period")
+  furnishing           Furnishing?
+  amenities            String[]       @default([])
+  parking              Int?
+  floor                Int?
+  view                 String?
+  developer            String?
+  handoverDate         DateTime?      @map("handover_date") @db.Date
+  paymentPlan          Json?          @map("payment_plan")
+  serviceChargePerSqft Decimal?       @map("service_charge_per_sqft") @db.Decimal(8, 2)
+  latitude             Decimal?       @db.Decimal(9, 6)
+  longitude            Decimal?       @db.Decimal(9, 6)
+  description          String?
+  listingExpiresAt     DateTime?      @map("listing_expires_at") @db.Timestamptz(3)
+  verifiedAt           DateTime?      @map("verified_at") @db.Timestamptz(3)
+  verifiedBy           String?        @map("verified_by") @db.Uuid
+  createdBy            String         @map("created_by") @db.Uuid
+  deletedAt            DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Composite keys: the database refuses a project or agent from another agency.
+  project  Project?         @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  assigned Membership?      @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  permits  PropertyPermit[]
+
+  @@unique([tenantId, reference])
+  @@unique([id, tenantId])
+  @@index([tenantId, status, listingType])
+  @@index([tenantId, emirate, community])
+  @@index([tenantId, assignedMembershipId])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("property")
+}
+
+/// Advertising permit for a listing (e.g. a Dubai Trakheesi permit). Entered by the agency; the
+/// platform does not verify it against the regulator.
+model PropertyPermit {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  propertyId   String   @map("property_id") @db.Uuid
+  authority    String
+  permitNumber String   @map("permit_number")
+  validUntil   DateTime @map("valid_until") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, authority, permitNumber])
+  @@index([propertyId])
+  @@map("property_permit")
 }

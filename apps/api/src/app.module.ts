@@ -9,6 +9,7 @@ import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { SecurityModule } from './security/security.module';
 import { TenancyModule } from './tenancy/tenancy.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({})
 export class AppModule {
@@ -45,6 +46,7 @@ export class AppModule {
         HealthModule,
         AuthModule,
         TenancyModule,
+        InventoryModule,
       ],
     };
   }

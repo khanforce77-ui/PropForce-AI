@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import { Building2, Home, LayoutDashboard, LogOut, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
@@ -30,8 +30,11 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
 
   if (!membership) return null;
   const base = `/app/${agencyId}`;
+  const isActive = (href: string) =>
+    href === base ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
   const nav = [
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `${base}/listings`, label: 'Listings', icon: Home },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
   ];
 
@@ -50,10 +53,10 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
             <Link
               key={href}
               href={href}
-              aria-current={pathname === href ? 'page' : undefined}
+              aria-current={isActive(href) ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap hover:bg-background',
-                pathname === href && 'bg-background font-medium',
+                isActive(href) && 'bg-background font-medium',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden />

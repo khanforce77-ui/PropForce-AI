@@ -149,6 +149,16 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Settings pages (agency profile edit, teams, audit log viewer, session list) have API support but no screens yet.
 - Arabic/RTL not started (planned for Phase 4).
 
+## PR 12 · Listings and dashboard (Phase 1, inventory part 1)
+
+- Database: `project`, `property`, `property_permit` with forced RLS. Composite `(id, tenant_id)` foreign keys make the database itself refuse a listing that points at another agency's project, agent or listing. Check constraints cover prices, areas, rooms and the rent period. Agency setting `require_permit_to_publish` (default on).
+- API: `GET/POST /v1/properties`, `GET/PATCH/DELETE /v1/properties/:id`, `POST /v1/properties/:id/status`, `POST /v1/properties/:id/verify`, permits, `GET/POST /v1/projects`, `GET /v1/dashboard/summary`. Every change is audited.
+- Rules: listings start as drafts. Publishing needs a price, area, community and, by default, an unexpired advertising permit, and sets a freshness date from `listing_freshness_days`. The lifecycle is enforced. Agents edit only listings assigned to them; managers, admins and owners edit and reassign any.
+- Web: Listings page (search, filters, pagination), Add listing, listing detail (publish, status changes, "still available", permits, edit), and dashboard counts plus recent listings.
+- Tests: 7 new db isolation tests, 12 new API tests, 1 new Playwright flow (add → publish with permit → dashboard).
+- Not yet: photos and media uploads (next PR), bulk import, map location.
+- The platform stores permit numbers as entered and does not check them with DLD or ADREC.
+
 ## Phase 2 · PR 1 · AI orchestration core (2026-11-20)
 
 **Built** (`packages/ai`, no database or network access of its own)
