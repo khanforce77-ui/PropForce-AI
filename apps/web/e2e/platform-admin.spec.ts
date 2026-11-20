@@ -20,7 +20,22 @@ async function makePlatformAdmin(email: string) {
   }
 }
 
-test('a platform admin lands on the platform dashboard and sees all agencies', async ({ page }) => {
+async function setFlag(key: string, enabled: boolean) {
+  const client = new pg.Client({ connectionString: OWNER_DB_URL });
+  await client.connect();
+  try {
+    await client.query('UPDATE feature_flag SET enabled = $2 WHERE key = $1', [key, enabled]);
+  } finally {
+    await client.end();
+  }
+}
+
+test('a platform admin sees all agencies, runs the approval queue and suspends an agency', async ({
+  page,
+  browser,
+}) => {
+  // Start from the default (approval off), even if an earlier run was interrupted.
+  await setFlag('platform.require_agency_approval', false);
   await page.goto('/register');
   await page.getByLabel('Your full name').fill(admin.name);
   await page.getByLabel('Work email').fill(admin.email);
@@ -47,8 +62,82 @@ test('a platform admin lands on the platform dashboard and sees all agencies', a
 
   await expect(page).toHaveURL(/\/app\/admin$/);
   await expect(page.getByRole('heading', { name: 'Platform admin' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: new RegExp(`Admin Realty ${run}`) })).toBeVisible();
+  await page.getByRole('button', { name: 'Agencies', exact: true }).click();
+  await expect(page.getByText(`Admin Realty ${run}`)).toBeVisible();
+  await page.getByRole('button', { name: 'Users', exact: true }).click();
   await expect(page.getByText(admin.email).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+
+  // Turn on "new agencies need approval" from Settings.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const approvalSwitch = page.getByRole('switch', { name: /need my approval/ });
+  await expect(approvalSwitch).not.toBeChecked();
+  await approvalSwitch.check();
+  await expect(page.getByText(/Setting saved: .* is on\./)).toBeVisible();
+
+  try {
+    // A new agency signs up and finishes setup in another browser; it waits for approval.
+    const owner = { email: `queue-${run}@e2e.test`, password: 'e2e queue owner pass' };
+    const agencyName = `Queue Realty ${run}`;
+    const ownerContext = await browser.newContext();
+    const ownerPage = await ownerContext.newPage();
+    await ownerPage.goto('/register');
+    await ownerPage.getByLabel('Your full name').fill('Noor Owner');
+    await ownerPage.getByLabel('Work email').fill(owner.email);
+    await ownerPage.getByLabel('Password').fill(owner.password);
+    await ownerPage.getByLabel('Agency name').fill(agencyName);
+    await ownerPage.getByLabel('Emirate').selectOption('Abu Dhabi');
+    await ownerPage.getByLabel(/I accept the terms/).check();
+    await ownerPage.getByRole('button', { name: 'Create agency' }).click();
+    await expect(ownerPage.getByText('We sent a verification link')).toBeVisible();
+    await ownerPage.goto(await linkFromEmail(owner.email, /Verify your email/));
+    await expect(ownerPage.getByText('Your email is verified')).toBeVisible();
+    await ownerPage.goto('/login');
+    await ownerPage.getByLabel('Email').fill(owner.email);
+    await ownerPage.getByLabel('Password').fill(owner.password);
+    await ownerPage.getByRole('button', { name: 'Sign in' }).click();
+    await ownerPage.getByRole('button', { name: 'Set up authenticator app' }).click();
+    const ownerSecret = (await ownerPage.getByTestId('totp-secret').textContent())!.trim();
+    const ownerTotp = new TOTP({ secret: Secret.fromBase32(ownerSecret), digits: 6, period: 30 });
+    await ownerPage.getByLabel('6-digit code from the app').fill(ownerTotp.generate());
+    await ownerPage.getByRole('button', { name: 'Turn on' }).click();
+    await ownerPage.getByRole('button', { name: 'I saved them, continue' }).click();
+    await expect(ownerPage.getByRole('heading', { name: 'Set up your agency' })).toBeVisible();
+    await ownerPage.getByRole('button', { name: 'Finish setup' }).click();
+    await expect(ownerPage.getByText(/waiting for PropForce approval/)).toBeVisible();
+
+    // The admin approves it from the queue.
+    await page.reload();
+    const queued = page.getByRole('listitem').filter({ hasText: agencyName });
+    await expect(queued).toBeVisible();
+    await queued.getByRole('button', { name: 'Approve' }).click();
+    await expect(page.getByText(`${agencyName} approved.`)).toBeVisible();
+    await expect(page.getByText('Nothing waiting for approval.')).toBeVisible();
+    await ownerPage.reload();
+    await expect(ownerPage.getByText(/waiting for PropForce approval/)).toHaveCount(0);
+
+    // The admin suspends it with a reason; the owner sees the notice.
+    await page.getByRole('button', { name: 'Agencies', exact: true }).click();
+    const row = page.getByRole('listitem').filter({ hasText: agencyName });
+    await row.getByRole('button', { name: 'Suspend' }).click();
+    await row.getByLabel(/Reason/).fill('Trade licence expired');
+    await row.getByRole('button', { name: 'Confirm suspension' }).click();
+    await expect(page.getByText(`${agencyName} suspended.`)).toBeVisible();
+    await ownerPage.reload();
+    await expect(
+      ownerPage.getByRole('heading', { name: 'Your agency is suspended' }),
+    ).toBeVisible();
+    await expect(ownerPage.getByText('Reason: Trade licence expired')).toBeVisible();
+
+    // Every action shows up in the activity log.
+    await page.getByRole('button', { name: 'Activity', exact: true }).click();
+    await expect(page.getByText('platform.agency_suspended')).toBeVisible();
+    await expect(page.getByText('platform.agency_approved')).toBeVisible();
+    await expect(page.getByText('platform.setting_changed').first()).toBeVisible();
+    await ownerContext.close();
+  } finally {
+    await setFlag('platform.require_agency_approval', false);
+  }
 
   // The agency dashboard is still one click away.
   await page.getByRole('link', { name: 'My agency dashboard' }).click();

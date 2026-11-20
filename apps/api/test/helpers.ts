@@ -50,6 +50,11 @@ export async function resetDatabase(owner: PrismaClient): Promise<void> {
   await owner.$executeRawUnsafe(
     'TRUNCATE "audit_log", "property_permit", "property", "project", "invitation", "membership", "team", "agency_settings", "agency", "user_token", "mfa_factor", "session", "user" CASCADE',
   );
+  await owner.$executeRawUnsafe('TRUNCATE "platform_audit_log"');
+  await owner.$executeRawUnsafe(
+    `UPDATE "feature_flag" SET enabled = (key = 'platform.allow_signups')
+     WHERE key IN ('platform.allow_signups', 'platform.require_agency_approval', 'voice.outbound_calls')`,
+  );
 }
 
 export function tokenFrom(message: EmailMessage | undefined): string {

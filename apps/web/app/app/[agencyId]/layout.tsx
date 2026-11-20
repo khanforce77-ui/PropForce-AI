@@ -29,6 +29,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   }, [me, membership, router]);
 
   if (!membership) return null;
+  const closed = ['suspended', 'cancelled'].includes(membership.agency.status);
   const base = `/app/${agencyId}`;
   const isActive = (href: string) =>
     href === base ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
@@ -75,7 +76,27 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </aside>
-      <main className="flex-1 px-4 py-6 md:px-10 md:py-10">{children}</main>
+      <main className="flex-1 px-4 py-6 md:px-10 md:py-10">
+        {closed ? (
+          <div className="max-w-xl rounded-xl border border-red-300 bg-red-50 p-6 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+            <h1 className="text-lg font-semibold">
+              {membership.agency.approvalStatus === 'rejected'
+                ? 'Your agency was not approved'
+                : membership.agency.status === 'suspended'
+                  ? 'Your agency is suspended'
+                  : 'Your agency is closed'}
+            </h1>
+            {membership.agency.statusReason ? (
+              <p className="mt-2 text-sm">Reason: {membership.agency.statusReason}</p>
+            ) : null}
+            <p className="mt-2 text-sm">
+              Contact PropForce support if you think this is a mistake.
+            </p>
+          </div>
+        ) : (
+          children
+        )}
+      </main>
     </div>
   );
 }

@@ -58,6 +58,12 @@ export class AuthService {
    * cannot be used to discover accounts; an existing user gets a notice email instead.
    */
   async register(input: RegisterInput): Promise<void> {
+    const signups = await this.prisma.featureFlag.findUnique({
+      where: { key: 'platform.allow_signups' },
+    });
+    if (signups && !signups.enabled) {
+      throw new AppError(403, 'SIGNUPS_CLOSED', 'New agency sign-ups are closed right now.');
+    }
     if (!this.config.supportedEmirates.includes(input.agency.emirate)) {
       throw new AppError(400, 'VALIDATION_FAILED', 'This emirate is not supported yet.', [
         {
@@ -154,6 +160,11 @@ export class AuthService {
 
   /** Completes a login once every required factor has been checked. */
   async startSession(userId: string, client: ClientInfo): Promise<IssuedTokens> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { suspendedAt: true },
+    });
+    if (user.suspendedAt) throw accountSuspended();
     await this.prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
     return this.createSession(userId, randomUUID(), client);
   }
@@ -188,6 +199,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
     if (!user) throw invalidSession();
+    if (user.suspendedAt) throw accountSuspended();
     return this.createSession(user.id, session.familyId, client);
   }
 
@@ -261,7 +273,17 @@ export class AuthService {
         select: {
           id: true,
           role: true,
-          agency: { select: { id: true, name: true, slug: true, emirate: true, status: true } },
+          agency: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              emirate: true,
+              status: true,
+              approvalStatus: true,
+              statusReason: true,
+            },
+          },
         },
         orderBy: { createdAt: 'asc' },
       }),
@@ -376,4 +398,12 @@ export class AuthService {
       this.logger.error(`Failed to send email "${message.subject}": ${(err as Error).message}`);
     }
   }
+}
+
+function accountSuspended() {
+  return new AppError(
+    403,
+    'ACCOUNT_SUSPENDED',
+    'This account is suspended. Contact PropForce support.',
+  );
 }

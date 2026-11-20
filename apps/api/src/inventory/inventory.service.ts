@@ -11,7 +11,7 @@ import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
 import { hasPermission } from '../tenancy/permissions';
-import { audit } from '../tenancy/tenancy.service';
+import { assertAgencyCanGrow, audit } from '../tenancy/tenancy.service';
 import type { TenantRequestContext } from '../tenancy/tenant.guard';
 import type {
   ListPropertiesQuery,
@@ -157,6 +157,7 @@ export class InventoryService {
       }
       if (rest.projectId) await this.assertProject(tx, rest.projectId);
       this.assertRentPeriod(rest.listingType, rest.rentPeriod);
+      await assertAgencyCanGrow(tx, ctx.tenantId, 'listing');
 
       const data = {
         ...rest,
@@ -242,6 +243,14 @@ export class InventoryService {
 
       const data: Prisma.PropertyUncheckedUpdateInput = { status };
       if (status === 'active') {
+        const agency = await tx.agency.findUniqueOrThrow({ where: { id: ctx.tenantId } });
+        if (agency.approvalStatus === 'pending') {
+          throw new AppError(
+            403,
+            'AGENCY_AWAITING_APPROVAL',
+            'Listings can go live once PropForce approves your agency.',
+          );
+        }
         await this.assertPublishable(tx, ctx, current);
         data.listingExpiresAt = await this.freshUntil(tx, ctx);
         data.verifiedAt = new Date();
