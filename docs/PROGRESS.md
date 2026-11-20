@@ -186,3 +186,18 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 
 - Cloud API and Embedded Signup adapters NOT run against Meta (no verified business, app or test number yet).
 - API webhook endpoint, queue, and the WhatsApp account / conversation / message tables come in the next PR.
+
+## Phase 2 · PR 3 · Google Calendar building blocks (2026-11-20)
+
+**Built** (`packages/calendar`, library only)
+
+- OAuth: authorization code + PKCE (S256), HMAC-signed 10-minute `state` bound to agency and agent, offline access, minimal scopes (`calendar.freebusy`, `calendar.events`; no full calendar read), https-only redirect (localhost allowed in development), check that the user granted every needed scope.
+- Viewing slots: working hours in agency local time (UAE fixed UTC+4, default Mon–Sat 09:00–19:00), 30-minute slots on the :00/:30 grid, buffer before/after busy times, minimum notice; `checkSlot` re-checks a slot at booking time (conflict, outside hours, too soon).
+- Google adapter: token exchange/refresh/revoke (revoked grants flagged as reconnect-required), free/busy that fails closed if Google reports an error, events created with a deterministic id from the viewing id so retries never duplicate, delete of a missing event treated as done. Fake provider for tests.
+
+**Tested**: 23 unit tests.
+
+**Pending**
+
+- Google adapter NOT run against Google (no OAuth client yet).
+- API routes (`/calendar/google/connect|callback`, `/availability`, `/viewings`), the `calendar_connection` and `viewing` tables, encrypted token storage and the AI tool handlers come with the wiring PR.
