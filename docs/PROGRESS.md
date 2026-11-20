@@ -106,3 +106,23 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 
 - Mandatory MFA for owners/admins is reported by `/me` but enforced on tenant routes in PR 5 (tenant selection), since no tenant routes exist yet.
 - Key rotation for `DATA_ENCRYPTION_KEY` (ciphertexts carry a version byte for this) has no tooling yet.
+
+## Phase 1 · PR 5 · Agency members, roles, invitations, teams and audit log (2026-11-20)
+
+**Built**
+
+- Agency context: tenant routes take the agency id in `X-Tenant-Id`. `TenantGuard` checks on every request that the user has an active membership, the agency is not suspended/cancelled, owners/admins have MFA on (now enforced), and the role has the route's permission (default deny).
+- Permission catalog (`src/tenancy/permissions.ts`): owner/admin full access; manager and agent read-only for agency, members and teams in this PR (their CRM/inventory permissions come with those modules).
+- `GET/PATCH /v1/agency`, `GET/PATCH /v1/agency/settings` (outbound voice cannot be enabled by the agency).
+- `GET /v1/members`, `PATCH /v1/members/:id` (role, team), `POST /v1/members/:id/suspend|reactivate`. Only owners grant/change owner and admin roles or suspend them; nobody changes their own role or suspends themselves; at least one active owner is kept.
+- Teams: list, create, rename, delete.
+- Invitations: create (7-day single-use link by email; replaces a pending invite for the same email), list, revoke, and public `POST /v1/invitations/accept`. New people set name + password (email is treated as verified); existing accounts must be signed in as the invited email.
+- `GET /v1/audit-logs` with filters and cursor pagination. Audit entries are written inside the same transaction as the change.
+
+**Tested**: 17 tenancy API tests: header validation, non-member refusal, MFA enforcement for owners and admins, suspended agency, profile/settings with audit, settings cannot enable outbound voice, invitation flows (new account, single use, revoked, expired, existing account must sign in as invitee, duplicates), agent permission matrix (8 routes refused), admin limits, suspension/reactivation, teams, audit pagination, and cross-agency isolation through the API (members, teams, invitations, audit log). 59 API tests total.
+
+**Not yet done / known issues**
+
+- Removing a member entirely (status `removed`) has no endpoint yet; suspension covers offboarding for now.
+- Agency onboarding UI and activation (`pending` → `active`) come with the web app PR.
+- Manager team-scoped permissions are defined when leads/listings exist.

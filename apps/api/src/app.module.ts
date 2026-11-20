@@ -8,6 +8,7 @@ import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { SecurityModule } from './security/security.module';
+import { TenancyModule } from './tenancy/tenancy.module';
 
 @Module({})
 export class AppModule {
@@ -43,6 +44,7 @@ export class AppModule {
         SecurityModule,
         HealthModule,
         AuthModule,
+        TenancyModule,
       ],
     };
   }
