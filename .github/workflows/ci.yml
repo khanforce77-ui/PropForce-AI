@@ -16,10 +16,25 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: propforce
+          POSTGRES_PASSWORD: propforce_ci_only
+          POSTGRES_DB: propforce
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U propforce" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      MIGRATION_DATABASE_URL: postgresql://propforce:propforce_ci_only@localhost:5432/propforce
+      DATABASE_URL: postgresql://propforce_app_user:propforce_app_ci_only@localhost:5432/propforce
+      APP_DB_PASSWORD: propforce_app_ci_only
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -27,13 +42,17 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - name: Apply migrations and create the application DB role
+        run: |
+          pnpm --filter @propforce/db migrate:deploy
+          pnpm --filter @propforce/db db:setup-local-roles
       - run: pnpm test
       - run: pnpm build
 
   secrets-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2

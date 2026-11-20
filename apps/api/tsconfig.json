@@ -8,5 +8,5 @@
     "isolatedModules": false,
     "declaration": false
   },
-  "include": ["src", "test", "vitest.config.ts"]
+  "include": ["src", "test", "vitest.config.mts"]
 }
