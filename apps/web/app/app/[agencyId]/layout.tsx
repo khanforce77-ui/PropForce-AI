@@ -3,6 +3,7 @@
 import {
   Building2,
   Contact,
+  Globe,
   Home,
   KanbanSquare,
   LayoutDashboard,
@@ -46,6 +47,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/listings`, label: 'Listings', icon: Home },
     { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
+    { href: `${base}/portal`, label: 'Property portal', icon: Globe },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
   ];
 
