@@ -3,7 +3,15 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/.next/**', '**/coverage/**', '**/next-env.d.ts'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/.next/**',
+      '**/coverage/**',
+      '**/next-env.d.ts',
+      '**/src/generated/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
-    "infra:down": "docker compose -f infra/docker-compose.yml down"
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "db:setup": "pnpm --filter @propforce/db migrate:deploy && pnpm --filter @propforce/db db:setup-local-roles"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

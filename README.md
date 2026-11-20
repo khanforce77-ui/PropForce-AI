@@ -2,7 +2,7 @@
 
 Multi-tenant AI real estate brokerage operating system for UAE agencies.
 
-> Status: **Phase 1, PR 1 (scaffold)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
+> Status: **Phase 1, PR 2 (database tenancy and row-level security)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
 
 ## Requirements
 
@@ -15,16 +15,24 @@ Multi-tenant AI real estate brokerage operating system for UAE agencies.
 corepack enable
 pnpm install
 cp .env.example .env
-pnpm infra:up        # optional for now; required from PR 2
+pnpm infra:up        # Postgres, Redis, MinIO, Mailpit, ClamAV
+pnpm db:setup        # apply migrations, create the app DB role
 pnpm build
 pnpm dev             # web on :3000, api on :4000
 ```
 
-Checks:
+Checks (database tests need `pnpm infra:up` and `pnpm db:setup` first):
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
+
+## Tenant isolation
+
+Every agency's data is separated by PostgreSQL row-level security. The app connects with a role
+that cannot bypass it, and all tenant queries run through `withTenant(prisma, { tenantId }, fn)`
+from `@propforce/db`. Without a tenant context, tenant tables return no rows. See
+`packages/db/test/tenant-isolation.test.ts`.
 
 ## Layout
 
@@ -32,7 +40,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 apps/api       NestJS REST API
 apps/worker    Background job processors (BullMQ, from later PRs)
 apps/web       Next.js web app
-packages/      Shared contracts and config
+packages/      Shared contracts, config and the database package (Prisma + RLS)
 infra/         Local docker-compose
 docs/          Architecture deliverables and progress report
 ```
