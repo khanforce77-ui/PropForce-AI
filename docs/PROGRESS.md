@@ -169,3 +169,20 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Not wired into the API/worker yet: needs Conversation/Message tables (WhatsApp PR) and Phase 1 listings/leads services for the real tool handlers.
 - Audit/run sinks and the Redis rate limiter are interfaces only; DB tables `ai_run` / `ai_tool_call` come with the wiring PR.
 - Golden-conversation eval set (EN/AR, injection attempts) still to be written.
+
+## Phase 2 · PR 2 · WhatsApp Cloud API building blocks (2026-11-20)
+
+**Built** (`packages/whatsapp`, library only)
+
+- Webhook security: `X-Hub-Signature-256` HMAC check on the raw body (constant time, 1 MB limit, fails closed without a secret) and the GET verify-token handshake.
+- Webhook parsing into normalized message/status events keyed by `wamid`; malformed items are skipped and counted instead of failing the batch.
+- Messaging rules: opt-out/opt-in keywords in English and Arabic (whole-message match, so "which metro stop?" is not an opt-out), 24-hour service window, and one fail-closed `checkOutboundSend` gate (opt-out → window → approved template → consent outside the window).
+- Per-agency numbers: every send takes the tenant's own phone number id and decrypted token. Embedded Signup adapter exchanges the signup code server-side (secret in the POST body, never a URL) and subscribes the app to the agency's WABA.
+- Cloud API send adapter (link previews off, Graph errors mapped to retryable/non-retryable codes) plus fakes.
+
+**Tested**: 38 unit tests.
+
+**Pending**
+
+- Cloud API and Embedded Signup adapters NOT run against Meta (no verified business, app or test number yet).
+- API webhook endpoint, queue, and the WhatsApp account / conversation / message tables come in the next PR.
