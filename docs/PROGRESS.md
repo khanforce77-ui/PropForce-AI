@@ -148,3 +148,24 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Two browser tabs refreshing at the same moment can trip refresh-token reuse detection and sign the user out (safe failure). A short grace window or cross-tab lock can follow.
 - Settings pages (agency profile edit, teams, audit log viewer, session list) have API support but no screens yet.
 - Arabic/RTL not started (planned for Phase 4).
+
+## Phase 2 · PR 1 · AI orchestration core (2026-11-20)
+
+**Built** (`packages/ai`, no database or network access of its own)
+
+- Tool catalog for all 12 AI tools from API spec §8, each with a strict zod schema (unknown keys rejected) and a policy: permission, sensitivity, per-conversation rate limit.
+- `ToolGateway`: allowlist → reserved scope fields refused (`tenantId`, `conversationId`, ...; scope always comes from server context) → schema → permission (AI's fixed set ∩ assigned agent's permissions) → rate limit → spend cap → sensitivity → execute → audit. Every attempt is audited, including refusals. Handler error details are never shown to the model.
+- Viewing requests are sensitive: confirmed only when the agent pre-authorized auto-confirm, otherwise created as a request needing a human; refused when no agent is assigned.
+- Prompt-injection defenses: client text, history and summaries go into a nonce-delimited untrusted block in a user message (never the instructions); invisible/bidi characters stripped; forged boundary tags defanged; heuristic detector (EN/AR) flags attempts for audit.
+- Grounding validator: the model must return structured JSON with `citedPropertyIds` and `claims`; replies are rejected if they cite properties no tool returned this turn, if claims don't match the listing, or if the text contains AED amounts, sqft or bedroom counts not found in tool results or in the client's own words (handles "AED 1.85M", "2 million dirhams", Arabic digits). Backstop for visa/mortgage/guaranteed-return advice.
+- `AiOrchestrator.runTurn`: tool loop (max 6 steps), on any failure (grounding, provider error, step limit, spend cap) sends a fixed EN/AR fallback and hands over to a human through the gateway. Records each run (provider, model, prompt version, tokens, latency, outcome, injection flag, grounding failures).
+- LLM port with `FakeLlmProvider` (tests, evals) and an OpenAI Responses API adapter (`store: false`, strict JSON output).
+
+**Tested**: 42 unit tests (gateway refusals and audit, permissions ceiling, approvals, rate limit, spend cap, grounding accept/reject cases, injection wrapping and detection, orchestrator end-to-end with the fake model, OpenAI request building and response parsing offline).
+
+**Pending**
+
+- OpenAI adapter has NOT been run against the live API (no key yet).
+- Not wired into the API/worker yet: needs Conversation/Message tables (WhatsApp PR) and Phase 1 listings/leads services for the real tool handlers.
+- Audit/run sinks and the Redis rate limiter are interfaces only; DB tables `ai_run` / `ai_tool_call` come with the wiring PR.
+- Golden-conversation eval set (EN/AR, injection attempts) still to be written.
