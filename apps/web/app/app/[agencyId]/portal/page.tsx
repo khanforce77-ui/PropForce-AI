@@ -35,6 +35,9 @@ interface Enquiry {
 const STATUSES: Enquiry['status'][] = ['new', 'contacted', 'converted', 'closed', 'spam'];
 const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL;
 
+/** Remount the form when saved values change, so the inputs show the normalised numbers. */
+const formKey = (a: PortalAgent) => [a.id, a.publicPhoneE164, a.whatsappE164, a.brn].join('|');
+
 function ProfileForm({
   agent,
   onSave,
@@ -180,7 +183,7 @@ export default function PortalPage() {
             enquiry form is shown.
           </p>
           <div className="mt-4">
-            <ProfileForm agent={mine} onSave={saveProfile} />
+            <ProfileForm key={formKey(mine)} agent={mine} onSave={saveProfile} />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Last 30 days: {mine.last30Days.enquiries} enquiries, {mine.last30Days.whatsappClicks}{' '}
@@ -202,7 +205,7 @@ export default function PortalPage() {
                     {a.last30Days.callClicks} calls (30 days)
                   </span>
                 </p>
-                <ProfileForm agent={a} onSave={saveProfile} />
+                <ProfileForm key={formKey(a)} agent={a} onSave={saveProfile} />
               </div>
             ))}
           </div>
