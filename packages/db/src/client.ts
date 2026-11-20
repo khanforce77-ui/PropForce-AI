@@ -65,6 +65,24 @@ export async function withUser<T>(
 }
 
 /**
+ * Runs `fn` as a platform administrator: read-only visibility of every agency, membership and
+ * listing. The database grants it only if the user's is_platform_admin flag is true, so a caller
+ * cannot gain it by passing any user id. Writes still need a tenant context.
+ */
+export async function withPlatformAdmin<T>(
+  prisma: PrismaClient,
+  ctx: UserContext,
+  fn: (tx: TransactionClient) => Promise<T>,
+): Promise<T> {
+  const userId = assertUuid(ctx.userId, 'userId');
+  return prisma.$transaction(async (tx) => {
+    await setLocal(tx, 'app.user_id', userId);
+    await setLocal(tx, 'app.platform_admin', 'on');
+    return fn(tx);
+  });
+}
+
+/**
  * Looks up an invitation by token hash before the accepting user has a tenant context.
  * Only the row whose hash matches is visible.
  */

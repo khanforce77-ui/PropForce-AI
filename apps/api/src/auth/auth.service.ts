@@ -242,7 +242,14 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { id: true, email: true, fullName: true, locale: true, emailVerifiedAt: true },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        locale: true,
+        emailVerifiedAt: true,
+        isPlatformAdmin: true,
+      },
     });
     const mfaEnabled =
       (await this.prisma.mfaFactor.count({
@@ -260,7 +267,8 @@ export class AuthService {
       }),
     );
     // Owners and admins must use two-factor authentication. Enforced on tenant routes (PR 5).
-    const mfaRequired = memberships.some((m) => m.role === 'owner' || m.role === 'admin');
+    const mfaRequired =
+      user.isPlatformAdmin || memberships.some((m) => m.role === 'owner' || m.role === 'admin');
     return { user: { ...user, mfaEnabled }, mfaRequired, memberships };
   }
 

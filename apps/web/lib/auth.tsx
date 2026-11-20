@@ -125,6 +125,7 @@ export function useAuth(): AuthState {
 /** Where to send a user right after signing in. */
 export function landingPath(me: MeResponse): string {
   if (me.mfaRequired && !me.user.mfaEnabled) return '/app/security?required=1';
+  if (me.user.isPlatformAdmin) return '/app/admin';
   const first = me.memberships[0];
   if (!first) return '/app';
   if (me.memberships.length > 1) return '/app';

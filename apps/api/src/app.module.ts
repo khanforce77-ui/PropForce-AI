@@ -10,6 +10,7 @@ import { HealthModule } from './health/health.module';
 import { SecurityModule } from './security/security.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({})
 export class AppModule {
@@ -47,6 +48,7 @@ export class AppModule {
         AuthModule,
         TenancyModule,
         InventoryModule,
+        PlatformModule,
       ],
     };
   }
