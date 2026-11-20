@@ -12,6 +12,7 @@ import { TenancyModule } from './tenancy/tenancy.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CrmModule } from './crm/crm.module';
 import { PlatformModule } from './platform/platform.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({})
 export class AppModule {
@@ -51,6 +52,7 @@ export class AppModule {
         InventoryModule,
         CrmModule,
         PlatformModule,
+        WhatsAppModule,
       ],
     };
   }

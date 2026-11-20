@@ -35,6 +35,20 @@ const envSchema = z.object({
 
   /** Requests per minute for sensitive auth endpoints, per client IP. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+
+  /**
+   * Meta app for WhatsApp (PropForce as Tech Provider). Each agency connects its own number via
+   * Embedded Signup; these are the platform app's credentials, not an agency's.
+   */
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  META_GRAPH_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .default('v21.0'),
+  /** `fake` records sends in memory (development/test only). Default: fake locally, meta when deployed. */
+  WHATSAPP_PROVIDER: z.enum(['meta', 'fake']).optional(),
 });
 
 export interface AppConfig {
@@ -59,6 +73,14 @@ export interface AppConfig {
   dataEncryptionKey?: Buffer;
   /** Cookies are Secure everywhere except local development and tests over plain HTTP. */
   secureCookies: boolean;
+  whatsapp: {
+    /** `none`: not configured, WhatsApp endpoints answer INTEGRATION_NOT_CONFIGURED. */
+    provider: 'meta' | 'fake' | 'none';
+    appId?: string;
+    appSecret?: string;
+    verifyToken?: string;
+    graphVersion: string;
+  };
 }
 
 /** Validates process environment once at boot. Invalid config stops the process. */
@@ -93,6 +115,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       'Invalid environment configuration: SMTP_URL is required in staging/production',
     );
   }
+  if (deployed && e.WHATSAPP_PROVIDER === 'fake') {
+    throw new Error(
+      'Invalid environment configuration: WHATSAPP_PROVIDER=fake is not allowed in staging/production',
+    );
+  }
+  const metaConfigured = Boolean(e.META_APP_ID && e.META_APP_SECRET);
+  const waProvider =
+    e.WHATSAPP_PROVIDER === 'fake' || (!e.WHATSAPP_PROVIDER && !deployed)
+      ? 'fake'
+      : metaConfigured
+        ? 'meta'
+        : 'none';
   return {
     nodeEnv: e.NODE_ENV,
     port: e.API_PORT,
@@ -115,6 +149,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
     ...(encryptionKey ? { dataEncryptionKey: encryptionKey } : {}),
     secureCookies: deployed,
+    whatsapp: {
+      provider: waProvider,
+      ...(e.META_APP_ID ? { appId: e.META_APP_ID } : {}),
+      ...(e.META_APP_SECRET ? { appSecret: e.META_APP_SECRET } : {}),
+      ...(e.META_WEBHOOK_VERIFY_TOKEN ? { verifyToken: e.META_WEBHOOK_VERIFY_TOKEN } : {}),
+      graphVersion: e.META_GRAPH_VERSION,
+    },
   };
 }
 

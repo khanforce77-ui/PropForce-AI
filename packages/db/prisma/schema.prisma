@@ -175,18 +175,21 @@ model Agency {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  settings    AgencySettings?
-  memberships Membership[]
-  teams       Team[]
-  invitations Invitation[]
-  auditLogs   AuditLog[]
-  projects    Project[]
-  properties  Property[]
-  permits     PropertyPermit[]
-  contacts    Contact[]
-  consents    ConsentRecord[]
-  leads       Lead[]
-  leadEvents  LeadActivity[]
+  settings         AgencySettings?
+  memberships      Membership[]
+  teams            Team[]
+  invitations      Invitation[]
+  auditLogs        AuditLog[]
+  projects         Project[]
+  properties       Property[]
+  permits          PropertyPermit[]
+  contacts         Contact[]
+  consents         ConsentRecord[]
+  leads            Lead[]
+  leadEvents       LeadActivity[]
+  whatsappAccounts WhatsAppAccount[]
+  conversations    Conversation[]
+  messages         Message[]
 
   @@map("agency")
 }
@@ -251,9 +254,10 @@ model Membership {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   team   Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
-  assignedProperties Property[]
-  ownedContacts      Contact[]
-  assignedLeads      Lead[]
+  assignedProperties    Property[]
+  ownedContacts         Contact[]
+  assignedLeads         Lead[]
+  assignedConversations Conversation[]
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -528,10 +532,11 @@ model Contact {
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agency   Agency          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owner    Membership?     @relation(fields: [ownerMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
-  consents ConsentRecord[]
-  leads    Lead[]
+  agency        Agency          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner         Membership?     @relation(fields: [ownerMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  consents      ConsentRecord[]
+  leads         Lead[]
+  conversations Conversation[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -617,4 +622,116 @@ model LeadActivity {
 
   @@index([tenantId, leadId, createdAt(sort: Desc)])
   @@map("lead_activity")
+}
+
+// ───── WhatsApp (Phase 2) ─────
+
+enum WhatsAppAccountStatus {
+  active
+  disconnected
+}
+
+enum ConversationMode {
+  ai
+  human
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageAuthor {
+  client
+  ai
+  agent
+  system
+}
+
+enum MessageStatus {
+  received
+  sent
+  delivered
+  read
+  failed
+}
+
+/// An agency's own WhatsApp Business number, connected through Meta Embedded Signup.
+model WhatsAppAccount {
+  id                 String                @id @default(uuid(7)) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  wabaId             String                @map("waba_id")
+  /// Meta's id for the number. Globally unique: webhooks are routed to the agency by it.
+  phoneNumberId      String                @unique @map("phone_number_id")
+  displayPhoneNumber String                @map("display_phone_number")
+  /// Business token, AES-256-GCM encrypted (associated data: account id).
+  accessTokenEnc     Bytes                 @map("access_token_enc")
+  status             WhatsAppAccountStatus @default(active)
+  connectedBy        String                @map("connected_by") @db.Uuid
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency        Agency         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@map("whatsapp_account")
+}
+
+/// One thread per agency number and contact.
+model Conversation {
+  id                   String           @id @default(uuid(7)) @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  whatsappAccountId    String           @map("whatsapp_account_id") @db.Uuid
+  contactId            String           @map("contact_id") @db.Uuid
+  mode                 ConversationMode @default(ai)
+  assignedMembershipId String?          @map("assigned_membership_id") @db.Uuid
+  /// Start of the 24-hour customer service window.
+  lastInboundAt        DateTime?        @map("last_inbound_at") @db.Timestamptz(3)
+  lastMessageAt        DateTime         @default(now()) @map("last_message_at") @db.Timestamptz(3)
+  unreadCount          Int              @default(0) @map("unread_count")
+  /// AI conversation state (stage, collected requirement fields, language).
+  state                Json             @default("{}")
+  summary              String?
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  WhatsAppAccount @relation(fields: [whatsappAccountId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  contact  Contact         @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  assignee Membership?     @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  messages Message[]
+
+  @@unique([tenantId, whatsappAccountId, contactId])
+  @@unique([id, tenantId])
+  @@index([tenantId, lastMessageAt(sort: Desc)])
+  @@index([tenantId, assignedMembershipId])
+  @@map("conversation")
+}
+
+model Message {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  direction      MessageDirection
+  author         MessageAuthor
+  authorUserId   String?          @map("author_user_id") @db.Uuid
+  /// Meta message id; the idempotency key for webhooks.
+  wamid          String?
+  type           String
+  body           String?
+  mediaId        String?          @map("media_id")
+  mediaMimeType  String?          @map("media_mime_type")
+  status         MessageStatus
+  errorCode      Int?             @map("error_code")
+  statusAt       DateTime?        @map("status_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency       Agency       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, wamid])
+  @@index([tenantId, conversationId, createdAt(sort: Desc)])
+  @@map("message")
 }

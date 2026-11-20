@@ -27,6 +27,12 @@ export const PERMISSIONS = [
   'crm:write',
   /** See and reassign every contact and lead in the agency; erase contacts. */
   'crm:manage',
+  /** Read WhatsApp conversations you are assigned (or all, with crm:manage). */
+  'conversation:read',
+  /** Reply, take over from the AI and hand back to it. */
+  'conversation:reply',
+  /** Connect and disconnect the agency's WhatsApp numbers. */
+  'integration:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -45,6 +51,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'crm:read',
     'crm:write',
     'crm:manage',
+    'conversation:read',
+    'conversation:reply',
   ],
   agent: [
     'agency:read',
@@ -54,6 +62,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'property:write',
     'crm:read',
     'crm:write',
+    'conversation:read',
+    'conversation:reply',
   ],
 };
 
