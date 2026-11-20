@@ -312,6 +312,58 @@ describe('public portal: enquiries', () => {
       .expect(200);
   });
 
+  it('turns an enquiry into a CRM lead for the listing agent, with the consent given', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p = await publishedListing(a, {
+      listingType: 'rent',
+      rentPeriod: 'yearly',
+      price: 150_000,
+    });
+    await http()
+      .post(`/v1/public/listings/${p.id}/enquiries`)
+      .send(enquiryBody({ consentMarketing: true }))
+      .expect(202);
+
+    const enquiry = await t.owner.portalEnquiry.findFirstOrThrow();
+    expect(enquiry.leadId).toBeTruthy();
+    const lead = await t.owner.lead.findUniqueOrThrow({
+      where: { id: enquiry.leadId! },
+      include: { contact: true, activities: true },
+    });
+    expect(lead).toMatchObject({
+      tenantId: a.tenantId,
+      intent: 'rent',
+      source: 'portal',
+      propertyId: p.id,
+      assignedMembershipId: a.membershipId,
+      communities: ['Dubai Marina'],
+    });
+    expect(lead.contact).toMatchObject({
+      fullName: 'Omar Visitor',
+      phoneE164: '+971507654321',
+      source: 'portal',
+      ownerMembershipId: a.membershipId,
+    });
+    expect(lead.activities.map((x) => x.type).sort()).toEqual(['created', 'note']);
+    const consents = await t.owner.consentRecord.findMany({ where: { contactId: lead.contactId } });
+    expect(consents).toHaveLength(6); // whatsapp, call, email × service, marketing
+    expect(consents.every((c) => c.evidence === `portal_enquiry:${enquiry.id}`)).toBe(true);
+
+    // The agent sees it as a lead through the normal CRM API.
+    const leads = await http().get('/v1/leads').set(a.h).expect(200);
+    expect(leads.body.data.map((l: { id: string }) => l.id)).toContain(lead.id);
+
+    // A second enquiry from the same phone about the same listing adds to the same lead.
+    await t.owner.$executeRawUnsafe('TRUNCATE "public_rate_hit"');
+    await http()
+      .post(`/v1/public/listings/${p.id}/enquiries`)
+      .send(enquiryBody({ message: 'Any update on this one?' }))
+      .expect(202);
+    expect(await t.owner.lead.count()).toBe(1);
+    expect(await t.owner.contact.count()).toBe(1);
+    expect(await t.owner.leadActivity.count({ where: { type: 'note' } })).toBe(2);
+  });
+
   it('requires consent and a valid phone', async () => {
     const a = await createAgency('a@example.test', 'Alpha Homes');
     const p = await publishedListing(a);

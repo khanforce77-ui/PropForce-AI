@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { Alert, Card } from '@/components/ui/card';
 import { ApiError, type DashboardSummary, type PropertyList } from '@/lib/api';
+import type { CrmSummary } from '@/lib/crm';
 import { useAuth } from '@/lib/auth';
 import { formatPrice } from '@/lib/listings';
 
@@ -37,17 +38,20 @@ export default function DashboardPage() {
   const m = me?.memberships.find((x) => x.agency.id === agencyId);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [recent, setRecent] = useState<PropertyList | null>(null);
+  const [crm, setCrm] = useState<CrmSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [s, r] = await Promise.all([
+        const [s, r, c] = await Promise.all([
           request<DashboardSummary>('/dashboard/summary', { tenantId: agencyId }),
           request<PropertyList>('/properties', { tenantId: agencyId, query: { limit: 5 } }),
+          request<CrmSummary>('/crm/summary', { tenantId: agencyId }),
         ]);
         setSummary(s);
         setRecent(r);
+        setCrm(c);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not load the dashboard.');
       }
@@ -94,6 +98,18 @@ export default function DashboardPage() {
         </Alert>
       ) : null}
       {error ? <Alert>{error}</Alert> : null}
+
+      <section aria-label="Leads at a glance" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Open leads" value={crm?.open} href={`${base}/leads`} />
+        <Stat
+          label="Follow-ups due today"
+          value={crm?.followUpsDue}
+          hint="Including overdue"
+          href={`${base}/leads`}
+        />
+        <Stat label="New leads this week" value={crm?.newThisWeek} href={`${base}/leads`} />
+        <Stat label="Contacts" value={crm?.contacts} href={`${base}/contacts`} />
+      </section>
 
       <section aria-label="Listings at a glance" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Live listings" value={l?.active} href={`${base}/listings`} />

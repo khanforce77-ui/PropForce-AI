@@ -21,6 +21,12 @@ export const PERMISSIONS = [
   'property:write',
   /** Edit, reassign, verify or delete any listing in the agency; manage projects. */
   'property:manage',
+  /** View contacts and leads you own or are assigned. */
+  'crm:read',
+  /** Add contacts and leads, record consent, work the leads assigned to you. */
+  'crm:write',
+  /** See and reassign every contact and lead in the agency; erase contacts. */
+  'crm:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -36,8 +42,19 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'property:read',
     'property:write',
     'property:manage',
+    'crm:read',
+    'crm:write',
+    'crm:manage',
   ],
-  agent: ['agency:read', 'member:read', 'team:read', 'property:read', 'property:write'],
+  agent: [
+    'agency:read',
+    'member:read',
+    'team:read',
+    'property:read',
+    'property:write',
+    'crm:read',
+    'crm:write',
+  ],
 };
 
 export const hasPermission = (role: Role, permission: Permission): boolean =>

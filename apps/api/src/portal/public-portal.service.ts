@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma, withPublicPortal, type PrismaClient, type TransactionClient } from '@propforce/db';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
@@ -10,6 +10,7 @@ import {
   type EnquiryInput,
   type PublicSearchQuery,
 } from './portal.schemas';
+import { convertEnquiryToLead } from './enquiry-to-lead';
 import { whatsappLink } from './phone';
 import { hitRateLimit, keyedHash } from './rate-limit';
 
@@ -358,7 +359,8 @@ export class PublicPortalService {
         { path: 'message', message: 'Too many links' },
       ]);
     }
-    return this.run(async (tx) => {
+    const enquiryId = randomUUID();
+    const tenantId = await this.run(async (tx) => {
       const row = await tx.property.findUnique({
         where: { id },
         select: { id: true, tenantId: true, assignedMembershipId: true },
@@ -388,6 +390,7 @@ export class PublicPortalService {
       await tx.portalEnquiry.createMany({
         data: [
           {
+            id: enquiryId,
             tenantId: row.tenantId,
             propertyId: row.id,
             membershipId: row.assignedMembershipId,
@@ -406,7 +409,15 @@ export class PublicPortalService {
           },
         ],
       });
-      return accepted;
+      return row.tenantId;
     });
+    // The enquiry is safely stored; turning it into a CRM lead is a separate step in the
+    // agency's own transaction. If it fails, the enquiry stays in the portal inbox (lead_id null).
+    try {
+      await convertEnquiryToLead(this.prisma, tenantId, enquiryId);
+    } catch (err) {
+      this.log.error({ msg: 'Portal enquiry could not become a lead', enquiryId, err });
+    }
+    return accepted;
   }
 }

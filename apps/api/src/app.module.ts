@@ -10,6 +10,7 @@ import { HealthModule } from './health/health.module';
 import { SecurityModule } from './security/security.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { CrmModule } from './crm/crm.module';
 import { PlatformModule } from './platform/platform.module';
 import { PortalModule } from './portal/portal.module';
 
@@ -49,6 +50,7 @@ export class AppModule {
         AuthModule,
         TenancyModule,
         InventoryModule,
+        CrmModule,
         PlatformModule,
         PortalModule,
       ],
