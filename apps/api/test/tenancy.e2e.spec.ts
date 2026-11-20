@@ -137,6 +137,21 @@ describe('agency context', () => {
 });
 
 describe('agency profile and settings', () => {
+  it('completes onboarding once: pending becomes active', async () => {
+    const o = await createOwner('owner@a.test', 'Alpha Realty');
+    expect((await http().get('/v1/agency').set(o.h).expect(200)).body.status).toBe('pending');
+    const done = await http().post('/v1/agency/onboarding/complete').set(o.h).expect(200);
+    expect(done.body.status).toBe('active');
+    expect(done.body.onboardedAt).toBeTruthy();
+    await http().post('/v1/agency/onboarding/complete').set(o.h).expect(200);
+    const logs = await http()
+      .get('/v1/audit-logs')
+      .set(o.h)
+      .query({ action: 'agency.onboarded' })
+      .expect(200);
+    expect(logs.body.data).toHaveLength(1);
+  });
+
   it('lets the owner update the profile and records an audit entry', async () => {
     const o = await createOwner('owner@a.test', 'Alpha Realty');
     const res = await http()

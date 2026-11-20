@@ -126,3 +126,25 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Removing a member entirely (status `removed`) has no endpoint yet; suspension covers offboarding for now.
 - Agency onboarding UI and activation (`pending` → `active`) come with the web app PR.
 - Manager team-scoped permissions are defined when leads/listings exist.
+
+## Phase 1 · PR 6 · Web app: sign-in, two-factor setup, onboarding, team members (2026-11-20)
+
+**Built**
+
+- Pages: register, verify email, sign in (with authenticator-code and recovery-code step), forgot/reset password, accept invitation, agency picker, two-factor setup (QR code + manual key, recovery codes shown once), agency onboarding, dashboard placeholder, team members (invite, revoke, suspend/reactivate).
+- Access token kept in memory only; session restored from the httpOnly refresh cookie on reload; refresh is single-flight so concurrent calls never reuse a rotated token.
+- Owners/admins without two-factor are routed to setup before any agency page (the API also enforces it).
+- App shell with sidebar, mobile-friendly layout, light/dark theme without flash. Sign-up only offers emirates in `NEXT_PUBLIC_SUPPORTED_EMIRATES`.
+- API: `POST /v1/agency/onboarding/complete` (pending → active, audited).
+- CI: new `e2e` job (Postgres + Mailpit services, Playwright Chromium).
+
+**Tested**
+
+- Playwright end-to-end: register → verify via emailed link → sign in → forced two-factor setup → recovery codes → onboarding → invite agent → agent accepts in a separate browser session → agent signs in, sees team but no admin controls → owner suspends agent; suspended agent signs in and no longer sees the agency; session survives reload.
+- API test for onboarding completion (idempotent, audited). 60 API tests total.
+
+**Not yet done / known issues**
+
+- Two browser tabs refreshing at the same moment can trip refresh-token reuse detection and sign the user out (safe failure). A short grace window or cross-tab lock can follow.
+- Settings pages (agency profile edit, teams, audit log viewer, session list) have API support but no screens yet.
+- Arabic/RTL not started (planned for Phase 4).

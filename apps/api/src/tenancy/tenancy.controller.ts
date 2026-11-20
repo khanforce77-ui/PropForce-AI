@@ -89,6 +89,13 @@ export class TenancyController {
     return this.tenancy.updateAgency(ctx, parseBody(updateAgencySchema, body));
   }
 
+  @Post('agency/onboarding/complete')
+  @HttpCode(200)
+  @RequirePermission('agency:write')
+  completeOnboarding(@CurrentTenant() ctx: TenantRequestContext) {
+    return this.tenancy.completeOnboarding(ctx);
+  }
+
   @Get('agency/settings')
   @RequirePermission('agency:settings')
   getSettings(@CurrentTenant() ctx: TenantRequestContext) {

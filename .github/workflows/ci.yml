@@ -49,6 +49,45 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: propforce
+          POSTGRES_PASSWORD: propforce_ci_only
+          POSTGRES_DB: propforce
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U propforce" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ['1025:1025', '8025:8025']
+    env:
+      MIGRATION_DATABASE_URL: postgresql://propforce:propforce_ci_only@localhost:5432/propforce
+      DATABASE_URL: postgresql://propforce_app_user:propforce_app_ci_only@localhost:5432/propforce
+      APP_DB_PASSWORD: propforce_app_ci_only
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply migrations and create the application DB role
+        run: |
+          pnpm --filter @propforce/db migrate:deploy
+          pnpm --filter @propforce/db db:setup-local-roles
+      - run: pnpm build
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @propforce/web exec playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: pnpm --filter @propforce/web e2e
+
   secrets-scan:
     runs-on: ubuntu-latest
     steps:

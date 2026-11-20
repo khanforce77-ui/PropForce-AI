@@ -90,6 +90,26 @@ export class TenancyService {
     });
   }
 
+  /** Marks onboarding complete: a pending agency becomes active. Idempotent. */
+  completeOnboarding(ctx: TenantRequestContext) {
+    return this.run(ctx, async (tx) => {
+      const agency = await tx.agency.findUniqueOrThrow({ where: { id: ctx.tenantId } });
+      if (agency.status !== 'pending') return agency;
+      const updated = await tx.agency.update({
+        where: { id: ctx.tenantId },
+        data: { status: 'active', onboardedAt: new Date() },
+      });
+      await audit(tx, ctx, {
+        action: 'agency.onboarded',
+        entityType: 'agency',
+        entityId: ctx.tenantId,
+        before: { status: 'pending' },
+        after: { status: 'active' },
+      });
+      return updated;
+    });
+  }
+
   getSettings(ctx: TenantRequestContext) {
     return this.run(ctx, (tx) =>
       tx.agencySettings.findUniqueOrThrow({ where: { tenantId: ctx.tenantId } }),
