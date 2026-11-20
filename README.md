@@ -2,7 +2,7 @@
 
 Multi-tenant AI real estate brokerage operating system for UAE agencies.
 
-> Status: **Phase 1, PR 5 (agency members, roles, invitations and audit log)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
+> Status: **Phase 1, PR 6 (web app: sign-in, two-factor setup, onboarding, team members)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
 
 ## Requirements
 
@@ -19,6 +19,13 @@ pnpm infra:up        # Postgres, Redis, MinIO, Mailpit, ClamAV
 pnpm db:setup        # apply migrations, create the app DB role
 pnpm build
 pnpm dev             # web on :3000, api on :4000
+```
+
+End-to-end tests (needs the database set up, Mailpit running from `pnpm infra:up`, and `pnpm build`):
+
+```bash
+pnpm --filter @propforce/web exec playwright install chromium   # once
+pnpm --filter @propforce/web e2e
 ```
 
 Checks (database tests need `pnpm infra:up` and `pnpm db:setup` first):

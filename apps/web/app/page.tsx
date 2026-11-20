@@ -1,4 +1,4 @@
-import { EMIRATES } from '@propforce/contracts';
+import Link from 'next/link';
 
 export default function HomePage() {
   return (
@@ -11,9 +11,19 @@ export default function HomePage() {
         Inventory, CRM, WhatsApp, viewings and deals in one place, with AI that answers only from
         your verified listings.
       </p>
-      <div className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
-        Development build. Sign-in and agency onboarding arrive in the next milestone. Supported
-        emirates are configured per installation ({EMIRATES.length} available).
+      <div className="flex gap-3">
+        <Link
+          href="/register"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          Create your agency
+        </Link>
+        <Link
+          href="/login"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+        >
+          Sign in
+        </Link>
       </div>
     </main>
   );
