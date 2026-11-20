@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getPublicApiUrl } from './env';
 
 describe('getPublicApiUrl', () => {
@@ -10,6 +10,12 @@ describe('getPublicApiUrl', () => {
     expect(getPublicApiUrl({ NEXT_PUBLIC_API_URL: 'https://api.example.com/v1/' })).toBe(
       'https://api.example.com',
     );
+  });
+
+  it('uses the page origin when the API shares the domain', () => {
+    vi.stubGlobal('window', { location: { origin: 'https://app.example.com' } });
+    expect(getPublicApiUrl({ NEXT_PUBLIC_API_URL: 'same-origin' })).toBe('https://app.example.com');
+    vi.unstubAllGlobals();
   });
 
   it('rejects non-http protocols', () => {
