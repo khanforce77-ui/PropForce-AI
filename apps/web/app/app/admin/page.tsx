@@ -3,23 +3,48 @@
 import { LogOut, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
-import { ApiError, type PlatformAgency, type PlatformSummary, type PlatformUser } from '@/lib/api';
+import { Input, Label } from '@/components/ui/input';
+import {
+  ApiError,
+  type PlatformAgency,
+  type PlatformAuditEntry,
+  type PlatformSetting,
+  type PlatformSummary,
+  type PlatformUser,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
 const date = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-AE', { dateStyle: 'medium' }) : '—';
+const dateTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-AE', { dateStyle: 'medium', timeStyle: 'short' });
 
-const STATUS_TONE: Record<string, string> = {
+const TONE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  approved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
   pending: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
   suspended: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
+  rejected: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
   cancelled: 'bg-muted text-muted-foreground',
 };
+
+function Badge({ value, label }: { value: string; label?: string }) {
+  return (
+    <span
+      className={cn(
+        'rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
+        TONE[value] ?? TONE.cancelled,
+      )}
+    >
+      {label ?? value.replace(/_/g, ' ')}
+    </span>
+  );
+}
 
 function Stat({ label, value, hint }: { label: string; value?: number; hint?: string }) {
   return (
@@ -31,42 +56,326 @@ function Stat({ label, value, hint }: { label: string; value?: number; hint?: st
   );
 }
 
+/** Inline "reason" form used for reject / suspend, so no browser dialogs are needed. */
+function ReasonForm({
+  id,
+  action,
+  onSubmit,
+  onCancel,
+}: {
+  id: string;
+  action: string;
+  onSubmit: (reason: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await onSubmit(reason.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={(e) => void submit(e)} className="mt-2 flex flex-wrap items-end gap-2">
+      <div className="flex min-w-60 flex-1 flex-col gap-1">
+        <Label htmlFor={id}>Reason (the agency or user will see this)</Label>
+        <Input
+          id={id}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          minLength={3}
+          maxLength={500}
+          required
+          autoFocus
+        />
+      </div>
+      <Button
+        type="submit"
+        variant="destructive"
+        size="sm"
+        disabled={busy || reason.trim().length < 3}
+      >
+        Confirm {action}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+    </form>
+  );
+}
+
+function PlanForm({
+  agency,
+  onSave,
+  onCancel,
+}: {
+  agency: PlatformAgency;
+  onSave: (body: {
+    plan: string;
+    seatLimit: number | null;
+    listingLimit: number | null;
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [plan, setPlan] = useState(agency.plan);
+  const [seats, setSeats] = useState(agency.seatLimit?.toString() ?? '');
+  const [listings, setListings] = useState(agency.listingLimit?.toString() ?? '');
+  const [busy, setBusy] = useState(false);
+  const toLimit = (v: string) => (v.trim() === '' ? null : Number(v));
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await onSave({
+        plan: plan.trim(),
+        seatLimit: toLimit(seats),
+        listingLimit: toLimit(listings),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pid = `plan-${agency.id}`;
+  return (
+    <form onSubmit={(e) => void submit(e)} className="mt-2 grid gap-2 sm:grid-cols-4 sm:items-end">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`${pid}-name`}>Plan</Label>
+        <Input
+          id={`${pid}-name`}
+          value={plan}
+          onChange={(e) => setPlan(e.target.value)}
+          maxLength={40}
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`${pid}-seats`}>Seat limit</Label>
+        <Input
+          id={`${pid}-seats`}
+          type="number"
+          min={1}
+          placeholder="No limit"
+          value={seats}
+          onChange={(e) => setSeats(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`${pid}-listings`}>Listing limit</Label>
+        <Input
+          id={`${pid}-listings`}
+          type="number"
+          min={0}
+          placeholder="No limit"
+          value={listings}
+          onChange={(e) => setListings(e.target.value)}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={busy}>
+          Save plan
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+const TABS = [
+  ['overview', 'Overview'],
+  ['agencies', 'Agencies'],
+  ['users', 'Users'],
+  ['settings', 'Settings'],
+  ['activity', 'Activity'],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+const SETTING_LABELS: Record<string, string> = {
+  'platform.require_agency_approval': 'New agencies need my approval before going live',
+  'platform.allow_signups': 'Allow new sign-ups',
+  'voice.outbound_calls': 'Outbound AI voice calls (keep off until compliance sign-off)',
+};
+
 export default function PlatformAdminPage() {
   const router = useRouter();
   const { me, request, signOut } = useAuth();
+  const [tab, setTab] = useState<Tab>('overview');
   const [summary, setSummary] = useState<PlatformSummary | null>(null);
   const [agencies, setAgencies] = useState<PlatformAgency[]>([]);
   const [users, setUsers] = useState<PlatformUser[]>([]);
+  const [settings, setSettings] = useState<PlatformSetting[]>([]);
+  const [activity, setActivity] = useState<PlatformAuditEntry[]>([]);
+  const [userQuery, setUserQuery] = useState('');
+  // Read by load() without re-running it on every keystroke.
+  const userQueryRef = useRef('');
+  userQueryRef.current = userQuery;
+  const [open, setOpen] = useState<string | null>(null); // "<action>:<id>"
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const isAdmin = me?.user.isPlatformAdmin === true;
 
   useEffect(() => {
     if (me && !isAdmin) router.replace('/app');
   }, [me, isAdmin, router]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    void (async () => {
-      try {
-        const [s, a, u] = await Promise.all([
-          request<PlatformSummary>('/platform/summary'),
-          request<{ data: PlatformAgency[] }>('/platform/agencies'),
-          request<{ data: PlatformUser[] }>('/platform/users'),
-        ]);
-        setSummary(s);
-        setAgencies(a.data);
-        setUsers(u.data);
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'MFA_REQUIRED') {
-          router.replace('/app/security?required=1');
-          return;
-        }
-        setError(err instanceof ApiError ? err.message : 'Could not load the platform dashboard.');
+  const handle = useCallback(
+    (err: unknown, fallback: string) => {
+      if (err instanceof ApiError && err.code === 'MFA_REQUIRED') {
+        router.replace('/app/security?required=1');
+        return;
       }
-    })();
-  }, [isAdmin, request, router]);
+      setError(err instanceof ApiError ? err.message : fallback);
+    },
+    [router],
+  );
+
+  const loadUsers = useCallback(
+    async (q: string) => {
+      const u = await request<{ data: PlatformUser[] }>('/platform/users', {
+        query: { q: q.trim() || undefined },
+      });
+      setUsers(u.data);
+    },
+    [request],
+  );
+
+  const load = useCallback(async () => {
+    try {
+      const [s, a, st, log] = await Promise.all([
+        request<PlatformSummary>('/platform/summary'),
+        request<{ data: PlatformAgency[] }>('/platform/agencies'),
+        request<{ data: PlatformSetting[] }>('/platform/settings'),
+        request<{ data: PlatformAuditEntry[] }>('/platform/audit-log'),
+      ]);
+      setSummary(s);
+      setAgencies(a.data);
+      setSettings(st.data);
+      setActivity(log.data);
+      await loadUsers(userQueryRef.current);
+    } catch (err) {
+      handle(err, 'Could not load the platform dashboard.');
+    }
+  }, [request, handle, loadUsers]);
+
+  useEffect(() => {
+    if (isAdmin) void load();
+  }, [isAdmin, load]);
+
+  const act = async (
+    path: string,
+    message: string,
+    method: 'POST' | 'PATCH' = 'POST',
+    body?: unknown,
+  ) => {
+    setError(null);
+    setNotice(null);
+    try {
+      await request(path, { method, body });
+      setOpen(null);
+      setNotice(message);
+      await load();
+    } catch (err) {
+      handle(err, 'That action failed. Please try again.');
+    }
+  };
 
   if (!isAdmin) return null;
+
+  const queue = agencies.filter((a) => a.approvalStatus === 'pending');
+  const approvalOn = settings.find((s) => s.key === 'platform.require_agency_approval')?.enabled;
+
+  const agencyActions = (a: PlatformAgency) => {
+    const key = (action: string) => `${action}:${a.id}`;
+    return (
+      <div>
+        <div className="flex flex-wrap gap-2">
+          {a.approvalStatus === 'pending' ? (
+            <>
+              <Button
+                size="sm"
+                onClick={() =>
+                  void act(`/platform/agencies/${a.id}/approve`, `${a.name} approved.`)
+                }
+              >
+                Approve
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setOpen(key('reject'))}>
+                Reject
+              </Button>
+            </>
+          ) : null}
+          {a.status === 'active' || a.status === 'pending' ? (
+            <Button size="sm" variant="outline" onClick={() => setOpen(key('suspend'))}>
+              Suspend
+            </Button>
+          ) : null}
+          {a.status === 'suspended' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void act(`/platform/agencies/${a.id}/reactivate`, `${a.name} reactivated.`)
+              }
+            >
+              Reactivate
+            </Button>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={() => setOpen(key('plan'))}>
+            Plan &amp; limits
+          </Button>
+        </div>
+        {open === key('reject') ? (
+          <ReasonForm
+            id={`reject-${a.id}`}
+            action="rejection"
+            onCancel={() => setOpen(null)}
+            onSubmit={(reason) =>
+              act(`/platform/agencies/${a.id}/reject`, `${a.name} rejected.`, 'POST', { reason })
+            }
+          />
+        ) : null}
+        {open === key('suspend') ? (
+          <ReasonForm
+            id={`suspend-${a.id}`}
+            action="suspension"
+            onCancel={() => setOpen(null)}
+            onSubmit={(reason) =>
+              act(`/platform/agencies/${a.id}/suspend`, `${a.name} suspended.`, 'POST', { reason })
+            }
+          />
+        ) : null}
+        {open === key('plan') ? (
+          <PlanForm
+            agency={a}
+            onCancel={() => setOpen(null)}
+            onSave={(body) =>
+              act(`/platform/agencies/${a.id}`, `Plan updated for ${a.name}.`, 'PATCH', body)
+            }
+          />
+        ) : null}
+      </div>
+    );
+  };
+
+  const agencyHeading = (a: PlatformAgency) => (
+    <div>
+      <p className="font-medium">{a.name}</p>
+      <p className="text-xs text-muted-foreground">
+        {a.emirate}
+        {a.orn ? ` · ORN ${a.orn}` : ''} · signed up {date(a.createdAt)}
+      </p>
+      {a.owner ? (
+        <p className="text-xs text-muted-foreground">
+          Owner: {a.owner.fullName} · {a.owner.email}
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-10 md:py-10">
@@ -95,111 +404,285 @@ export default function PlatformAdminPage() {
         </div>
       </header>
 
+      <nav aria-label="Admin sections" className="flex flex-wrap gap-1 border-b border-border">
+        {TABS.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-current={tab === value ? 'page' : undefined}
+            onClick={() => {
+              setTab(value);
+              setOpen(null);
+            }}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
+              tab === value
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {label}
+            {value === 'overview' && queue.length > 0 ? (
+              <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-white">
+                {queue.length}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </nav>
+
       {error ? <Alert>{error}</Alert> : null}
+      {notice ? <Alert tone="success">{notice}</Alert> : null}
 
-      <section aria-label="Platform at a glance" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat
-          label="Agencies"
-          value={summary?.agencies.total}
-          hint={summary ? `${summary.agencies.newThisWeek} new this week` : undefined}
-        />
-        <Stat
-          label="Still onboarding"
-          value={summary?.agencies.pending}
-          hint="Signed up, setup not finished"
-        />
-        <Stat
-          label="Users"
-          value={summary?.users.total}
-          hint={summary ? `${summary.users.newThisWeek} new this week` : undefined}
-        />
-        <Stat
-          label="Live listings"
-          value={summary?.listings.live}
-          hint={summary ? `${summary.listings.total} listings in total` : undefined}
-        />
-      </section>
+      {tab === 'overview' ? (
+        <>
+          <section
+            aria-label="Platform at a glance"
+            className="grid grid-cols-2 gap-3 md:grid-cols-4"
+          >
+            <Stat
+              label="Agencies"
+              value={summary?.agencies.total}
+              hint={summary ? `${summary.agencies.newThisWeek} new this week` : undefined}
+            />
+            <Stat
+              label="Not live yet"
+              value={summary?.agencies.pending}
+              hint="Onboarding or awaiting approval"
+            />
+            <Stat
+              label="Users"
+              value={summary?.users.total}
+              hint={summary ? `${summary.users.newThisWeek} new this week` : undefined}
+            />
+            <Stat
+              label="Live listings"
+              value={summary?.listings.live}
+              hint={summary ? `${summary.listings.total} listings in total` : undefined}
+            />
+          </section>
 
-      <Card className="p-0">
-        <h2 className="px-6 pt-5 font-medium">Agencies</h2>
-        {agencies.length === 0 ? (
-          <p className="px-6 pt-2 pb-5 text-sm text-muted-foreground">No agencies yet.</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-left text-xs text-muted-foreground uppercase">
-                <tr>
-                  <th className="px-6 py-3 font-medium">Agency</th>
-                  <th className="px-4 py-3 font-medium">Owner</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Team</th>
-                  <th className="px-4 py-3 font-medium">Listings</th>
-                  <th className="px-4 py-3 font-medium">Signed up</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {agencies.map((a) => (
-                  <tr key={a.id}>
-                    <td className="px-6 py-3">
-                      <p className="font-medium">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.emirate}
-                        {a.orn ? ` · ORN ${a.orn}` : ''}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      {a.owner ? (
-                        <>
-                          <p>{a.owner.fullName}</p>
-                          <p className="text-xs text-muted-foreground">{a.owner.email}</p>
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium capitalize',
-                          STATUS_TONE[a.status] ?? STATUS_TONE.cancelled,
-                        )}
-                      >
-                        {a.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">{a.members}</td>
-                    <td className="px-4 py-3 tabular-nums">{a.listings}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{date(a.createdAt)}</td>
-                  </tr>
+          <Card>
+            <h2 className="font-medium">Approval queue</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {approvalOn
+                ? 'New agencies wait here after setup until you approve them.'
+                : 'Approval is off, so new agencies go live straight after setup. Turn it on under Settings.'}
+            </p>
+            {queue.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">Nothing waiting for approval.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-border">
+                {queue.map((a) => (
+                  <li key={a.id} className="flex flex-col gap-2 py-3">
+                    {agencyHeading(a)}
+                    {agencyActions(a)}
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+              </ul>
+            )}
+          </Card>
+        </>
+      ) : null}
 
-      <Card>
-        <h2 className="font-medium">Recent sign-ups</h2>
-        <ul className="mt-3 divide-y divide-border text-sm">
-          {users.map((u) => (
-            <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <span>
-                <span className="font-medium">{u.fullName}</span>{' '}
-                <span className="text-muted-foreground">{u.email}</span>
-                {!u.emailVerifiedAt ? (
-                  <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">
-                    email not verified
+      {tab === 'agencies' ? (
+        <Card className="p-0">
+          <h2 className="px-6 pt-5 font-medium">Agencies</h2>
+          {agencies.length === 0 ? (
+            <p className="px-6 pt-2 pb-5 text-sm text-muted-foreground">No agencies yet.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-border">
+              {agencies.map((a) => (
+                <li key={a.id} className="flex flex-col gap-2 px-6 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    {agencyHeading(a)}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge value={a.status} />
+                      {a.approvalStatus !== 'not_required' ? (
+                        <Badge value={a.approvalStatus} label={`approval: ${a.approvalStatus}`} />
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Plan <span className="font-medium text-foreground">{a.plan}</span> · team{' '}
+                    {a.members}
+                    {a.seatLimit != null ? ` / ${a.seatLimit}` : ''} · listings {a.listings}
+                    {a.listingLimit != null ? ` / ${a.listingLimit}` : ''}
+                  </p>
+                  {a.statusReason ? (
+                    <p className="text-xs text-muted-foreground">Reason: {a.statusReason}</p>
+                  ) : null}
+                  {agencyActions(a)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === 'users' ? (
+        <Card>
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void loadUsers(userQuery).catch((err: unknown) => handle(err, 'Search failed.'));
+            }}
+          >
+            <div className="flex min-w-60 flex-1 flex-col gap-1">
+              <Label htmlFor="user-search">Search users by name or email</Label>
+              <Input
+                id="user-search"
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+                maxLength={80}
+              />
+            </div>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <ul className="mt-4 divide-y divide-border text-sm">
+            {users.map((u) => (
+              <li key={u.id} className="flex flex-col gap-1 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-medium">{u.fullName}</span>{' '}
+                    <span className="text-muted-foreground">{u.email}</span>
+                    {u.isPlatformAdmin ? (
+                      <span className="ml-2 text-xs text-primary">platform admin</span>
+                    ) : null}
+                    {!u.emailVerifiedAt ? (
+                      <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">
+                        email not verified
+                      </span>
+                    ) : null}
+                    {u.suspendedAt ? (
+                      <span className="ml-2">
+                        <Badge value="suspended" />
+                      </span>
+                    ) : null}
+                  </span>
+                  {u.id !== me.user.id ? (
+                    u.suspendedAt ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void act(`/platform/users/${u.id}/reactivate`, `${u.email} reactivated.`)
+                        }
+                      >
+                        Reactivate
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setOpen(`user:${u.id}`)}>
+                        Suspend
+                      </Button>
+                    )
+                  ) : null}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {u.memberships.map((m) => `${m.agency.name} (${m.role})`).join(', ') ||
+                    'No agency'}{' '}
+                  · joined {date(u.createdAt)} · last sign-in {date(u.lastLoginAt)}
+                </span>
+                {u.suspendedReason ? (
+                  <span className="text-xs text-muted-foreground">
+                    Suspended: {u.suspendedReason}
                   </span>
                 ) : null}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {u.memberships.map((m) => `${m.agency.name} (${m.role})`).join(', ') || 'No agency'}{' '}
-                · joined {date(u.createdAt)} · last sign-in {date(u.lastLoginAt)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+                {open === `user:${u.id}` ? (
+                  <ReasonForm
+                    id={`suspend-user-${u.id}`}
+                    action="suspension"
+                    onCancel={() => setOpen(null)}
+                    onSubmit={(reason) =>
+                      act(`/platform/users/${u.id}/suspend`, `${u.email} suspended.`, 'POST', {
+                        reason,
+                      })
+                    }
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {tab === 'settings' ? (
+        <Card>
+          <h2 className="font-medium">Platform settings</h2>
+          <ul className="mt-3 divide-y divide-border">
+            {settings.map((s) => (
+              <li key={s.key} className="flex items-center justify-between gap-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">{SETTING_LABELS[s.key] ?? s.key}</p>
+                  {s.description ? (
+                    <p className="text-xs text-muted-foreground">{s.description}</p>
+                  ) : null}
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    className="h-5 w-5 accent-[var(--color-primary)]"
+                    checked={s.enabled}
+                    aria-label={SETTING_LABELS[s.key] ?? s.key}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      // Show the new position straight away; load() re-syncs with the server.
+                      setSettings((all) =>
+                        all.map((x) => (x.key === s.key ? { ...x, enabled } : x)),
+                      );
+                      void act(
+                        `/platform/settings/${s.key}`,
+                        `Setting saved: ${SETTING_LABELS[s.key] ?? s.key} is ${enabled ? 'on' : 'off'}.`,
+                        'PATCH',
+                        { enabled },
+                      );
+                    }}
+                  />
+                  {s.enabled ? 'On' : 'Off'}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {tab === 'activity' ? (
+        <Card>
+          <h2 className="font-medium">Admin activity</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every platform admin action, newest first.
+          </p>
+          {activity.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">No admin actions yet.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-border text-sm">
+              {activity.map((e) => (
+                <li key={e.id} className="flex flex-wrap justify-between gap-2 py-2">
+                  <span>
+                    <span className="font-medium">{e.action}</span>{' '}
+                    <span className="text-muted-foreground">
+                      {typeof e.after?.target === 'string' ? e.after.target : (e.targetId ?? '')}
+                      {typeof e.after?.reason === 'string'
+                        ? ` · “${e.after.reason}”`
+                        : typeof e.after?.statusReason === 'string'
+                          ? ` · “${e.after.statusReason}”`
+                          : ''}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {typeof e.after?.by === 'string' ? `${e.after.by} · ` : ''}
+                    {dateTime(e.createdAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

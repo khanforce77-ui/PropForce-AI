@@ -46,9 +46,16 @@ export default function OnboardingPage() {
           orn: optional('orn'),
         },
       });
-      await request('/agency/onboarding/complete', { method: 'POST', tenantId: agencyId });
+      const done = await request<{ approvalStatus?: string }>('/agency/onboarding/complete', {
+        method: 'POST',
+        tenantId: agencyId,
+      });
       await refreshMe();
-      router.replace(`/app/${agencyId}/settings/members?welcome=1`);
+      router.replace(
+        done.approvalStatus === 'pending'
+          ? `/app/${agencyId}`
+          : `/app/${agencyId}/settings/members?welcome=1`,
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         setErrors(err.fieldErrors);

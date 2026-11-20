@@ -6,7 +6,7 @@ import { PRISMA } from '../database/database.module';
 import { EmailSender } from '../email/email.sender';
 import { generateToken, hashPassword, hashToken } from '../auth/crypto';
 import { PRIVILEGED_ROLES } from './permissions';
-import { audit } from './tenancy.service';
+import { assertAgencyCanGrow, audit } from './tenancy.service';
 import type { TenantRequestContext } from './tenant.guard';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -64,11 +64,12 @@ export class InvitationService {
             'This person is already a member of the agency.',
           );
         }
-        // A new invitation replaces any pending one for the same email.
+        // A new invitation replaces a pending one for the same email, so that one frees a seat.
         await tx.invitation.updateMany({
           where: { tenantId: ctx.tenantId, email: input.email, acceptedAt: null, revokedAt: null },
           data: { revokedAt: new Date() },
         });
+        await assertAgencyCanGrow(tx, ctx.tenantId, 'seat');
         const invitation = await tx.invitation.create({
           data: {
             tenantId: ctx.tenantId,

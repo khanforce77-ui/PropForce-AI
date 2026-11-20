@@ -219,3 +219,12 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: `/app/admin` platform dashboard showing agency, user and listing counts, an agencies table and recent sign-ups. Platform admins land there after sign-in, and the agency dashboard stays reachable.
 - Tests: 4 db tests (visibility, no flag, no opt-in, read-only), 1 API test, 1 Playwright flow.
 - The flag is set only directly in the database; there is no API to grant it.
+
+## PR · Platform admin controls
+
+- Database (`20261121006000_platform_controls`): agency `approval_status`, `status_reason`, `plan`, `seat_limit`, `listing_limit`, `reviewed_at/by`; user `suspended_at/suspended_reason`; append-only `platform_audit_log`; platform settings stored as feature flags `platform.require_agency_approval` (off), `platform.allow_signups` (on), `voice.outbound_calls` (off).
+- API (all behind `PlatformAdminGuard`, i.e. platform admin flag plus two-factor): approve/reject an agency, suspend/reactivate an agency (reason required), set plan, seat and listing limits, suspend/reactivate a user (signs them out everywhere; cannot suspend yourself), list and change settings, read the admin activity log. Every action writes the platform audit log and, for agencies, the agency's own audit log with actor type `platform`.
+- Enforcement: suspended users cannot sign in or refresh (`ACCOUNT_SUSPENDED`); closed sign-ups return `SIGNUPS_CLOSED`; with approval on, finished onboarding waits in the queue and listings cannot be published until approved; seat limit counts members plus live invites, listing limit counts non-deleted listings (`PLAN_LIMIT_REACHED`).
+- Web: `/app/admin` tabs (Overview with approval queue, Agencies, Users, Settings, Activity) with inline reason forms. Agencies see "waiting for approval" on the dashboard, and a suspended/rejected notice with the reason instead of their pages.
+- Tests: 5 new API tests, 1 extended Playwright flow (turn approval on, new agency waits, approve, suspend with reason, owner sees notice, activity log).
+- Plans are free-text labels for now; billing and plan catalogue come in Phase 3.

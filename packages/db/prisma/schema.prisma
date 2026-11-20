@@ -27,6 +27,9 @@ model User {
   fullName        String    @map("full_name")
   locale          String    @default("en")
   isPlatformAdmin Boolean   @default(false) @map("is_platform_admin")
+  /// Set by a platform admin. A suspended user cannot sign in; their sessions are revoked.
+  suspendedAt     DateTime? @map("suspended_at") @db.Timestamptz(3)
+  suspendedReason String?   @map("suspended_reason")
   lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -103,6 +106,22 @@ model MfaFactor {
   @@map("mfa_factor")
 }
 
+/// Actions taken by platform administrators. Not tenant-scoped; agency actions are also written
+/// to that agency's audit log.
+model PlatformAuditLog {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("platform_audit_log")
+}
+
 model FeatureFlag {
   key         String   @id
   description String?
@@ -123,19 +142,38 @@ enum AgencyStatus {
   cancelled
 }
 
+enum ApprovalStatus {
+  not_required
+  pending
+  approved
+  rejected
+}
+
 /// The tenant. Its own id is the tenant id.
 model Agency {
-  id             String       @id @db.Uuid
+  id             String         @id @db.Uuid
   name           String
-  slug           String       @unique
+  slug           String         @unique
   emirate        String
-  tradeLicenseNo String?      @map("trade_license_no")
+  tradeLicenseNo String?        @map("trade_license_no")
   /// RERA Office Registration Number or equivalent; optional, entered by the agency.
   orn            String?
-  status         AgencyStatus @default(pending)
-  onboardedAt    DateTime?    @map("onboarded_at") @db.Timestamptz(3)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  status         AgencyStatus   @default(pending)
+  onboardedAt    DateTime?      @map("onboarded_at") @db.Timestamptz(3)
+  /// Platform approval, used when the platform requires new agencies to be approved.
+  approvalStatus ApprovalStatus @default(not_required) @map("approval_status")
+  reviewedAt     DateTime?      @map("reviewed_at") @db.Timestamptz(3)
+  reviewedBy     String?        @map("reviewed_by") @db.Uuid
+  /// Why the platform suspended, rejected or reactivated the agency. Shown to the agency.
+  statusReason   String?        @map("status_reason")
+  /// Commercial plan name; billing is not wired yet.
+  plan           String         @default("trial")
+  /// Maximum active members plus pending invitations. Null = unlimited.
+  seatLimit      Int?           @map("seat_limit")
+  /// Maximum listings (not deleted). Null = unlimited.
+  listingLimit   Int?           @map("listing_limit")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   settings        AgencySettings?
   memberships     Membership[]

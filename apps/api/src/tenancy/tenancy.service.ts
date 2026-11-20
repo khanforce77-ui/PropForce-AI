@@ -37,6 +37,51 @@ export async function audit(tx: TransactionClient, ctx: TenantRequestContext, en
   });
 }
 
+/**
+ * Platform rules an agency must meet before growing: not waiting for (or refused) platform
+ * approval, and within its plan's seat or listing limit.
+ */
+export async function assertAgencyCanGrow(
+  tx: TransactionClient,
+  tenantId: string,
+  what: 'seat' | 'listing',
+) {
+  const agency = await tx.agency.findUniqueOrThrow({ where: { id: tenantId } });
+  if (agency.approvalStatus === 'pending') {
+    throw new AppError(
+      403,
+      'AGENCY_AWAITING_APPROVAL',
+      'Your agency is waiting for PropForce approval. You can prepare drafts in the meantime.',
+    );
+  }
+  if (what === 'seat' && agency.seatLimit !== null) {
+    const now = new Date();
+    const [members, invites] = await Promise.all([
+      tx.membership.count({ where: { tenantId, status: { not: 'removed' } } }),
+      tx.invitation.count({
+        where: { tenantId, acceptedAt: null, revokedAt: null, expiresAt: { gt: now } },
+      }),
+    ]);
+    if (members + invites >= agency.seatLimit) {
+      throw new AppError(
+        409,
+        'PLAN_LIMIT_REACHED',
+        `Your plan allows ${agency.seatLimit} team members including pending invitations.`,
+      );
+    }
+  }
+  if (what === 'listing' && agency.listingLimit !== null) {
+    const listings = await tx.property.count({ where: { tenantId, deletedAt: null } });
+    if (listings >= agency.listingLimit) {
+      throw new AppError(
+        409,
+        'PLAN_LIMIT_REACHED',
+        `Your plan allows ${agency.listingLimit} listings. Archive and delete old ones or upgrade.`,
+      );
+    }
+  }
+}
+
 const memberSelect = {
   id: true,
   role: true,
@@ -94,17 +139,23 @@ export class TenancyService {
   completeOnboarding(ctx: TenantRequestContext) {
     return this.run(ctx, async (tx) => {
       const agency = await tx.agency.findUniqueOrThrow({ where: { id: ctx.tenantId } });
-      if (agency.status !== 'pending') return agency;
+      if (agency.status !== 'pending' || agency.approvalStatus === 'pending') return agency;
+      const approval = await tx.featureFlag.findUnique({
+        where: { key: 'platform.require_agency_approval' },
+      });
+      const needsApproval = approval?.enabled === true && agency.approvalStatus !== 'approved';
       const updated = await tx.agency.update({
         where: { id: ctx.tenantId },
-        data: { status: 'active', onboardedAt: new Date() },
+        data: needsApproval
+          ? { approvalStatus: 'pending', onboardedAt: new Date() }
+          : { status: 'active', onboardedAt: new Date() },
       });
       await audit(tx, ctx, {
-        action: 'agency.onboarded',
+        action: needsApproval ? 'agency.submitted_for_approval' : 'agency.onboarded',
         entityType: 'agency',
         entityId: ctx.tenantId,
         before: { status: 'pending' },
-        after: { status: 'active' },
+        after: { status: updated.status, approvalStatus: updated.approvalStatus },
       });
       return updated;
     });
