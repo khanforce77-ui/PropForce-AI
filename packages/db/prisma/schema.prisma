@@ -34,6 +34,7 @@ model User {
   memberships Membership[]
   sessions    Session[]
   mfaFactors  MfaFactor[]
+  tokens      UserToken[]
 
   @@map("user")
 }
@@ -55,6 +56,27 @@ model Session {
   @@index([userId])
   @@index([familyId])
   @@map("session")
+}
+
+enum UserTokenType {
+  email_verification
+  password_reset
+}
+
+/// Single-use tokens sent by email. Only a SHA-256 hash of the token is stored.
+model UserToken {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      UserTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime?     @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("user_token")
 }
 
 enum MfaFactorType {

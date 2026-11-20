@@ -17,4 +17,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ API_PORT: 'abc' })).toThrow('Invalid environment configuration');
     expect(() => loadConfig({ SUPPORTED_EMIRATES: 'Dubay' })).toThrow('Unknown emirate');
   });
+
+  it('requires JWT keys and SMTP outside development and test', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production', SMTP_URL: 'smtp://x' })).toThrow('JWT keys');
+    expect(() =>
+      loadConfig({ NODE_ENV: 'staging', JWT_PRIVATE_KEY: 'a', JWT_PUBLIC_KEY: 'b' }),
+    ).toThrow('SMTP_URL');
+  });
+
+  it('uses Secure cookies only when deployed', () => {
+    expect(loadConfig({}).secureCookies).toBe(false);
+    expect(
+      loadConfig({
+        NODE_ENV: 'production',
+        JWT_PRIVATE_KEY: 'a',
+        JWT_PUBLIC_KEY: 'b',
+        SMTP_URL: 'smtp://x',
+      }).secureCookies,
+    ).toBe(true);
+  });
 });

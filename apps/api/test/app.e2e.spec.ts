@@ -2,19 +2,19 @@ import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../src/bootstrap';
-import { loadConfig } from '../src/config/env';
+import { createTestApp, type TestApp } from './helpers';
 
 describe('API (HTTP)', () => {
+  let t: TestApp;
   let app: INestApplication;
 
   beforeAll(async () => {
-    app = await createApp(loadConfig({ NODE_ENV: 'test', APP_VERSION: '1.2.3' }));
-    await app.init();
+    t = await createTestApp();
+    app = t.app;
   });
 
   afterAll(async () => {
-    await app.close();
+    await t.close();
   });
 
   it('GET /health/live returns ok', async () => {
@@ -22,9 +22,9 @@ describe('API (HTTP)', () => {
     expect(res.body).toEqual({ status: 'ok', service: 'api', version: '1.2.3', checks: {} });
   });
 
-  it('GET /health/ready reports unimplemented checks as skipped', async () => {
+  it('GET /health/ready checks the database and reports Redis as skipped', async () => {
     const res = await request(app.getHttpServer()).get('/health/ready').expect(200);
-    expect(res.body.checks).toEqual({ database: 'skipped', redis: 'skipped' });
+    expect(res.body.checks).toEqual({ database: 'up', redis: 'skipped' });
   });
 
   it('unknown routes return RFC 9457 problem details with a request id', async () => {

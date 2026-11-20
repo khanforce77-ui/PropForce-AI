@@ -3,6 +3,9 @@ import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
 import { ConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env';
+import { AuthModule } from './auth/auth.module';
+import { DatabaseModule } from './database/database.module';
+import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 
 @Module({})
@@ -34,7 +37,10 @@ export class AppModule {
             },
           },
         }),
+        DatabaseModule,
+        EmailModule,
         HealthModule,
+        AuthModule,
       ],
     };
   }

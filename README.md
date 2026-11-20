@@ -2,7 +2,7 @@
 
 Multi-tenant AI real estate brokerage operating system for UAE agencies.
 
-> Status: **Phase 1, PR 2 (database tenancy and row-level security)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
+> Status: **Phase 1, PR 3 (registration, login and sessions)**. See [docs/PROGRESS.md](docs/PROGRESS.md) for what is built and tested, and [docs/architecture](docs/architecture/README.md) for the planning documents.
 
 ## Requirements
 
