@@ -15,6 +15,12 @@ export const PERMISSIONS = [
   'team:read',
   'team:write',
   'audit:read',
+  /** View the agency's listings and projects. */
+  'property:read',
+  /** Create listings and edit or change the status of listings assigned to you. */
+  'property:write',
+  /** Edit, reassign, verify or delete any listing in the agency; manage projects. */
+  'property:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -23,8 +29,15 @@ const ALL: readonly Permission[] = PERMISSIONS;
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ALL,
   admin: ALL,
-  manager: ['agency:read', 'member:read', 'team:read'],
-  agent: ['agency:read', 'member:read', 'team:read'],
+  manager: [
+    'agency:read',
+    'member:read',
+    'team:read',
+    'property:read',
+    'property:write',
+    'property:manage',
+  ],
+  agent: ['agency:read', 'member:read', 'team:read', 'property:read', 'property:write'],
 };
 
 export const hasPermission = (role: Role, permission: Permission): boolean =>

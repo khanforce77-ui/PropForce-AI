@@ -48,7 +48,7 @@ function pickDbEnv(): Record<string, string> {
 
 export async function resetDatabase(owner: PrismaClient): Promise<void> {
   await owner.$executeRawUnsafe(
-    'TRUNCATE "audit_log", "invitation", "membership", "team", "agency_settings", "agency", "user_token", "mfa_factor", "session", "user" CASCADE',
+    'TRUNCATE "audit_log", "property_permit", "property", "project", "invitation", "membership", "team", "agency_settings", "agency", "user_token", "mfa_factor", "session", "user" CASCADE',
   );
 }
 

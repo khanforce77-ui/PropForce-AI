@@ -96,3 +96,70 @@ export interface Agency {
   tradeLicenseNo: string | null;
   orn: string | null;
 }
+
+// ───── inventory ─────
+
+export type ListingType = 'sale' | 'rent';
+export type PropertyStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'rented' | 'archived';
+
+export interface PropertySummary {
+  id: string;
+  reference: string;
+  title: string | null;
+  listingType: ListingType;
+  propertyType: string;
+  completion: 'ready' | 'off_plan';
+  status: PropertyStatus;
+  emirate: string;
+  community: string | null;
+  building: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  /** Decimal values arrive as strings. */
+  areaSqft: string | null;
+  price: string | null;
+  rentPeriod: 'yearly' | 'monthly' | null;
+  listingExpiresAt: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+  assigned: { id: string; user: { fullName: string } } | null;
+}
+
+export interface Permit {
+  id: string;
+  authority: string;
+  permitNumber: string;
+  validUntil: string;
+}
+
+export interface PropertyDetail extends PropertySummary {
+  assignedMembershipId: string | null;
+  subCommunity: string | null;
+  unitNo: string | null;
+  furnishing: string | null;
+  parking: number | null;
+  floor: number | null;
+  view: string | null;
+  description: string | null;
+  permits: Permit[];
+}
+
+export interface PropertyList {
+  data: PropertySummary[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface DashboardSummary {
+  listings: {
+    draft: number;
+    active: number;
+    underOffer: number;
+    sold: number;
+    rented: number;
+    archived: number;
+    mine: number;
+    needsVerification: number;
+  };
+  team: { activeMembers: number; pendingInvitations: number };
+}
