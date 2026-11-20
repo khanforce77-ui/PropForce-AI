@@ -1,0 +1,45 @@
+# Local development dependencies. Not for production use.
+name: propforce
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: propforce
+      POSTGRES_PASSWORD: propforce_dev_only
+      POSTGRES_DB: propforce
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U propforce']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: propforce
+      MINIO_ROOT_PASSWORD: propforce_dev_only
+    ports: ['9000:9000', '9001:9001']
+    volumes: [miniodata:/data]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ['1025:1025', '8025:8025']
+
+  clamav:
+    image: clamav/clamav:stable
+    ports: ['3310:3310']
+
+volumes:
+  pgdata:
+  miniodata:

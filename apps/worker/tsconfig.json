@@ -1,0 +1,12 @@
+{
+  "extends": "@propforce/config/tsconfig.node.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "isolatedModules": false,
+    "declaration": false
+  },
+  "include": ["src", "vitest.config.ts"]
+}
