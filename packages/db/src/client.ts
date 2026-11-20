@@ -95,6 +95,22 @@ export async function findInvitationByTokenHash(prisma: PrismaClient, tokenHash:
 }
 
 /**
+ * Routes a WhatsApp webhook to its agency before any tenant context exists. Only the account row
+ * whose phone_number_id matches is visible, and only its routing fields are returned (never the
+ * encrypted token). Returns null for unknown or disconnected numbers.
+ */
+export async function findWhatsAppAccountForWebhook(prisma: PrismaClient, phoneNumberId: string) {
+  if (!/^\d{1,32}$/.test(phoneNumberId)) return null;
+  return prisma.$transaction(async (tx) => {
+    await setLocal(tx, 'app.wa_phone_number_id', phoneNumberId);
+    return tx.whatsAppAccount.findFirst({
+      where: { phoneNumberId, status: 'active' },
+      select: { id: true, tenantId: true, wabaId: true, connectedBy: true },
+    });
+  });
+}
+
+/**
  * Runs `fn` as the anonymous public portal: read-only visibility of published listings (active,
  * fresh, permitted, assigned to an active agent of an active agency) across all agencies, and the
  * right to add enquiries and contact clicks for those listings. Nothing else tenant-scoped is

@@ -12,6 +12,8 @@ export async function createApp(config: AppConfig): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule.forRoot(config), {
     bufferLogs: true,
     bodyParser: true,
+    // Webhook signatures are computed over the exact bytes received.
+    rawBody: true,
   });
   app.useLogger(app.get(Logger));
   app.use(helmet());

@@ -237,3 +237,22 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: Contacts list with add form (consent ticks plus "how did they agree"), contact page (consent grid with history, record/withdraw, leads, erase), Leads board by stage, lead page (stage changes, lost reason, follow-up, assignment, notes timeline), dashboard lead counts.
 - Tests: 7 db tests, 10 API tests, 1 Playwright flow.
 - Not yet: bulk import, matching leads to listings, WhatsApp/portal leads flowing in automatically (Phase 2 and portal threads will use these tables).
+
+## Phase 2 · PR 4 · WhatsApp in the app: webhook, inbox, agent replies, opt-out (2026-11-21)
+
+**Built**
+
+- Migration `20261121030000_whatsapp`: `whatsapp_account` (per-agency number, token AES-256-GCM encrypted bound to the account id, globally unique `phone_number_id`), `conversation` (one per number + contact, AI/human mode, 24-hour window start, unread count, AI state), `message` (unique `wamid` per agency for idempotency; inbound must be authored by the client). RLS forced on all three; the app role cannot delete messages or accounts. Webhook routing can read only the one account row matching `phone_number_id`, and only its routing fields.
+- `POST /v1/webhooks/whatsapp`: HMAC check over the raw body, then stores messages in the right agency: finds or creates the contact by phone (source `whatsapp`), the conversation and the message. Meta retries are no-ops. Status webhooks move a message forward only (sent → delivered → read, or failed). `GET` verify handshake.
+- Consent from WhatsApp: a client who writes first consents to service replies; STOP / إلغاء etc. withdraws WhatsApp consent (service and marketing) at once, switches the conversation to human and is audited; only START restores it.
+- Inbox API: `GET /v1/conversations` (agents see their assigned/owned conversations, managers all), `GET /v1/conversations/:id/messages` (clears unread), `POST /v1/conversations/:id/messages` (agent reply: consent via `mayContact`, 24-hour window, takes over from AI, token decrypted only for the send, network call outside the DB transaction), `takeover` / `release-to-ai` (release refused for opted-out clients).
+- Numbers: `GET/POST /v1/whatsapp/accounts`, `POST /v1/whatsapp/accounts/:id/disconnect` (owner/admin only). Connect runs the Embedded Signup code exchange server-side; one number can belong to only one agency.
+- Config: `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_GRAPH_VERSION`, `WHATSAPP_PROVIDER`. Fake provider only in development/test (refused in staging/production); without Meta credentials the WhatsApp endpoints answer `INTEGRATION_NOT_CONFIGURED`.
+
+**Tested** (real Postgres): 10 API end-to-end tests (handshake, bad signatures, idempotent storage, contact/conversation/consent creation, unknown numbers, per-agency routing and cross-agency 404, STOP/START consent flow, agent send with tenant token and encrypted storage, status ordering, 24-hour window, agent visibility and admin-only number management, duplicate numbers, disconnect) and 6 database isolation tests for the new tables. Config test for provider selection.
+
+**Pending**
+
+- Real Meta delivery not tested (no Meta app yet). Media download/virus scan, templates outside the window, and a web inbox screen are not built.
+- Webhook processing is inline (database only, no AI call). The AI reply step and queue come next.
+- Staging needs this migration applied before WhatsApp routes are used.

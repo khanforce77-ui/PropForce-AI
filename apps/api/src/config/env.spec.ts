@@ -55,4 +55,23 @@ describe('loadConfig', () => {
       }).secureCookies,
     ).toBe(true);
   });
+
+  it('chooses the WhatsApp provider safely', () => {
+    const deployed = {
+      NODE_ENV: 'production',
+      JWT_PRIVATE_KEY: 'a',
+      JWT_PUBLIC_KEY: 'b',
+      SMTP_URL: 'smtp://x',
+      DATA_ENCRYPTION_KEY: KEY,
+    };
+    expect(loadConfig({}).whatsapp.provider).toBe('fake');
+    expect(loadConfig(deployed).whatsapp.provider).toBe('none');
+    expect(
+      loadConfig({ ...deployed, META_APP_ID: '1', META_APP_SECRET: 's' }).whatsapp.provider,
+    ).toBe('meta');
+    expect(() => loadConfig({ ...deployed, WHATSAPP_PROVIDER: 'fake' })).toThrow(
+      'WHATSAPP_PROVIDER',
+    );
+    expect(() => loadConfig({ META_GRAPH_VERSION: 'latest' })).toThrow();
+  });
 });
