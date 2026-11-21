@@ -13,6 +13,14 @@ export interface PublicAgent {
   photoVersion: string | null;
 }
 
+export interface ListingPhoto {
+  id: string;
+  /** Changes when the photo or the agency logo watermark changes; keep it in the URL. */
+  version: string;
+  width: number;
+  height: number;
+}
+
 export interface ListingCard {
   id: string;
   reference: string;
@@ -34,6 +42,9 @@ export interface ListingCard {
   listedAt: string;
   permit: { authority: string; number: string; validUntil: string | null } | null;
   agent: PublicAgent | null;
+  /** Cover only on cards; all photos, in order, on the listing detail. */
+  photos: ListingPhoto[];
+  photoCount?: number;
   agency: { name: string; slug: string; orn: string | null; emirate: string };
 }
 

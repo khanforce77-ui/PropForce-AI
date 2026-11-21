@@ -1,7 +1,8 @@
-import { Bath, BedDouble, Building2, Home, MapPin, Ruler, ShieldCheck } from 'lucide-react';
+import { Bath, BedDouble, Building2, Camera, Home, MapPin, Ruler, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { AgentAvatar } from '@/components/agent-avatar';
 import type { ListingCard as Card } from '@/lib/api';
+import { photoUrl } from '@/lib/photos';
 import {
   bedsLabel,
   formatArea,
@@ -32,7 +33,23 @@ export function ListingCard({ listing }: { listing: Card }) {
     <article className="overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-shadow hover:shadow-md">
       <Link href={listingPath(listing)} className="block">
         <div className="relative">
-          <PhotoPlaceholder type={listing.type} className="h-44" />
+          {listing.photos?.[0] ? (
+            <img
+              src={photoUrl(listing.photos[0], 'thumb')}
+              alt={title}
+              width={480}
+              height={320}
+              loading="lazy"
+              className="h-44 w-full bg-accent object-cover"
+            />
+          ) : (
+            <PhotoPlaceholder type={listing.type} className="h-44" />
+          )}
+          {listing.photoCount ? (
+            <span className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
+              <Camera className="h-3 w-3" aria-hidden /> {listing.photoCount}
+            </span>
+          ) : null}
           <span className="absolute left-3 top-3 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium">
             {TYPE_LABEL[listing.type] ?? 'Property'}
             {listing.completion === 'off_plan' ? ' · Off-plan' : ''}
