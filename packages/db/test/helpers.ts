@@ -16,8 +16,17 @@ export const createAppClient = (): PrismaClient =>
   createPrismaClient({ connectionString: APP_URL, max: 4 });
 
 export async function resetDatabase(owner: PrismaClient): Promise<void> {
+  // TRUNCATE ... CASCADE on "agency" also empties "fee_rule", including the migration-seeded
+  // shared templates (tenant_id IS NULL) that later suites rely on. Keep and restore them.
+  const templates = await owner.$queryRawUnsafe<{ rows: unknown }[]>(
+    `SELECT coalesce(json_agg(f), '[]'::json) AS rows FROM "fee_rule" f WHERE tenant_id IS NULL`,
+  );
   await owner.$executeRawUnsafe(
     'TRUNCATE "audit_log", "invitation", "membership", "team", "agency_settings", "agency", "mfa_factor", "session", "user" CASCADE',
+  );
+  await owner.$executeRawUnsafe(
+    'INSERT INTO "fee_rule" SELECT * FROM json_populate_recordset(NULL::"fee_rule", $1::json)',
+    JSON.stringify(templates[0]?.rows ?? []),
   );
 }
 
