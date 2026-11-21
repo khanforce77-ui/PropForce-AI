@@ -194,6 +194,7 @@ model Agency {
   messages         Message[]
   portalEnquiries  PortalEnquiry[]
   portalContacts   PortalContactEvent[]
+  listingReports   PortalListingReport[]
   propertyPhotos   PropertyPhoto[]
   logo             AgencyLogo?
 
@@ -435,13 +436,14 @@ model Property {
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agency          Agency               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agency          Agency                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // Composite keys: the database refuses a project or agent from another agency.
-  project         Project?             @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
-  assigned        Membership?          @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  project         Project?              @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  assigned        Membership?           @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
   permits         PropertyPermit[]
   portalEnquiries PortalEnquiry[]
   portalContacts  PortalContactEvent[]
+  reports         PortalListingReport[]
   leads           Lead[]
   photos          PropertyPhoto[]
 
@@ -457,14 +459,17 @@ model Property {
 /// Advertising permit for a listing (e.g. a Dubai Trakheesi permit). Entered by the agency; the
 /// platform does not verify it against the regulator.
 model PropertyPermit {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  propertyId   String   @map("property_id") @db.Uuid
-  authority    String
+  id              String   @id @default(uuid(7)) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  propertyId      String   @map("property_id") @db.Uuid
+  authority       String
   /// Optional when the agency uploads the permit document instead.
-  permitNumber String?  @map("permit_number")
-  validUntil   DateTime @map("valid_until") @db.Date
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  permitNumber    String?  @map("permit_number")
+  validUntil      DateTime @map("valid_until") @db.Date
+  /// The link inside the regulator's QR code (DLD Trakheesi, ADREC). Must be https on a .gov.ae
+  /// host; the portal draws the QR from it.
+  verificationUrl String?  @map("verification_url")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   agency   Agency                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property                @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
@@ -570,6 +575,29 @@ model PortalContactEvent {
   @@map("portal_contact_event")
 }
 
+/// A visitor's report that a public listing is wrong, unavailable or fraudulent. Filed under the
+/// listing's agency; PropForce admins can read every report.
+model PortalListingReport {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  propertyId String   @map("property_id") @db.Uuid
+  /// not_available | wrong_price | wrong_details | wrong_photos | fraud | other
+  reason     String
+  details    String?
+  email      String?
+  status     String   @default("open")
+  ipHash     String?  @map("ip_hash")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([propertyId])
+  @@map("portal_listing_report")
+}
+
 /// An agent's profile photo, shown with their listings on the public portal. Small images only
 /// (the CRM resizes to 256x256 before upload); served by the API with the hash in the URL.
 model MemberPhoto {
@@ -593,28 +621,28 @@ model MemberPhoto {
 /// display and thumbnail versions, which carry the agency's logo (or the PropForce mark) as a
 /// faint watermark.
 model PropertyPhoto {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  propertyId  String   @map("property_id") @db.Uuid
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  propertyId String   @map("property_id") @db.Uuid
   /// 0 is the cover photo.
-  position    Int
+  position   Int
   /// SHA-256 of the clean original (hex); used to refuse the same photo twice on one listing.
-  sha256      String
-  width       Int
-  height      Int
+  sha256     String
+  width      Int
+  height     Int
   /// Upright JPEG with EXIF/GPS removed, at most 2560 px. Never served to the public.
-  original    Bytes
+  original   Bytes
   /// 1600 px watermarked WebP.
-  display     Bytes
+  display    Bytes
   /// 480 px watermarked WebP.
-  thumb       Bytes
+  thumb      Bytes
   /// SHA-256 of the logo the watermark was made from; null for the PropForce mark.
-  markSha256  String?  @map("mark_sha256")
+  markSha256 String?  @map("mark_sha256")
   /// Goes up whenever the watermarked versions are re-rendered, so their URLs can be cached forever.
-  version     Int      @default(1)
-  createdBy   String   @map("created_by") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version    Int      @default(1)
+  createdBy  String   @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)

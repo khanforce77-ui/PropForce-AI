@@ -128,9 +128,8 @@ describe('public portal visibility', () => {
 
   it('exposes nothing else tenant-scoped', async () => {
     await listing(a, 'A-1');
-    const [teams, invitations, audit, settings, projects, enquiries] = await withPublicPortal(
-      app,
-      (tx) =>
+    const [teams, invitations, audit, settings, projects, enquiries, reports] =
+      await withPublicPortal(app, (tx) =>
         Promise.all([
           tx.team.count(),
           tx.invitation.count(),
@@ -138,16 +137,40 @@ describe('public portal visibility', () => {
           tx.agencySettings.count(),
           tx.project.count(),
           tx.portalEnquiry.count(),
+          tx.portalListingReport.count(),
         ]),
-    );
-    expect({ teams, invitations, audit, settings, projects, enquiries }).toEqual({
+      );
+    expect({ teams, invitations, audit, settings, projects, enquiries, reports }).toEqual({
       teams: 0,
       invitations: 0,
       audit: 0,
       settings: 0,
       projects: 0,
       enquiries: 0,
+      reports: 0,
     });
+  });
+
+  it('shows an off-plan project only while it has a public listing', async () => {
+    const mk = (name: string) =>
+      owner.project.create({ data: { tenantId: a.agencyId, name, emirate: 'Dubai' } });
+    const live = await mk('Marina Vista');
+    const draftOnly = await mk('Secret Tower');
+    await mk('Unused Project');
+    const p1 = await listing(a, 'A-1');
+    const p2 = await listing(a, 'A-2', { status: 'draft' });
+    await owner.property.update({ where: { id: p1.id }, data: { projectId: live.id } });
+    await owner.property.update({ where: { id: p2.id }, data: { projectId: draftOnly.id } });
+
+    const names = await withPublicPortal(app, (tx) =>
+      tx.project.findMany({ select: { name: true } }),
+    );
+    expect(names).toEqual([{ name: 'Marina Vista' }]);
+    // Writing stays impossible.
+    const changed = await withPublicPortal(app, (tx) =>
+      tx.project.updateMany({ data: { name: 'x' } }),
+    );
+    expect(changed.count).toBe(0);
   });
 
   it('cannot change listings, agencies or memberships', async () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { captchaEnabled, Turnstile } from './turnstile';
 
 type FieldErrors = Record<string, string>;
 
@@ -20,6 +21,8 @@ export function EnquiryForm({
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   useEffect(() => {
     started.current = Date.now();
@@ -28,6 +31,10 @@ export function EnquiryForm({
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    if (captchaEnabled && !captcha) {
+      setError('Please confirm you are not a robot.');
+      return;
+    }
     setState('sending');
     setError(null);
     setFieldErrors({});
@@ -44,6 +51,7 @@ export function EnquiryForm({
           consentMarketing: form.get('consentMarketing') === 'on',
           website: form.get('website') || '',
           elapsedMs: started.current ? Date.now() - started.current : undefined,
+          ...(captcha ? { captchaToken: captcha } : {}),
         }),
       });
       if (res.ok) {
@@ -57,6 +65,7 @@ export function EnquiryForm({
       setFieldErrors(Object.fromEntries((body.errors ?? []).map((x) => [x.path, x.message])));
       setError(body.message ?? 'Something went wrong. Please try again.');
       setState('idle');
+      setCaptchaReset((n) => n + 1);
     } catch {
       setError('Something went wrong. Please try again.');
       setState('idle');
@@ -151,6 +160,7 @@ export function EnquiryForm({
         <input type="checkbox" name="consentMarketing" className="mt-0.5" />
         <span>{CONSENT_MARKETING_LABEL} (optional)</span>
       </label>
+      <Turnstile onToken={setCaptcha} resetSignal={captchaReset} />
       {error ? (
         <p className="text-sm text-red-600" role="alert">
           {error}

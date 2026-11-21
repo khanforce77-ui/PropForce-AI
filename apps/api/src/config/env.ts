@@ -56,6 +56,11 @@ const envSchema = z.object({
    * (used only for rate limiting). Without it, the API uses the connecting IP.
    */
   PORTAL_API_KEY: z.string().min(32).optional(),
+  /**
+   * Cloudflare Turnstile secret. When set, portal enquiries and listing reports must carry a
+   * valid captcha token; when unset (pending keys), the honeypot and rate limits still apply.
+   */
+  TURNSTILE_SECRET_KEY: z.string().min(10).optional(),
 });
 
 export interface AppConfig {
@@ -76,7 +81,7 @@ export interface AppConfig {
   refreshTokenTtlDays: number;
   email: { smtpUrl?: string; from: string };
   authRateLimitPerMinute: number;
-  portal: { publicUrl: string; apiKey?: string };
+  portal: { publicUrl: string; apiKey?: string; turnstileSecret?: string };
   /** Undefined only in development/test, where a fixed, clearly non-secret key is used. */
   dataEncryptionKey?: Buffer;
   /** Cookies are Secure everywhere except local development and tests over plain HTTP. */
@@ -158,6 +163,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     portal: {
       publicUrl: e.PORTAL_PUBLIC_URL.replace(/\/$/, ''),
       ...(e.PORTAL_API_KEY ? { apiKey: e.PORTAL_API_KEY } : {}),
+      ...(e.TURNSTILE_SECRET_KEY ? { turnstileSecret: e.TURNSTILE_SECRET_KEY } : {}),
     },
     ...(encryptionKey ? { dataEncryptionKey: encryptionKey } : {}),
     secureCookies: deployed,

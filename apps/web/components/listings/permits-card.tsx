@@ -109,6 +109,7 @@ export function PermitsCard({
           authority: f.get('authority'),
           permitNumber: number || null,
           validUntil: f.get('validUntil'),
+          verificationUrl: String(f.get('verificationUrl') ?? '').trim() || null,
         },
       });
       if (doc) await upload(permit.id, doc);
@@ -120,19 +121,28 @@ export function PermitsCard({
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const number = String(f.get('permitNumber') ?? '').trim();
+    const qr = String(f.get('verificationUrl') ?? '').trim() || null;
     const file = f.get('document');
     const doc = file instanceof File && file.size > 0 ? file : null;
+    const changes = {
+      ...(f.get('validUntil') ? { validUntil: f.get('validUntil') } : {}),
+      ...(number && number !== permit.permitNumber ? { permitNumber: number } : {}),
+      ...(qr !== (permit.verificationUrl ?? null) ? { verificationUrl: qr } : {}),
+    };
+    if (Object.keys(changes).length === 0 && !doc) {
+      setError('Nothing to save: change the date, number, QR link or document.');
+      return;
+    }
     void run(async () => {
-      await request(`${path}/${permit.id}`, {
-        tenantId: agencyId,
-        method: 'PATCH',
-        body: {
-          validUntil: f.get('validUntil'),
-          ...(number && number !== permit.permitNumber ? { permitNumber: number } : {}),
-        },
-      });
+      if (Object.keys(changes).length > 0) {
+        await request(`${path}/${permit.id}`, {
+          tenantId: agencyId,
+          method: 'PATCH',
+          body: changes,
+        });
+      }
       if (doc) await upload(permit.id, doc);
-    }, 'Permit renewed.').then((ok) => ok && setRenewing(null));
+    }, 'Permit updated.').then((ok) => ok && setRenewing(null));
   }
 
   return (
@@ -143,7 +153,8 @@ export function PermitsCard({
         PDF or a photo, and its expiry date. The number is optional if you upload the document. The
         document stays private to your agency. When the permit expires the listing is taken off the
         portal automatically until you renew it. We store what you upload; we do not check it with
-        the regulator.
+        the regulator. Paste the link from the permit&apos;s QR code and the portal shows the QR on
+        the listing, so buyers can check the permit themselves.
       </p>
       {error ? (
         <p className="mt-3 text-sm text-red-600" role="alert">
@@ -208,7 +219,7 @@ export function PermitsCard({
                 {renewing === permit.id ? (
                   <form
                     onSubmit={(e) => onRenew(e, permit)}
-                    className="mt-2 grid gap-3 rounded-lg bg-muted p-3 sm:grid-cols-[1fr_10rem_1fr_auto] sm:items-end"
+                    className="mt-2 grid gap-3 rounded-lg bg-muted p-3 sm:grid-cols-2 sm:items-end"
                   >
                     <Field id={`renew-number-${permit.id}`} label="Permit number (optional)">
                       <Input
@@ -217,12 +228,24 @@ export function PermitsCard({
                         defaultValue={permit.permitNumber ?? ''}
                       />
                     </Field>
-                    <Field id={`renew-until-${permit.id}`} label="New expiry date">
+                    <Field
+                      id={`renew-until-${permit.id}`}
+                      label={expired ? 'New expiry date' : 'New expiry date (empty keeps it)'}
+                    >
                       <Input
                         id={`renew-until-${permit.id}`}
                         name="validUntil"
                         type="date"
-                        required
+                        required={expired}
+                      />
+                    </Field>
+                    <Field id={`renew-qr-${permit.id}`} label="QR code link (optional)">
+                      <Input
+                        id={`renew-qr-${permit.id}`}
+                        name="verificationUrl"
+                        type="url"
+                        placeholder="https://…gov.ae/…"
+                        defaultValue={permit.verificationUrl ?? ''}
                       />
                     </Field>
                     <Field id={`renew-doc-${permit.id}`} label="New permit document (optional)">
@@ -262,6 +285,16 @@ export function PermitsCard({
           <Field id="validUntil" label="Expiry date">
             <Input id="validUntil" name="validUntil" type="date" required />
           </Field>
+          <div className="sm:col-span-3">
+            <Field id="verificationUrl" label="QR code link (optional)">
+              <Input
+                id="verificationUrl"
+                name="verificationUrl"
+                type="url"
+                placeholder="https://…gov.ae/… (scan the permit QR code with your phone and paste the link)"
+              />
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <Field id="permitDocument" label="Permit document (PDF or photo)">
               <Input id="permitDocument" name="document" type="file" accept={ACCEPT} />

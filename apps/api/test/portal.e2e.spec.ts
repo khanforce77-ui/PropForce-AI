@@ -517,3 +517,232 @@ describe('agent profile photos', () => {
     await http().get(`/v1/public/agents/${a.membershipId}/photo`).expect(404);
   });
 });
+
+describe('public portal: Bayut-style discovery and trust', () => {
+  it('filters by bathrooms, amenity and agent, and lists amenities in the facets', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const b = await createAgency('b@example.test', 'Bravo Realty');
+    await publishedListing(a, { bathrooms: 1, amenities: ['Pool', 'Gym'] });
+    await publishedListing(a, { bathrooms: 4, amenities: ['Pool'] });
+    await publishedListing(b, { bathrooms: 2 });
+
+    const q = async (query: Record<string, string>) =>
+      (await http().get('/v1/public/listings').query(query).expect(200)).body.total as number;
+    expect(await q({ baths: '2' })).toBe(2);
+    expect(await q({ amenity: 'Pool' })).toBe(2);
+    expect(await q({ amenity: 'Gym' })).toBe(1);
+    expect(await q({ agent: b.membershipId })).toBe(1);
+    await http().get('/v1/public/listings').query({ agent: 'not-a-uuid' }).expect(400);
+
+    const facets = (await http().get('/v1/public/facets').expect(200)).body;
+    expect(facets.amenities).toEqual([
+      { name: 'Pool', count: 2 },
+      { name: 'Gym', count: 1 },
+    ]);
+  });
+
+  it('shows only an approximate location, coarser for villas', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const flat = await publishedListing(a, { latitude: 25.080123, longitude: 55.140987 });
+    const villa = await publishedListing(a, {
+      propertyType: 'villa',
+      latitude: 25.051234,
+      longitude: 55.261234,
+    });
+    const none = await publishedListing(a);
+
+    const f = (await http().get(`/v1/public/listings/${flat.id}`).expect(200)).body;
+    expect(f.location).toEqual({ lat: 25.08, lng: 55.141, radiusM: 150 });
+    expect(JSON.stringify(f)).not.toContain('25.080123');
+    const v = (await http().get(`/v1/public/listings/${villa.id}`).expect(200)).body;
+    expect(v.location).toEqual({ lat: 25.05, lng: 55.26, radiusM: 1000 });
+    expect(
+      (await http().get(`/v1/public/listings/${none.id}`).expect(200)).body.location,
+    ).toBeNull();
+    // Cards never carry coordinates.
+    const cards = JSON.stringify((await http().get('/v1/public/listings').expect(200)).body);
+    expect(cards).not.toContain('55.14');
+  });
+
+  it('suggests similar listings: same purpose and type, same community first, never itself', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const base = await publishedListing(a);
+    const sameArea = await publishedListing(a);
+    const otherArea = await publishedListing(a, { community: 'JVC' });
+    await publishedListing(a, { propertyType: 'villa' });
+    await publishedListing(a, { listingType: 'rent', rentPeriod: 'yearly', price: 100_000 });
+
+    const res = await http().get(`/v1/public/listings/${base.id}/similar`).expect(200);
+    expect(res.body.data.map((r: { id: string }) => r.id)).toEqual([sameArea.id, otherArea.id]);
+    await http()
+      .get('/v1/public/listings/00000000-0000-4000-8000-000000000000/similar')
+      .expect(404);
+  });
+
+  it('serves a public agent profile without contact details, only while they have live listings', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    await http()
+      .patch(`/v1/portal/agents/${a.membershipId}`)
+      .set(a.h)
+      .send({ publicPhoneE164: '+971501234567', brn: '12345' })
+      .expect(200);
+    await publishedListing(a);
+    await publishedListing(a, {
+      listingType: 'rent',
+      rentPeriod: 'yearly',
+      price: 100_000,
+      community: 'JVC',
+    });
+
+    const res = await http().get(`/v1/public/agents/${a.membershipId}`).expect(200);
+    expect(res.body).toMatchObject({
+      id: a.membershipId,
+      name: 'Alpha Homes Agent',
+      brn: '12345',
+      canCall: true,
+      agency: { name: 'Alpha Homes' },
+      listings: { sale: 1, rent: 1, total: 2 },
+    });
+    expect(res.body.communities.sort()).toEqual(['Dubai Marina', 'JVC']);
+    const json = JSON.stringify(res.body);
+    expect(json).not.toContain('501234567');
+    expect(json).not.toContain('a@example.test');
+
+    await t.owner.property.updateMany({
+      where: { tenantId: a.tenantId },
+      data: { status: 'draft' },
+    });
+    await http().get(`/v1/public/agents/${a.membershipId}`).expect(404);
+  });
+
+  it('files listing reports under the agency, once per visitor, and never for hidden listings', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p = await publishedListing(a);
+    const hidden = await publishedListing(a, { status: 'draft' });
+    const send = (id: string, body: Record<string, unknown>) =>
+      http()
+        .post(`/v1/public/listings/${id}/reports`)
+        .set('x-portal-key', PORTAL_KEY)
+        .set('x-portal-client-ip', '203.0.113.9')
+        .send(body);
+
+    await send(p.id, {
+      reason: 'not_available',
+      details: 'Agent said it was sold',
+      email: '',
+    }).expect(202);
+    await send(p.id, { reason: 'fraud' }).expect(429);
+    await send(p.id, { reason: 'made_up' }).expect(400);
+    await send(hidden.id, { reason: 'fraud' }).expect(404);
+
+    const rows = await t.owner.portalListingReport.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      tenantId: a.tenantId,
+      propertyId: p.id,
+      reason: 'not_available',
+      details: 'Agent said it was sold',
+      email: null,
+      status: 'open',
+    });
+    expect(rows[0]!.ipHash).not.toContain('203.0.113.9');
+
+    // Honeypot: accepted, nothing stored.
+    await http()
+      .post(`/v1/public/listings/${p.id}/reports`)
+      .send({ reason: 'fraud', website: 'spam.example' })
+      .expect(202);
+    expect(await t.owner.portalListingReport.count()).toBe(1);
+  });
+
+  it('shows the permit QR link, which must be an https .gov.ae address', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p = await publishedListing(a, {}, { permit: false });
+    const permits = `/v1/properties/${p.id}/permits`;
+    const validUntil = new Date(Date.now() + 30 * DAY).toISOString().slice(0, 10);
+    for (const bad of [
+      'http://dubailand.gov.ae/x',
+      'https://evil.example/gov.ae',
+      'https://gov.ae.evil.test/',
+    ]) {
+      await http()
+        .post(permits)
+        .set(a.h)
+        .send({ authority: 'DLD', permitNumber: '711', validUntil, verificationUrl: bad })
+        .expect(400);
+    }
+    const permit = await http()
+      .post(permits)
+      .set(a.h)
+      .send({
+        authority: 'DLD',
+        validUntil,
+        verificationUrl: 'https://Trakheesi.DubaiLand.gov.ae/verify?id=711',
+      })
+      .expect(201);
+
+    const card = (await http().get('/v1/public/listings').expect(200)).body.data[0];
+    expect(card.permit).toEqual({
+      authority: 'DLD',
+      number: null,
+      validUntil,
+      verificationUrl: 'https://trakheesi.dubailand.gov.ae/verify?id=711',
+    });
+
+    await http()
+      .patch(`${permits}/${permit.body.id as string}`)
+      .set(a.h)
+      .send({ verificationUrl: null })
+      .expect(200);
+    const after = (await http().get(`/v1/public/listings/${p.id}`).expect(200)).body;
+    expect(after.permit.verificationUrl).toBeNull();
+  });
+});
+
+describe('public portal: saved listings and new projects', () => {
+  it('fetches saved listings by id, skipping hidden ones, and refuses bad ids', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p1 = await publishedListing(a);
+    const p2 = await publishedListing(a);
+    const hidden = await publishedListing(a, { status: 'draft' });
+    await publishedListing(a);
+
+    const res = await http()
+      .get('/v1/public/listings')
+      .query({ ids: `${p1.id},${p2.id},${hidden.id}` })
+      .expect(200);
+    expect(res.body.data.map((r: { id: string }) => r.id).sort()).toEqual([p1.id, p2.id].sort());
+    await http().get('/v1/public/listings').query({ ids: 'nope' }).expect(400);
+  });
+
+  it('shows the off-plan project name and handover, filters by project, sorts by handover', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const vista = await t.owner.project.create({
+      data: { tenantId: a.tenantId, name: 'Marina Vista', emirate: 'Dubai' },
+    });
+    const late = await publishedListing(a, {
+      completion: 'off_plan',
+      projectId: vista.id,
+      handoverDate: new Date('2029-03-31'),
+    });
+    const soon = await publishedListing(a, {
+      completion: 'off_plan',
+      projectId: vista.id,
+      handoverDate: new Date('2027-09-30'),
+    });
+    await publishedListing(a);
+
+    const res = await http()
+      .get('/v1/public/listings')
+      .query({ completion: 'off_plan', sort: 'handover' })
+      .expect(200);
+    expect(res.body.data.map((r: { id: string }) => r.id)).toEqual([soon.id, late.id]);
+    expect(res.body.data[0]).toMatchObject({ project: 'Marina Vista', handoverDate: '2027-09-30' });
+    expect(
+      (await http().get('/v1/public/listings').query({ project: 'marina vista' }).expect(200)).body
+        .total,
+    ).toBe(2);
+    const detail = (await http().get(`/v1/public/listings/${soon.id}`).expect(200)).body;
+    expect(detail.project).toBe('Marina Vista');
+  });
+});

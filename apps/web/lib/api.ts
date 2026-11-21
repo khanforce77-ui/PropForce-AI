@@ -155,6 +155,8 @@ export interface Permit {
   /** The uploaded permit document (private to the agency), if any. */
   document: { contentType: string; fileName: string; updatedAt: string } | null;
   validUntil: string;
+  /** The link inside the permit's QR code (https, .gov.ae); the portal shows it as a QR code. */
+  verificationUrl: string | null;
 }
 
 export interface PropertyDetail extends PropertySummary {

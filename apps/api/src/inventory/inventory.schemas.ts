@@ -104,26 +104,64 @@ export type PropertyUpdateInput = z.output<typeof propertyUpdateSchema>;
 
 export const statusSchema = z.strictObject({ status: z.enum(propertyStatuses) });
 
+/**
+ * The link inside the regulator's QR code on the permit (DLD Trakheesi, ADREC). Only https links
+ * on UAE government (.gov.ae) hosts are accepted; the portal draws the QR code from it.
+ */
+export const permitVerificationUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine(
+    (v) => {
+      try {
+        const u = new URL(v);
+        const host = u.hostname.toLowerCase();
+        return (
+          u.protocol === 'https:' &&
+          !u.username &&
+          !u.port &&
+          (host === 'gov.ae' || host.endsWith('.gov.ae'))
+        );
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Paste the https link from the permit QR code (a .gov.ae address)' },
+  )
+  // Matches the database check, which wants the host in lower case.
+  .transform((v) => {
+    const u = new URL(v);
+    return `https://${u.hostname.toLowerCase()}${u.pathname}${u.search}`;
+  });
+
 /** The number is optional: an agency may upload the permit document instead (see the document route). */
 export const permitSchema = z
   .strictObject({
     authority: text(32),
     permitNumber: optionalText(64),
     validUntil: isoDate,
+    verificationUrl: permitVerificationUrl.nullable().optional(),
   })
   .transform((v) => ({
     ...v,
     permitNumber: v.permitNumber ?? null,
+    verificationUrl: v.verificationUrl ?? null,
     validUntil: new Date(v.validUntil),
   }));
 export type PermitInput = z.output<typeof permitSchema>;
 
 /** Renewing a permit: a new expiry date and, if it changed, a new number. */
 export const permitUpdateSchema = z
-  .strictObject({ permitNumber: optionalText(64), validUntil: isoDate.optional() })
+  .strictObject({
+    permitNumber: optionalText(64),
+    validUntil: isoDate.optional(),
+    verificationUrl: permitVerificationUrl.nullable().optional(),
+  })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' })
   .transform((v) => ({
     ...(v.permitNumber !== undefined ? { permitNumber: v.permitNumber } : {}),
+    ...(v.verificationUrl !== undefined ? { verificationUrl: v.verificationUrl } : {}),
     ...(v.validUntil ? { validUntil: new Date(v.validUntil) } : {}),
   }));
 export type PermitUpdateInput = z.output<typeof permitUpdateSchema>;
