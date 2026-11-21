@@ -1,9 +1,10 @@
 'use client';
 
-import { LogOut, ShieldCheck } from 'lucide-react';
+import { LogOut, Plus, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { StatusBadge } from '@/components/listings/status-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -11,12 +12,14 @@ import { Input, Label } from '@/components/ui/input';
 import {
   ApiError,
   type PlatformAgency,
+  type PlatformListing,
   type PlatformAuditEntry,
   type PlatformSetting,
   type PlatformSummary,
   type PlatformUser,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { formatPrice, titleCase } from '@/lib/listings';
 import { cn } from '@/lib/utils';
 
 const date = (iso: string | null) =>
@@ -189,6 +192,7 @@ function PlanForm({
 const TABS = [
   ['overview', 'Overview'],
   ['agencies', 'Agencies'],
+  ['listings', 'All listings'],
   ['users', 'Users'],
   ['settings', 'Settings'],
   ['activity', 'Activity'],
@@ -203,13 +207,15 @@ const SETTING_LABELS: Record<string, string> = {
 
 export default function PlatformAdminPage() {
   const router = useRouter();
-  const { me, request, signOut } = useAuth();
+  const { me, request, signOut, refreshMe } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
   const [summary, setSummary] = useState<PlatformSummary | null>(null);
   const [agencies, setAgencies] = useState<PlatformAgency[]>([]);
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [settings, setSettings] = useState<PlatformSetting[]>([]);
   const [activity, setActivity] = useState<PlatformAuditEntry[]>([]);
+  const [listings, setListings] = useState<PlatformListing[]>([]);
+  const [listingQuery, setListingQuery] = useState('');
   const [userQuery, setUserQuery] = useState('');
   // Read by load() without re-running it on every keystroke.
   const userQueryRef = useRef('');
@@ -265,6 +271,31 @@ export default function PlatformAdminPage() {
   useEffect(() => {
     if (isAdmin) void load();
   }, [isAdmin, load]);
+
+  useEffect(() => {
+    if (!isAdmin || tab !== 'listings') return;
+    const t = setTimeout(() => {
+      void request<{ data: PlatformListing[] }>('/platform/listings', {
+        query: { q: listingQuery.trim() || undefined },
+      })
+        .then((r) => setListings(r.data))
+        .catch((err: unknown) => handle(err, 'Could not load listings.'));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [isAdmin, tab, listingQuery, request, handle]);
+
+  /** Opens PropForce Direct (created on first use), optionally at a sub-page. */
+  const openDirect = async (subPath: string) => {
+    try {
+      const { agencyId } = await request<{ agencyId: string }>('/platform/direct', {
+        method: 'POST',
+      });
+      await refreshMe();
+      router.push(`/app/${agencyId}${subPath}`);
+    } catch (err) {
+      handle(err, 'Could not open PropForce Direct.');
+    }
+  };
 
   const act = async (
     path: string,
@@ -328,6 +359,12 @@ export default function PlatformAdminPage() {
           <Button size="sm" variant="ghost" onClick={() => setOpen(key('plan'))}>
             Plan &amp; limits
           </Button>
+          <Link
+            href={`/app/${a.id}`}
+            className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-primary hover:bg-muted"
+          >
+            Open agency (view &amp; edit) →
+          </Link>
         </div>
         {open === key('reject') ? (
           <ReasonForm
@@ -364,7 +401,14 @@ export default function PlatformAdminPage() {
 
   const agencyHeading = (a: PlatformAgency) => (
     <div>
-      <p className="font-medium">{a.name}</p>
+      <p className="font-medium">
+        {a.name}
+        {a.isPlatformOwned ? (
+          <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+            PropForce's own
+          </span>
+        ) : null}
+      </p>
       <p className="text-xs text-muted-foreground">
         {a.emirate}
         {a.orn ? ` · ORN ${a.orn}` : ''} · signed up {date(a.createdAt)}
@@ -436,6 +480,23 @@ export default function PlatformAdminPage() {
 
       {tab === 'overview' ? (
         <>
+          <Card className="flex flex-wrap items-center justify-between gap-4 border-primary/30">
+            <div>
+              <h2 className="font-medium">List a property yourself</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your own listings go under <strong>PropForce Direct</strong>, the platform&apos;s
+                agency, and show on the portal under your name once they have a permit.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void openDirect('/listings/new')}>
+                <Plus className="h-4 w-4" aria-hidden /> Add listing
+              </Button>
+              <Button variant="outline" onClick={() => void openDirect('')}>
+                Open PropForce Direct
+              </Button>
+            </div>
+          </Card>
           <section
             aria-label="Platform at a glance"
             className="grid grid-cols-2 gap-3 md:grid-cols-4"
@@ -516,6 +577,68 @@ export default function PlatformAdminPage() {
                 </li>
               ))}
             </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === 'listings' ? (
+        <Card className="p-0">
+          <div className="flex flex-wrap items-end gap-2 px-6 pt-5">
+            <div className="flex min-w-60 flex-1 flex-col gap-1">
+              <Label htmlFor="listing-search">Search all listings</Label>
+              <Input
+                id="listing-search"
+                placeholder="Reference, community, building or agency"
+                value={listingQuery}
+                onChange={(e) => setListingQuery(e.target.value)}
+                maxLength={80}
+              />
+            </div>
+            <Button onClick={() => void openDirect('/listings/new')}>
+              <Plus className="h-4 w-4" aria-hidden /> Add listing
+            </Button>
+          </div>
+          {listings.length === 0 ? (
+            <p className="px-6 py-5 text-sm text-muted-foreground">No listings found.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted text-left text-xs text-muted-foreground uppercase">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Listing</th>
+                    <th className="px-4 py-3 font-medium">Agency</th>
+                    <th className="px-4 py-3 font-medium">Agent</th>
+                    <th className="px-4 py-3 font-medium">Price</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {listings.map((p) => (
+                    <tr key={p.id} className="hover:bg-muted/50">
+                      <td className="px-6 py-3">
+                        <Link
+                          href={`/app/${p.agency.id}/listings/${p.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {p.title ||
+                            [p.building, p.community].filter(Boolean).join(', ') ||
+                            p.reference}
+                        </Link>
+                        <p className="text-xs text-muted-foreground">
+                          {p.reference} · {titleCase(p.listingType)} · {titleCase(p.propertyType)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">{p.agency.name}</td>
+                      <td className="px-4 py-3">{p.assigned?.user.fullName ?? '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatPrice(p)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={p.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       ) : null}

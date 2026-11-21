@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/listings/status-badge';
 import { Alert, Card } from '@/components/ui/card';
 import { ApiError, type DashboardSummary, type PropertyList } from '@/lib/api';
 import type { CrmSummary } from '@/lib/crm';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 import { formatPrice } from '@/lib/listings';
 
@@ -35,7 +36,7 @@ function Stat({
 export default function DashboardPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const { me, request } = useAuth();
-  const m = me?.memberships.find((x) => x.agency.id === agencyId);
+  const m = useAgencyMembership();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [recent, setRecent] = useState<PropertyList | null>(null);
   const [crm, setCrm] = useState<CrmSummary | null>(null);

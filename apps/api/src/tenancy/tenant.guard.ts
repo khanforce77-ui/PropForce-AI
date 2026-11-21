@@ -7,7 +7,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { withUser, type PrismaClient, type Role } from '@propforce/db';
+import { withPlatformAdmin, withUser, type PrismaClient, type Role } from '@propforce/db';
 import { AppError } from '../common/app-error';
 import { PRISMA } from '../database/database.module';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
@@ -20,8 +20,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export interface TenantRequestContext {
   tenantId: string;
   userId: string;
-  membershipId: string;
+  /** Null when a platform admin works in an agency they are not a member of. */
+  membershipId: string | null;
   role: Role;
+  /** True when a platform admin acts in an agency without being a member. Audited as 'platform'. */
+  platform?: boolean;
 }
 
 export interface TenantRequest extends AuthenticatedRequest {
@@ -67,7 +70,25 @@ export class TenantGuard implements CanActivate {
         include: { agency: { select: { status: true } } },
       }),
     );
+    const permission = this.reflector.getAllAndOverride<Permission | undefined>(PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
     if (!membership || membership.status === 'removed') {
+      // A platform admin (flag + two-factor) may work in any agency, with admin rights.
+      // Every write is audited with actor type 'platform' (see audit()).
+      if (await this.isPlatformAdmin(userId)) {
+        const agency = await withPlatformAdmin(this.prisma, { userId }, (tx) =>
+          tx.agency.findUnique({ where: { id: tenantId }, select: { id: true } }),
+        );
+        if (!agency) throw new AppError(404, 'NOT_FOUND', 'Agency not found.');
+        if (!permission || !hasPermission('admin', permission)) {
+          throw new AppError(403, 'PERMISSION_DENIED', 'You do not have permission to do this.');
+        }
+        req.tenant = { tenantId, userId, membershipId: null, role: 'admin', platform: true };
+        return true;
+      }
       throw new AppError(403, 'TENANT_FORBIDDEN', 'You are not a member of this agency.');
     }
     if (membership.status === 'suspended') {
@@ -84,10 +105,6 @@ export class TenantGuard implements CanActivate {
       );
     }
 
-    const permission = this.reflector.getAllAndOverride<Permission | undefined>(PERMISSION_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
     if (!permission || !hasPermission(membership.role, permission)) {
       throw new AppError(403, 'PERMISSION_DENIED', 'You do not have permission to do this.');
     }
@@ -95,8 +112,32 @@ export class TenantGuard implements CanActivate {
     req.tenant = { tenantId, userId, membershipId: membership.id, role: membership.role };
     return true;
   }
+
+  private async isPlatformAdmin(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isPlatformAdmin: true, suspendedAt: true },
+    });
+    return !!user?.isPlatformAdmin && !user.suspendedAt && (await this.mfa.isEnabled(userId));
+  }
 }
 
 export const CurrentTenant = createParamDecorator(
   (_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<TenantRequest>().tenant,
 );
+
+/**
+ * The caller's own membership id, for "mine" filters and agent-only scopes. A platform admin
+ * working in an agency they do not belong to has none; such calls are refused rather than
+ * silently widened.
+ */
+export function ownMembershipId(ctx: TenantRequestContext): string {
+  if (!ctx.membershipId) {
+    throw new AppError(
+      403,
+      'PERMISSION_DENIED',
+      'Only members of this agency can do this. You are viewing it as a platform admin.',
+    );
+  }
+  return ctx.membershipId;
+}

@@ -10,7 +10,7 @@ import { AppError } from '../common/app-error';
 import { PRISMA } from '../database/database.module';
 import { hasPermission } from '../tenancy/permissions';
 import { audit } from '../tenancy/tenancy.service';
-import type { TenantRequestContext } from '../tenancy/tenant.guard';
+import { ownMembershipId, type TenantRequestContext } from '../tenancy/tenant.guard';
 import { currentConsent } from './consent';
 import type {
   ConsentInput,
@@ -80,15 +80,15 @@ export class CrmService {
     if (this.canManage(ctx)) return {};
     return {
       OR: [
-        { ownerMembershipId: ctx.membershipId },
-        { leads: { some: { assignedMembershipId: ctx.membershipId } } },
+        { ownerMembershipId: ownMembershipId(ctx) },
+        { leads: { some: { assignedMembershipId: ownMembershipId(ctx) } } },
       ],
     };
   }
 
   /** Agents see only the leads assigned to them; managers see all. */
   private leadScope(ctx: TenantRequestContext): Prisma.LeadWhereInput {
-    return this.canManage(ctx) ? {} : { assignedMembershipId: ctx.membershipId };
+    return this.canManage(ctx) ? {} : { assignedMembershipId: ownMembershipId(ctx) };
   }
 
   // ───── contacts ─────
@@ -99,7 +99,7 @@ export class CrmService {
         AND: [
           { tenantId: ctx.tenantId },
           this.contactScope(ctx),
-          q.mine ? { ownerMembershipId: ctx.membershipId } : {},
+          q.mine && ctx.membershipId ? { ownerMembershipId: ctx.membershipId } : {},
           q.q
             ? {
                 OR: [
@@ -284,7 +284,7 @@ export class CrmService {
         AND: [
           { tenantId: ctx.tenantId },
           this.leadScope(ctx),
-          q.mine ? { assignedMembershipId: ctx.membershipId } : {},
+          q.mine && ctx.membershipId ? { assignedMembershipId: ctx.membershipId } : {},
           q.stage ? { stage: q.stage } : {},
           q.open === true ? { stage: { notIn: [...CLOSED_STAGES] } } : {},
           q.q

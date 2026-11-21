@@ -256,3 +256,12 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Real Meta delivery not tested (no Meta app yet). Media download/virus scan, templates outside the window, and a web inbox screen are not built.
 - Webhook processing is inline (database only, no AI call). The AI reply step and queue come next.
 - Staging needs this migration applied before WhatsApp routes are used.
+
+## PR · Super admin works inside every agency, plus PropForce Direct
+
+- A platform admin (flag plus two-factor, not suspended) can open any agency, including suspended ones, and work there with admin rights: listings, leads, contacts, team. They are not added as a member, and the request context has `membershipId: null` and `platform: true`. Agent-only scopes use `ownMembershipId(ctx)`, which refuses rather than widening.
+- Every change made that way is written to the agency's audit log with actor type `platform` and to the platform audit log as `agency_data.<action>`.
+- PropForce Direct (`20261121040000_platform_direct`, `agency.is_platform_owned`, at most one): the platform's own agency, created on first use by `POST /v1/platform/direct`. The admin becomes its owner, so their listings are assigned to them and can appear on the portal.
+- `GET /v1/platform/listings`: every agency's listings in one table.
+- Web: the admin overview has "Add listing" and "Open PropForce Direct". The Agencies tab has "Open agency (view & edit)", and there is a new All listings tab. Inside an agency, a banner shows that the admin is viewing it as platform admin and links back.
+- Tests: 3 API tests, extended Playwright admin flow.

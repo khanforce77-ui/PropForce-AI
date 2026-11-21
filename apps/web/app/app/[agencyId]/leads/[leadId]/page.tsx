@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Label, Select } from '@/components/ui/input';
 import { ApiError, type Member } from '@/lib/api';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 import {
   bedsLabel,
@@ -48,8 +49,8 @@ function activityText(a: LeadActivity) {
 export default function LeadPage() {
   const { agencyId, leadId } = useParams<{ agencyId: string; leadId: string }>();
   const router = useRouter();
-  const { me, request } = useAuth();
-  const role = me?.memberships.find((m) => m.agency.id === agencyId)?.role;
+  const { request } = useAuth();
+  const role = useAgencyMembership()?.role;
   const manage = canManageCrm(role);
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [members, setMembers] = useState<Member[]>([]);

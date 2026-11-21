@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input } from '@/components/ui/input';
 import { ApiError, type PropertyDetail, type PropertyStatus } from '@/lib/api';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 import { STATUS_LABEL, formatPrice, nextStatuses } from '@/lib/listings';
 
@@ -29,8 +30,8 @@ function ListingDetail() {
   const { agencyId, propertyId } = useParams<{ agencyId: string; propertyId: string }>();
   const created = useSearchParams().get('created') === '1';
   const router = useRouter();
-  const { me, request } = useAuth();
-  const membership = me?.memberships.find((m) => m.agency.id === agencyId);
+  const { request } = useAuth();
+  const membership = useAgencyMembership();
 
   const [p, setP] = useState<PropertyDetail | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -345,3 +345,91 @@ describe('platform controls', () => {
       .expect(404);
   });
 });
+
+describe('platform admin inside any agency', () => {
+  it('can read and change another agency’s listings and leads, audited as the platform', async () => {
+    const admin = await platformAdmin();
+    const a = await createOwner('owner@alpha.test', 'Alpha Realty');
+    const asAdmin = { ...admin.auth, 'X-Tenant-Id': a.tenantId };
+
+    const listing = await http()
+      .post('/v1/properties')
+      .set(a.h)
+      .send({ listingType: 'sale', propertyType: 'villa', emirate: 'Dubai' })
+      .expect(201);
+    await http().get('/v1/properties').set(asAdmin).expect(200);
+    await http()
+      .patch(`/v1/properties/${listing.body.id}`)
+      .set(asAdmin)
+      .send({ title: 'Fixed by PropForce' })
+      .expect(200);
+    const contact = await http()
+      .post('/v1/contacts')
+      .set(asAdmin)
+      .send({ fullName: 'Walk In', phone: '0501231234' })
+      .expect(201);
+    expect(contact.body.ownerMembershipId).toBeNull();
+    await http().get('/v1/contacts?mine=true').set(asAdmin).expect(200);
+    await http().get('/v1/dashboard/summary').set(asAdmin).expect(200);
+
+    // The agency sees the change in its own audit log as made by the platform ...
+    const logs = await http().get('/v1/audit-logs?entityType=property').set(a.h).expect(200);
+    expect(logs.body.data[0]).toMatchObject({ action: 'property.updated', actorType: 'platform' });
+    // ... and the platform log records it too.
+    const platformLog = await http().get('/v1/platform/audit-log').set(admin.auth).expect(200);
+    expect(platformLog.body.data.map((e: { action: string }) => e.action)).toEqual(
+      expect.arrayContaining(['agency_data.property.updated', 'agency_data.contact.created']),
+    );
+
+    // Everything is visible in the all-listings view.
+    const all = await http().get('/v1/platform/listings').set(admin.auth).expect(200);
+    expect(all.body.data[0]).toMatchObject({
+      id: listing.body.id,
+      agency: { id: a.tenantId, name: 'Alpha Realty' },
+    });
+  });
+
+  it('is refused to other agency members and to admins without two-factor', async () => {
+    const a = await createOwner('owner@alpha.test', 'Alpha Realty');
+    const b = await createOwner('owner@bravo.test', 'Bravo Homes');
+    await http()
+      .get('/v1/properties')
+      .set({ ...b.auth, 'X-Tenant-Id': a.tenantId })
+      .expect(403);
+    const noMfa = await createOwner('root2@platform.test', 'HQ Two', false);
+    await t.owner.user.update({ where: { id: noMfa.userId }, data: { isPlatformAdmin: true } });
+    await http()
+      .get('/v1/properties')
+      .set({ ...noMfa.auth, 'X-Tenant-Id': a.tenantId })
+      .expect(403);
+  });
+
+  it('PropForce Direct: created once, admin is its owner and can list there', async () => {
+    const admin = await platformAdmin();
+    const first = await http().post('/v1/platform/direct').set(admin.auth).expect(200);
+    const second = await http().post('/v1/platform/direct').set(admin.auth).expect(200);
+    expect(second.body.agencyId).toBe(first.body.agencyId);
+    const me = await http().get('/v1/me').set(admin.auth).expect(200);
+    const direct = me.body.memberships.find(
+      (m: { agency: { id: string } }) => m.agency.id === first.body.agencyId,
+    );
+    expect(direct).toMatchObject({
+      role: 'owner',
+      agency: { name: 'PropForce Direct', status: 'active' },
+    });
+    const h = { ...admin.auth, 'X-Tenant-Id': first.body.agencyId };
+    const listing = await http()
+      .post('/v1/properties')
+      .set(h)
+      .send({ listingType: 'rent', propertyType: 'apartment', emirate: 'Dubai', price: 90_000 })
+      .expect(201);
+    expect(listing.body.assignedMembershipId).toBe(direct.id);
+    const agencies = await http().get('/v1/platform/agencies').set(admin.auth).expect(200);
+    expect(
+      agencies.body.data.filter((x: { isPlatformOwned: boolean }) => x.isPlatformOwned),
+    ).toHaveLength(1);
+    // Non-admins cannot create it.
+    const o = await createOwner('owner@alpha.test', 'Alpha Realty');
+    await http().post('/v1/platform/direct').set(o.auth).expect(403);
+  });
+});
