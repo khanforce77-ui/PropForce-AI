@@ -26,6 +26,9 @@ const planSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
 const flagSchema = z.strictObject({ enabled: z.boolean() });
+const dashboardQuery = z.object({
+  days: z.coerce.number().int().min(7).max(90).default(30),
+});
 const listingsQuery = z.object({
   q: z.string().trim().min(1).max(80).optional(),
   status: z.enum(['draft', 'active', 'under_offer', 'sold', 'rented', 'archived']).optional(),
@@ -107,6 +110,11 @@ export class PlatformController {
   @HttpCode(200)
   reactivateUser(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
     return this.platform.reactivateUser(req.auth.userId, id);
+  }
+
+  @Get('dashboard')
+  dashboard(@Req() req: AuthenticatedRequest, @Query() query: unknown) {
+    return this.platform.dashboard(req.auth.userId, parseBody(dashboardQuery, query).days);
   }
 
   @Get('listings')

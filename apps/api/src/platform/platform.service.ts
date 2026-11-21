@@ -125,6 +125,92 @@ export class PlatformService {
     });
   }
 
+  /**
+   * Daily trends (UAE days) for the last `days` days, headline counts and the most active
+   * agencies, for the platform dashboard. Read-only, through the platform-admin read policies.
+   */
+  dashboard(adminUserId: string, days: number) {
+    return withPlatformAdmin(this.prisma, { userId: adminUserId }, async (tx) => {
+      // Days are UAE calendar days (UTC+4, no daylight saving).
+      const UAE = 4 * 3_600_000;
+      const firstDay = (Math.floor((Date.now() + UAE) / DAY_MS) - (days - 1)) * DAY_MS;
+      const since = new Date(firstDay - UAE);
+      const daily = (table: 'agency' | 'user' | 'property' | 'lead' | 'portal_enquiry') =>
+        tx.$queryRawUnsafe<{ d: string; n: bigint }[]>(
+          `SELECT to_char(created_at AT TIME ZONE 'Asia/Dubai', 'YYYY-MM-DD') AS d, count(*) AS n
+             FROM "${table}" WHERE created_at >= $1 GROUP BY 1`,
+          since,
+        );
+      const [agencies, users, listings, leads, enquiries] = await Promise.all([
+        daily('agency'),
+        daily('user'),
+        daily('property'),
+        daily('lead'),
+        daily('portal_enquiry'),
+      ]);
+      const dates: string[] = [];
+      for (let i = 0; i < days; i++) {
+        dates.push(new Date(firstDay + i * DAY_MS).toISOString().slice(0, 10));
+      }
+      const series = (rows: { d: string; n: bigint }[]) => {
+        const byDay = new Map(rows.map((r) => [r.d, Number(r.n)]));
+        return dates.map((d) => byDay.get(d) ?? 0);
+      };
+
+      const [leadsTotal, leadsOpen, enquiriesTotal, enquiriesNew, top] = await Promise.all([
+        tx.lead.count(),
+        tx.lead.count({ where: { stage: { notIn: ['won', 'lost'] } } }),
+        tx.portalEnquiry.count(),
+        tx.portalEnquiry.count({ where: { status: 'new' } }),
+        tx.agency.findMany({
+          where: { status: { not: 'cancelled' } },
+          select: {
+            id: true,
+            name: true,
+            isPlatformOwned: true,
+            _count: {
+              select: {
+                properties: { where: { deletedAt: null } },
+                leads: true,
+                memberships: { where: { status: 'active' } },
+              },
+            },
+          },
+          take: 200,
+        }),
+      ]);
+      const topAgencies = top
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          isPlatformOwned: a.isPlatformOwned,
+          listings: a._count.properties,
+          leads: a._count.leads,
+          members: a._count.memberships,
+        }))
+        .sort((x, y) => y.listings + y.leads - (x.listings + x.leads))
+        .slice(0, 5);
+
+      return {
+        dates,
+        series: {
+          agencies: series(agencies),
+          users: series(users),
+          listings: series(listings),
+          leads: series(leads),
+          enquiries: series(enquiries),
+        },
+        totals: {
+          leads: leadsTotal,
+          openLeads: leadsOpen,
+          enquiries: enquiriesTotal,
+          newEnquiries: enquiriesNew,
+        },
+        topAgencies,
+      };
+    });
+  }
+
   /** Listings across all agencies, newest first, for the admin "All listings" view. */
   listings(adminUserId: string, q: { q?: string | undefined; status?: string | undefined }) {
     return withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>

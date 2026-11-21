@@ -108,11 +108,14 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
 
     // The admin approves it from the queue.
     await page.reload();
-    const queued = page.getByRole('listitem').filter({ hasText: agencyName });
+    const queued = page
+      .getByRole('region', { name: 'Approval queue' })
+      .getByRole('listitem')
+      .filter({ hasText: agencyName });
     await expect(queued).toBeVisible();
     await queued.getByRole('button', { name: 'Approve' }).click();
     await expect(page.getByText(`${agencyName} approved.`)).toBeVisible();
-    await expect(page.getByText('Nothing waiting for approval.')).toBeVisible();
+    await expect(queued).toHaveCount(0);
     await ownerPage.reload();
     await expect(ownerPage.getByText(/waiting for PropForce approval/)).toHaveCount(0);
 
@@ -145,10 +148,10 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
 
     // Every action shows up in the activity log.
     await page.getByRole('button', { name: 'Activity', exact: true }).click();
-    await expect(page.getByText('platform.agency_suspended')).toBeVisible();
-    await expect(page.getByText('platform.agency_approved')).toBeVisible();
+    await expect(page.getByText('platform.agency_suspended').first()).toBeVisible();
+    await expect(page.getByText('platform.agency_approved').first()).toBeVisible();
     await expect(page.getByText('platform.setting_changed').first()).toBeVisible();
-    await expect(page.getByText('agency_data.contact.created')).toBeVisible();
+    await expect(page.getByText('agency_data.contact.created').first()).toBeVisible();
     await ownerContext.close();
   } finally {
     await setFlag('platform.require_agency_approval', false);
@@ -169,7 +172,10 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
   const directRow = page.getByRole('row').filter({ hasText: `Direct Villa ${run}` });
   await expect(directRow).toContainText('PropForce Direct');
 
-  // The agency dashboard is still one click away.
-  await page.getByRole('link', { name: 'My agency dashboard' }).click();
-  await expect(page.getByRole('link', { name: 'Platform admin dashboard' })).toBeVisible();
+  // The overview shows trends and the roadmap; there is no agency link for the admin.
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Most active agencies' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'New listings' })).toBeVisible();
+  await expect(page.getByText('Lead booster')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'My agency dashboard' })).toHaveCount(0);
 });

@@ -265,3 +265,15 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - `GET /v1/platform/listings`: every agency's listings in one table.
 - Web: the admin overview has "Add listing" and "Open PropForce Direct". The Agencies tab has "Open agency (view & edit)", and there is a new All listings tab. Inside an agency, a banner shows that the admin is viewing it as platform admin and links back.
 - Tests: 3 API tests, extended Playwright admin flow.
+
+## PR · Rich platform admin dashboard
+
+- Layout: a sidebar like the agency app's (Overview, Agencies, All listings, Users, Settings, Activity). The "My agency dashboard" link is gone.
+- Overview:
+  - Quick actions: Add listing, Open PropForce Direct, Manage agencies, Find a user, Review approvals.
+  - Six headline numbers, including open leads and new portal enquiries.
+  - Daily charts of new agencies, users, listings, leads and portal enquiries over 7, 30 or 90 UAE days, each with a hover tooltip and a screen-reader table.
+  - Most active agencies, a recent activity feed, and the approval queue.
+- Roadmap in the menu: every feature from the four phases. Each is marked Live (portal), Needs setup (WhatsApp, AI assistant) or Soon, and the Soon items are disabled and show no data.
+- API: `GET /v1/platform/dashboard?days=`. Migration `20261121060000_platform_stats` adds read-only `platform_admin_read` policies on `lead` and `portal_enquiry` (same opt-in plus flag gate as the other platform reads).
+- Tests: 1 API test, extended Playwright admin flow.

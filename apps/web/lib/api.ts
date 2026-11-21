@@ -258,3 +258,23 @@ export interface PlatformListing {
   agency: { id: string; name: string; isPlatformOwned: boolean };
   assigned: { user: { fullName: string } } | null;
 }
+
+export interface PlatformDashboard {
+  dates: string[];
+  series: {
+    agencies: number[];
+    users: number[];
+    listings: number[];
+    leads: number[];
+    enquiries: number[];
+  };
+  totals: { leads: number; openLeads: number; enquiries: number; newEnquiries: number };
+  topAgencies: {
+    id: string;
+    name: string;
+    isPlatformOwned: boolean;
+    listings: number;
+    leads: number;
+    members: number;
+  }[];
+}
