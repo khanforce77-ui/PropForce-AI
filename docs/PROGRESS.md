@@ -293,3 +293,12 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Tests: 4 media unit tests, 3 DB isolation tests, 5 API tests (watermark present, EXIF/GPS gone, original not public, hidden listings, cross-agency, bad files, duplicates, order, logo re-marking), and an extended Playwright listing flow.
 
 **Pending**: photos are stored in Postgres for staging; move to S3 (private bucket plus CDN) before launch. Virus scanning isn't needed for re-encoded images, but the HEIC decode path depends on the libheif build in sharp's prebuilt binaries. The portal site still needs to render `photos` (portal thread).
+
+## PR · Permit documents, unpublish, delete, and hiding listings when the permit expires
+
+- Permits: the number is now optional. An agency can upload the permit itself instead: a PDF, kept as is, or a photo or scan, re-encoded as JPEG with metadata removed. Each permit has an expiry date. Migration `20261121080000_permit_documents` adds `property_permit_document`, which is tenant-only with no public policy, so the portal can never read it. A listing can be published once it has an unexpired permit with either its number or its document.
+- Renew: `PATCH /v1/properties/:id/permits/:permitId` sets a new expiry date and number, and a new document can be uploaded with it. The document is uploaded with `PUT …/permits/:permitId/document?fileName=` (raw body) and downloaded with `GET` (as an attachment, sandboxed).
+- When the permit expires, the listing leaves the portal automatically. The existing portal RLS policy only shows listings with a permit valid today, and this PR adds a test for it. The listing page explains why a published listing isn't showing ("permit has expired, renew below").
+- Unpublish: live or under-offer listings can go back to draft, which takes them off the portal; they can be published again.
+- Delete: managers can delete any listing, live ones included, behind a confirm step. It is a soft delete and the listing leaves the portal at once. Agents can delete only their own drafts.
+- Tests: 1 media test, 1 DB test (document private from the portal and from other agencies), 3 new or updated API tests, and the Playwright listing flow (permit by document only, unpublish, republish).

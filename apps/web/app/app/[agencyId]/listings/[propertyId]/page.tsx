@@ -1,15 +1,15 @@
 'use client';
 
-import { BadgeCheck, Trash2 } from 'lucide-react';
+import { BadgeCheck, EyeOff, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingPhotos } from '@/components/listings/listing-photos';
+import { PermitsCard, permitCounts } from '@/components/listings/permits-card';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
-import { Field, Input } from '@/components/ui/input';
 import { ApiError, type PropertyDetail, type PropertyStatus } from '@/lib/api';
 import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
@@ -38,6 +38,7 @@ function ListingDetail() {
   const [error, setError] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(created ? 'Draft saved.' : null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const path = `/properties/${propertyId}`;
   const load = useCallback(async () => {
@@ -79,24 +80,21 @@ function ListingDetail() {
     membership &&
     (['owner', 'admin', 'manager'].includes(membership.role) ||
       p.assignedMembershipId === membership.id);
+  const isManager = ['owner', 'admin', 'manager'].includes(membership?.role ?? '');
+  // Managers can delete any listing; agents only their own drafts.
+  const canDelete = canEdit && (isManager || p.status === 'draft');
 
-  function onAddPermit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const f = new FormData(form);
-    void act(
-      () =>
-        request(`${path}/permits`, {
-          tenantId: agencyId,
-          body: {
-            authority: f.get('authority'),
-            permitNumber: f.get('permitNumber'),
-            validUntil: f.get('validUntil'),
-          },
-        }),
-      'Permit added.',
-    ).then(() => form.reset());
-  }
+  // Why a published listing is not on the portal, if it is not.
+  const hiddenBecause =
+    p.status !== 'active'
+      ? null
+      : !p.permits.some(permitCounts)
+        ? p.permits.length > 0
+          ? 'its advertising permit has expired. Renew the permit below to bring it back.'
+          : 'it has no valid advertising permit. Add one below.'
+        : p.listingExpiresAt && new Date(p.listingExpiresAt) < new Date()
+          ? 'nobody has confirmed it is still available. Press "Still available".'
+          : null;
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
@@ -123,6 +121,7 @@ function ListingDetail() {
       </div>
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}
+      {hiddenBecause ? <Alert>Not showing on the portal: {hiddenBecause}</Alert> : null}
       {error ? (
         <Alert>
           {error}
@@ -142,15 +141,30 @@ function ListingDetail() {
             <Button
               key={s}
               variant={s === 'active' ? 'default' : 'outline'}
+              title={
+                s === 'draft' && ['active', 'under_offer'].includes(p.status)
+                  ? 'Take the listing off the portal; you can publish it again later'
+                  : undefined
+              }
               size="sm"
               onClick={() =>
                 void act(
                   () => request(`${path}/status`, { tenantId: agencyId, body: { status: s } }),
-                  `Listing is now ${STATUS_LABEL[s].toLowerCase()}.`,
+                  s === 'draft' && ['active', 'under_offer'].includes(p.status)
+                    ? 'Unpublished. The listing is no longer on the portal.'
+                    : s === 'active'
+                      ? 'Listing is now live.'
+                      : `Listing is now ${STATUS_LABEL[s].toLowerCase()}.`,
                 )
               }
             >
-              {ACTION_LABEL[s]}
+              {s === 'draft' && ['active', 'under_offer'].includes(p.status) ? (
+                <>
+                  <EyeOff className="h-4 w-4" aria-hidden /> Unpublish
+                </>
+              ) : (
+                ACTION_LABEL[s]
+              )}
             </Button>
           ))}
           <Button
@@ -165,91 +179,50 @@ function ListingDetail() {
           >
             <BadgeCheck className="h-4 w-4" aria-hidden /> Still available
           </Button>
-          {p.status === 'draft' ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                void act(async () => {
-                  await request(path, { tenantId: agencyId, method: 'DELETE' });
-                  router.replace(`/app/${agencyId}/listings`);
-                }, 'Deleted.')
-              }
-            >
-              <Trash2 className="h-4 w-4" aria-hidden /> Delete draft
-            </Button>
+          {canDelete ? (
+            confirmDelete ? (
+              <span className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() =>
+                    void act(async () => {
+                      await request(path, { tenantId: agencyId, method: 'DELETE' });
+                      router.replace(`/app/${agencyId}/listings`);
+                    }, 'Deleted.')
+                  }
+                >
+                  Yes, delete this listing
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden /> Delete listing
+              </Button>
+            )
           ) : null}
         </div>
       ) : null}
 
       <ListingPhotos agencyId={agencyId} propertyId={p.id} canEdit={Boolean(canEdit)} />
 
-      <Card>
-        <h2 className="font-medium">Advertising permits</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Add the permit issued by the regulator (for example a DLD Trakheesi permit in Dubai). We
-          store what you enter; we do not check it with the regulator.
-        </p>
-        {p.permits.length > 0 ? (
-          <ul className="mt-3 divide-y divide-border text-sm">
-            {p.permits.map((permit) => {
-              const expired = new Date(permit.validUntil) < new Date(new Date().toDateString());
-              return (
-                <li key={permit.id} className="flex items-center justify-between py-2">
-                  <span>
-                    {permit.authority} · {permit.permitNumber} ·{' '}
-                    <span className={expired ? 'text-red-600' : 'text-muted-foreground'}>
-                      {expired ? 'expired' : 'valid until'} {date(permit.validUntil)}
-                    </span>
-                  </span>
-                  {canEdit ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        void act(
-                          () =>
-                            request(`${path}/permits/${permit.id}`, {
-                              tenantId: agencyId,
-                              method: 'DELETE',
-                            }),
-                          'Permit removed.',
-                        )
-                      }
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        {canEdit ? (
-          <form
-            onSubmit={onAddPermit}
-            className="mt-4 grid gap-3 sm:grid-cols-[8rem_1fr_10rem_auto] sm:items-end"
-          >
-            <Field id="authority" label="Authority">
-              <Input
-                id="authority"
-                name="authority"
-                defaultValue={p.emirate === 'Abu Dhabi' ? 'ADREC' : 'DLD'}
-                required
-              />
-            </Field>
-            <Field id="permitNumber" label="Permit number">
-              <Input id="permitNumber" name="permitNumber" required />
-            </Field>
-            <Field id="validUntil" label="Valid until">
-              <Input id="validUntil" name="validUntil" type="date" required />
-            </Field>
-            <Button type="submit" variant="outline">
-              Add permit
-            </Button>
-          </form>
-        ) : null}
-      </Card>
+      <PermitsCard
+        agencyId={agencyId}
+        property={p}
+        canEdit={Boolean(canEdit)}
+        onChanged={async (message) => {
+          setNotice(message);
+          await load();
+        }}
+      />
 
       {canEdit ? (
         <Card>

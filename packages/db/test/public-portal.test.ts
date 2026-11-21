@@ -344,3 +344,40 @@ describe('listing photos and agency logos', () => {
     await expect(add('Z')).rejects.toThrow();
   });
 });
+
+describe('permit documents', () => {
+  it('are private to the agency and never visible to the portal', async () => {
+    const pa = await listing(a, 'A-1');
+    const permit = await owner.propertyPermit.findFirstOrThrow({ where: { propertyId: pa.id } });
+    const doc = {
+      permitId: permit.id,
+      tenantId: a.agencyId,
+      contentType: 'application/pdf',
+      fileName: 'permit.pdf',
+      bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      sha256: 'e'.repeat(64),
+      uploadedBy: a.ownerUserId,
+    };
+    await expect(
+      withTenant(app, { tenantId: b.agencyId }, (tx) =>
+        tx.propertyPermitDocument.create({ data: { ...doc, tenantId: b.agencyId } }),
+      ),
+    ).rejects.toThrow();
+    await withTenant(app, { tenantId: a.agencyId }, (tx) =>
+      tx.propertyPermitDocument.create({ data: doc }),
+    );
+    expect(await withPublicPortal(app, (tx) => tx.propertyPermit.count())).toBe(1);
+    expect(await withPublicPortal(app, (tx) => tx.propertyPermitDocument.count())).toBe(0);
+    expect(
+      await withTenant(app, { tenantId: b.agencyId }, (tx) => tx.propertyPermitDocument.count()),
+    ).toBe(0);
+    await expect(
+      withTenant(app, { tenantId: a.agencyId }, (tx) =>
+        tx.propertyPermitDocument.update({
+          where: { permitId: permit.id },
+          data: { contentType: 'text/html' },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+});

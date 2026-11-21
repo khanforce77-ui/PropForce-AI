@@ -8,9 +8,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { AppError } from '../common/app-error';
 import { AuthGuard } from '../auth/auth.guard';
 import { parseBody } from '../common/zod';
 import {
@@ -21,7 +25,9 @@ import {
 } from '../tenancy/tenant.guard';
 import {
   listPropertiesSchema,
+  permitDocumentQuery,
   permitSchema,
+  permitUpdateSchema,
   projectSchema,
   propertyCreateSchema,
   propertyUpdateSchema,
@@ -106,6 +112,56 @@ export class InventoryController {
     @Body() body: unknown,
   ) {
     return this.inventory.addPermit(ctx, id, parseBody(permitSchema, body));
+  }
+
+  @Patch('properties/:id/permits/:permitId')
+  @RequirePermission('property:write')
+  updatePermit(
+    @CurrentTenant() ctx: TenantRequestContext,
+    @Param('id', uuid()) id: string,
+    @Param('permitId', uuid()) permitId: string,
+    @Body() body: unknown,
+  ) {
+    return this.inventory.updatePermit(ctx, id, permitId, parseBody(permitUpdateSchema, body));
+  }
+
+  /** The permit document as the raw file body (PDF or image); ?fileName= gives its name. */
+  @Put('properties/:id/permits/:permitId/document')
+  @RequirePermission('property:write')
+  setPermitDocument(
+    @CurrentTenant() ctx: TenantRequestContext,
+    @Param('id', uuid()) id: string,
+    @Param('permitId', uuid()) permitId: string,
+    @Query() query: unknown,
+    @Body() body: unknown,
+  ) {
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      throw new AppError(
+        415,
+        'UNSUPPORTED_IMAGE',
+        'Send the file itself as the request body with a PDF or image Content-Type.',
+      );
+    }
+    const { fileName } = parseBody(permitDocumentQuery, query);
+    return this.inventory.setPermitDocument(ctx, id, permitId, fileName, body);
+  }
+
+  @Get('properties/:id/permits/:permitId/document')
+  @RequirePermission('property:read')
+  async permitDocument(
+    @CurrentTenant() ctx: TenantRequestContext,
+    @Param('id', uuid()) id: string,
+    @Param('permitId', uuid()) permitId: string,
+    @Res() res: Response,
+  ) {
+    const doc = await this.inventory.permitDocument(ctx, id, permitId);
+    res.set({
+      'Content-Type': doc.contentType,
+      'Content-Disposition': `attachment; filename="${doc.fileName.replace(/[^\w.\- ]/g, '_')}"`,
+      'Cache-Control': 'private, no-store',
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+    });
+    res.send(Buffer.from(doc.bytes));
   }
 
   @Delete('properties/:id/permits/:permitId')

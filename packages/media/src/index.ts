@@ -214,3 +214,44 @@ export function defaultWatermark(): Promise<Buffer> {
   cachedDefault ??= sharp(Buffer.from(PROPFORCE_MARK_SVG)).png().toBuffer().then(prepareWatermark);
   return cachedDefault;
 }
+
+/** Largest permit or other document we keep. */
+export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Checks an uploaded document (a regulator's permit, for example) and makes it safe to store.
+ * PDFs are kept as they are; photos and scans are re-encoded as JPEG, upright, metadata removed.
+ */
+export async function normaliseDocument(
+  buf: Buffer,
+): Promise<{ bytes: Buffer; contentType: 'application/pdf' | 'image/jpeg'; sha256: string }> {
+  if (buf.length > MAX_UPLOAD_BYTES) {
+    throw new MediaError('IMAGE_TOO_LARGE', 'Files must be 15 MB or smaller.');
+  }
+  let bytes: Buffer;
+  let contentType: 'application/pdf' | 'image/jpeg';
+  if (buf.subarray(0, 5).toString('latin1') === '%PDF-') {
+    if (buf.length > MAX_DOCUMENT_BYTES) {
+      throw new MediaError('IMAGE_TOO_LARGE', 'PDFs must be 5 MB or smaller.');
+    }
+    bytes = buf;
+    contentType = 'application/pdf';
+  } else {
+    if (!sniffImage(buf)) {
+      throw new MediaError(
+        'UNSUPPORTED_IMAGE',
+        'Upload a PDF, or a photo or scan (JPEG, PNG, WebP, HEIC).',
+      );
+    }
+    try {
+      bytes = await open(buf)
+        .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer();
+    } catch {
+      throw new MediaError('IMAGE_UNREADABLE', 'This file could not be read.');
+    }
+    contentType = 'image/jpeg';
+  }
+  return { bytes, contentType, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
