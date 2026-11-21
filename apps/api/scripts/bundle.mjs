@@ -22,6 +22,8 @@ await build({
   external: [
     // Native addon: loaded from node_modules at runtime.
     '@node-rs/argon2',
+    // Native image library (libvips) used by @propforce/media.
+    'sharp',
     // Optional Nest integrations that Nest only loads when installed. They are not used here.
     '@nestjs/microservices',
     '@nestjs/microservices/*',

@@ -37,7 +37,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  // A Blob (an image upload) is sent as raw bytes with its own type; anything else as JSON.
+  const raw = typeof Blob !== 'undefined' && options.body instanceof Blob ? options.body : null;
+  if (raw) headers['Content-Type'] = raw.type || 'application/octet-stream';
+  else if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.accessToken) headers.Authorization = `Bearer ${options.accessToken}`;
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId;
   if (options.csrf) headers['X-PropForce-CSRF'] = '1';
@@ -46,9 +49,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
     headers,
     credentials: 'include', // refresh cookie
-    body: options.body === undefined ? null : JSON.stringify(options.body),
+    body: raw ?? (options.body === undefined ? null : JSON.stringify(options.body)),
   });
   if (res.status === 204) return undefined as T;
+  if (res.status === 413) {
+    throw new ApiError(413, { detail: 'This file is too large to upload. Try a smaller photo.' });
+  }
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data as Partial<ProblemDetails>);
   return data as T;

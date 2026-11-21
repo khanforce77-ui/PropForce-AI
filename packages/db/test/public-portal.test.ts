@@ -275,3 +275,72 @@ describe('agent photos', () => {
     expect(await owner.memberPhoto.count()).toBe(0);
   });
 });
+
+describe('listing photos and agency logos', () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const photo = (t: SeededTenant, propertyId: string, sha = 'b') => ({
+    tenantId: t.agencyId,
+    propertyId,
+    position: 0,
+    sha256: sha.repeat(64),
+    width: 1600,
+    height: 1200,
+    original: bytes,
+    display: bytes,
+    thumb: bytes,
+    createdBy: t.ownerUserId,
+  });
+
+  it('are private to the agency, and public only while the listing is', async () => {
+    const pa = await listing(a, 'A-1');
+    const pb = await listing(b, 'B-1');
+    const draft = await listing(a, 'A-DRAFT', { status: 'draft' });
+    await owner.propertyPhoto.create({ data: photo(a, pa.id) });
+    await owner.propertyPhoto.create({ data: photo(a, draft.id) });
+    await owner.propertyPhoto.create({ data: photo(b, pb.id) });
+    await owner.agencyLogo.create({
+      data: { tenantId: b.agencyId, bytes, sha256: 'c'.repeat(64), width: 100, height: 100 },
+    });
+    expect(await withTenant(app, { tenantId: a.agencyId }, (tx) => tx.propertyPhoto.count())).toBe(
+      2,
+    );
+    expect(await withTenant(app, { tenantId: a.agencyId }, (tx) => tx.agencyLogo.count())).toBe(0);
+    expect(await withPublicPortal(app, (tx) => tx.propertyPhoto.count())).toBe(2);
+    expect(await withPublicPortal(app, (tx) => tx.agencyLogo.count())).toBe(0);
+
+    await owner.property.update({ where: { id: pa.id }, data: { status: 'archived' } });
+    await owner.agency.update({ where: { id: b.agencyId }, data: { status: 'suspended' } });
+    expect(await withPublicPortal(app, (tx) => tx.propertyPhoto.count())).toBe(0);
+  });
+
+  it('cannot be attached to another agency’s listing or written by the portal', async () => {
+    const pb = await listing(b, 'B-1');
+    await expect(
+      withTenant(app, { tenantId: a.agencyId }, (tx) =>
+        tx.propertyPhoto.create({ data: { ...photo(a, pb.id) } }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withPublicPortal(app, (tx) => tx.propertyPhoto.createMany({ data: [photo(b, pb.id)] })),
+    ).rejects.toThrow();
+    await expect(
+      withTenant(app, { tenantId: a.agencyId }, (tx) =>
+        tx.agencyLogo.create({
+          data: { tenantId: b.agencyId, bytes, sha256: 'c'.repeat(64), width: 1, height: 1 },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await owner.propertyPhoto.count()).toBe(0);
+  });
+
+  it('refuse the same photo twice on a listing and malformed hashes', async () => {
+    const pa = await listing(a, 'A-1');
+    const add = (sha: string) =>
+      withTenant(app, { tenantId: a.agencyId }, (tx) =>
+        tx.propertyPhoto.create({ data: photo(a, pa.id, sha) }),
+      );
+    await add('d');
+    await expect(add('d')).rejects.toThrow();
+    await expect(add('Z')).rejects.toThrow();
+  });
+});

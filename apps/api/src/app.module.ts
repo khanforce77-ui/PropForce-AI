@@ -14,6 +14,7 @@ import { CrmModule } from './crm/crm.module';
 import { PlatformModule } from './platform/platform.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { PortalModule } from './portal/portal.module';
+import { MediaModule } from './media/media.module';
 
 @Module({})
 export class AppModule {
@@ -55,6 +56,7 @@ export class AppModule {
         PlatformModule,
         WhatsAppModule,
         PortalModule,
+        MediaModule,
       ],
     };
   }

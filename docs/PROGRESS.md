@@ -277,3 +277,19 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Roadmap in the menu: every feature from the four phases. Each is marked Live (portal), Needs setup (WhatsApp, AI assistant) or Soon, and the Soon items are disabled and show no data.
 - API: `GET /v1/platform/dashboard?days=`. Migration `20261121060000_platform_stats` adds read-only `platform_admin_read` policies on `lead` and `portal_enquiry` (same opt-in plus flag gate as the other platform reads).
 - Tests: 1 API test, extended Playwright admin flow.
+
+## PR · Listing photos with the agency logo as a watermark
+
+- `packages/media` (sharp/libvips): detects the real file type from its bytes (JPEG, PNG, WebP, HEIC; SVG and anything else refused), limits size (15 MB) and pixels (50 MP), turns photos upright, strips all metadata including GPS, and refuses photos under 400 px.
+- Each photo is stored three ways (`20261121070000_listing_media`, table `property_photo`): a clean JPEG original (at most 2560 px, private to the agency), a 1600 px WebP display copy and a 480 px WebP thumbnail. Both copies carry the watermark: the agency's logo as a faint white mark with a soft shadow, centred, about 40% of the shorter side. Agencies without a logo, including PropForce Direct, get the PropForce mark.
+- Agency logo (`agency_logo`): owners and admins upload it on the Property portal page. Saving or removing it re-renders every photo's watermark and bumps its `version`, so cached URLs change. This runs inline, one photo per transaction; it moves to a background job when workers are deployed.
+- API:
+  - `GET|POST /v1/properties/:id/photos`, `PUT …/photos/order`, `DELETE …/photos/:photoId`, `GET …/photos/:photoId/display|thumb|original`. Uploads are the raw image bytes with an image Content-Type. Agents can change photos only on listings assigned to them. At most 30 photos per listing, and the same photo can't be added twice.
+  - `GET|PUT|DELETE /v1/agency/logo`.
+  - Public: `GET /v1/public/listing-photos/:photoId/display|thumb?v=<version>`. It serves only watermarked copies of listings the portal can show, cached for a year. The original is never served publicly.
+  - Portal payloads: cards carry `photos` (the cover only) and `photoCount`; the detail view carries all `photos` in order (`{id, version, width, height}`).
+- RLS: tenant isolation on both tables. Public read of `property_photo` only where the listing itself is public (EXISTS on `property` under its portal policy). Platform admin read-only.
+- Web: a Photos card on the listing page (add several at once, cover badge, move, remove). The browser shrinks photos over 4 MB before upload, because Vercel caps request bodies at 4.5 MB. The logo card is on the Property portal page. Listing photos is marked Live in the admin roadmap.
+- Tests: 4 media unit tests, 3 DB isolation tests, 5 API tests (watermark present, EXIF/GPS gone, original not public, hidden listings, cross-agency, bad files, duplicates, order, logo re-marking), and an extended Playwright listing flow.
+
+**Pending**: photos are stored in Postgres for staging; move to S3 (private bucket plus CDN) before launch. Virus scanning isn't needed for re-encoded images, but the HEIC decode path depends on the libheif build in sharp's prebuilt binaries. The portal site still needs to render `photos` (portal thread).

@@ -259,6 +259,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         note: "Public site with every agency's live listings",
         href: process.env.NEXT_PUBLIC_PORTAL_URL || undefined,
       },
+      {
+        label: 'Listing photos',
+        icon: Images,
+        status: 'live',
+        note: "Watermarked with the agency's logo; originals stay private",
+      },
     ],
   },
   {
@@ -281,7 +287,6 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
   {
     title: 'Phase 1 · coming soon',
     items: [
-      { label: 'Listing photos', icon: Images, status: 'soon', note: 'In progress' },
       { label: 'Lead matching', icon: Shuffle, status: 'soon', note: 'Next up' },
       { label: 'Bulk import', icon: FileUp, status: 'soon', note: 'Planned' },
     ],

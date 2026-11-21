@@ -1,8 +1,10 @@
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
 import { linkFromEmail } from './mailpit';
 
 const run = Date.now().toString(36);
+const fixture = (name: string) => join(__dirname, 'fixtures', name);
 const owner = {
   name: 'Layla Hassan',
   email: `listings-${run}@e2e.test`,
@@ -62,6 +64,11 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('Listing is now live.')).toBeVisible();
 
+  // Add a photo: it becomes the cover.
+  await page.getByLabel('Add photos').setInputFiles(fixture('living-room.jpg'));
+  await expect(page.getByRole('img', { name: 'Photo 1 (cover)' })).toBeVisible();
+  await expect(page.getByText(/^1 of 30\./)).toBeVisible();
+
   // It shows up in the list and on the dashboard.
   await page.getByRole('link', { name: '← Listings' }).click();
   await expect(page.getByRole('link', { name: 'Marina Gate 1, Dubai Marina' })).toBeVisible();
@@ -79,12 +86,38 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   await expect(page.getByText('Contact details saved.')).toBeVisible();
   await expect(page.getByLabel('WhatsApp')).toHaveValue('+971501234567');
 
+  // The agency logo becomes the watermark; the existing photo is re-marked.
+  await page.getByLabel('Upload logo').setInputFiles(fixture('agency-logo.png'));
+  await expect(page.getByText('Logo saved. 1 photo re-marked.')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Agency logo' })).toBeVisible();
+
   const res = await page.request.get('http://localhost:4000/v1/public/listings', {
     params: { q: 'Marina Gate 1' },
   });
   const body = (await res.json()) as {
-    data: { building: string; agent: { name: string; canWhatsapp: boolean } }[];
+    data: {
+      building: string;
+      agent: { name: string; canWhatsapp: boolean };
+      photoCount: number;
+      photos: { id: string; version: number }[];
+    }[];
   };
   const mine = body.data.find((l) => l.agent.name === owner.name);
-  expect(mine).toMatchObject({ building: 'Marina Gate 1', agent: { canWhatsapp: true } });
+  expect(mine).toMatchObject({
+    building: 'Marina Gate 1',
+    agent: { canWhatsapp: true },
+    photoCount: 1,
+  });
+  expect(mine!.photos[0]!.version).toBe(2);
+  const img = await page.request.get(
+    `http://localhost:4000/v1/public/listing-photos/${mine!.photos[0]!.id}/display`,
+  );
+  expect(img.headers()['content-type']).toBe('image/webp');
+  expect(
+    (
+      await page.request.get(
+        `http://localhost:4000/v1/public/listing-photos/${mine!.photos[0]!.id}/original`,
+      )
+    ).status(),
+  ).toBe(404);
 });

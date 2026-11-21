@@ -40,6 +40,8 @@ const agentSelect = {
 } as const;
 const agencySelect = { name: true, slug: true, orn: true, emirate: true } as const;
 
+const photoSelect = { id: true, version: true, width: true, height: true } as const;
+
 const cardSelect = {
   id: true,
   reference: true,
@@ -66,6 +68,9 @@ const cardSelect = {
     orderBy: { validUntil: 'desc' },
     take: 1,
   },
+  // Watermarked photos only; the URL is /v1/public/listing-photos/:id/:variant?v=:version.
+  photos: { select: photoSelect, orderBy: { position: 'asc' }, take: 1 },
+  _count: { select: { photos: true } },
 } as const satisfies Prisma.PropertySelect;
 
 const detailSelect = {
@@ -80,6 +85,7 @@ const detailSelect = {
   description: true,
   updatedAt: true,
   project: { select: { name: true } },
+  photos: { select: photoSelect, orderBy: { position: 'asc' } },
 } as const satisfies Prisma.PropertySelect;
 
 type CardRow = Prisma.PropertyGetPayload<{ select: typeof cardSelect }>;
@@ -133,6 +139,9 @@ function toCard(row: CardRow) {
       : null,
     agent: toAgent(row),
     agency: row.agency,
+    /** Cards carry the cover photo only; the detail view carries all of them, in order. */
+    photos: row.photos,
+    photoCount: row._count.photos,
   };
 }
 
