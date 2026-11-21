@@ -47,10 +47,19 @@ function pickDbEnv(): Record<string, string> {
 }
 
 export async function resetDatabase(owner: PrismaClient): Promise<void> {
+  // TRUNCATE ... CASCADE on "agency" also empties "fee_rule", which holds the
+  // migration-seeded shared templates (tenant_id IS NULL). Keep and restore them.
+  const templates = await owner.$queryRawUnsafe<{ rows: unknown }[]>(
+    'SELECT coalesce(json_agg(f), \'[]\'::json) AS rows FROM "fee_rule" f WHERE tenant_id IS NULL',
+  );
   await owner.$executeRawUnsafe(
     'TRUNCATE "audit_log", "property_permit", "property", "project", "invitation", "membership", "team", "agency_settings", "agency", "user_token", "mfa_factor", "session", "user" CASCADE',
   );
   await owner.$executeRawUnsafe('TRUNCATE "platform_audit_log"');
+  await owner.$executeRawUnsafe(
+    'INSERT INTO "fee_rule" SELECT * FROM json_populate_recordset(NULL::"fee_rule", $1::json)',
+    JSON.stringify(templates[0]?.rows ?? []),
+  );
   await owner.$executeRawUnsafe(
     `UPDATE "feature_flag" SET enabled = (key = 'platform.allow_signups')
      WHERE key IN ('platform.allow_signups', 'platform.require_agency_approval', 'voice.outbound_calls')`,
