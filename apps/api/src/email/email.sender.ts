@@ -3,6 +3,8 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html?: string;
+  /** Where replies go, e.g. the visitor who sent a portal enquiry. */
+  replyTo?: string;
 }
 
 /** Transport-agnostic email port. Real providers are adapters behind it. */

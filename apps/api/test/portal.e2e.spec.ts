@@ -274,6 +274,48 @@ describe('public portal: contacting the agent', () => {
 });
 
 describe('public portal: enquiries', () => {
+  it('emails the enquiry to the agent without exposing their email or numbers publicly', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p = await publishedListing(a);
+    await http()
+      .patch(`/v1/portal/agents/${a.membershipId}`)
+      .set(a.h)
+      .send({ whatsappE164: '055 111 2222', publicPhoneE164: '+971 4 123 4567' })
+      .expect(200);
+
+    // Nothing public carries the agent's phone, WhatsApp number or email address.
+    const detail = await http().get(`/v1/public/listings/${p.id}`).expect(200);
+    const search = await http().get('/v1/public/listings').expect(200);
+    for (const body of [JSON.stringify(detail.body), JSON.stringify(search.body)]) {
+      expect(body).not.toContain('a@example.test');
+      expect(body).not.toMatch(/971(55111|41234)|111 ?2222|123 ?4567/);
+    }
+    expect(detail.body.agent).toMatchObject({ canCall: true, canWhatsapp: true });
+
+    const before = t.emails.length;
+    await http()
+      .post(`/v1/public/listings/${p.id}/enquiries`)
+      .send(enquiryBody({ fullName: 'Omar\r\nBcc: x@evil.test' }))
+      .expect(202);
+    const sent = t.emails.slice(before);
+    expect(sent).toHaveLength(1);
+    const enquiry = await t.owner.portalEnquiry.findFirstOrThrow();
+    expect(sent[0]).toMatchObject({ to: 'a@example.test', replyTo: 'omar@example.test' });
+    expect(sent[0]!.subject).toMatch(/^New enquiry: Omar Bcc: x@evil\.test about /);
+    expect(sent[0]!.subject).not.toMatch(/[\r\n]/);
+    expect(sent[0]!.text).toContain('+971507654321');
+    expect(sent[0]!.text).toContain(`/app/${a.tenantId}/leads/${enquiry.leadId}`);
+
+    // Without an email from the visitor there is no Reply-To.
+    await t.owner.$executeRawUnsafe('TRUNCATE "public_rate_hit"');
+    await http()
+      .post(`/v1/public/listings/${p.id}/enquiries`)
+      .send(enquiryBody({ phone: '050 111 0000', email: undefined }))
+      .expect(202);
+    expect(t.emails.at(-1)).toMatchObject({ to: 'a@example.test' });
+    expect(t.emails.at(-1)!.replyTo).toBeUndefined();
+  });
+
   it('stores an enquiry with consent for the listing agent only', async () => {
     const a = await createAgency('a@example.test', 'Alpha Homes');
     const b = await createAgency('b@example.test', 'Bravo Realty');
