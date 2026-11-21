@@ -10,7 +10,9 @@ import {
   CONSENT_MARKETING_TEXT,
   type EnquiryInput,
   type PublicSearchQuery,
+  type ReportInput,
 } from './portal.schemas';
+import { verifyCaptcha } from './captcha';
 import { convertEnquiryToLead } from './enquiry-to-lead';
 import { notifyAgentOfEnquiry } from './enquiry-email';
 import { whatsappLink } from './phone';
@@ -64,7 +66,7 @@ const cardSelect = {
   agency: { select: agencySelect },
   assigned: { select: agentSelect },
   permits: {
-    select: { authority: true, permitNumber: true, validUntil: true },
+    select: { authority: true, permitNumber: true, validUntil: true, verificationUrl: true },
     orderBy: { validUntil: 'desc' },
     take: 1,
   },
@@ -85,6 +87,8 @@ const detailSelect = {
   description: true,
   updatedAt: true,
   project: { select: { name: true } },
+  latitude: true,
+  longitude: true,
   photos: { select: photoSelect, orderBy: { position: 'asc' } },
 } as const satisfies Prisma.PropertySelect;
 
@@ -94,7 +98,23 @@ type DetailRow = Prisma.PropertyGetPayload<{ select: typeof detailSelect }>;
 const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
-function toAgent(row: CardRow) {
+/**
+ * The map shows roughly where a listing is, never the exact spot: about 100 m for apartments and
+ * offices, about 1 km for villas, townhouses and land, where 100 m could point at one house.
+ */
+export function approximateLocation(
+  type: string,
+  lat: Prisma.Decimal | number | null,
+  lng: Prisma.Decimal | number | null,
+): { lat: number; lng: number; radiusM: number } | null {
+  if (lat == null || lng == null) return null;
+  const coarse = ['villa', 'townhouse', 'land'].includes(type);
+  const places = coarse ? 2 : 3;
+  const round = (v: number) => Number(v.toFixed(places));
+  return { lat: round(Number(lat)), lng: round(Number(lng)), radiusM: coarse ? 1000 : 150 };
+}
+
+function toAgent(row: Pick<CardRow, 'assigned'>) {
   const a = row.assigned;
   if (!a) return null;
   return {
@@ -135,6 +155,7 @@ function toCard(row: CardRow) {
           authority: permit.authority,
           number: permit.permitNumber,
           validUntil: day(permit.validUntil),
+          verificationUrl: permit.verificationUrl,
         }
       : null,
     agent: toAgent(row),
@@ -158,6 +179,7 @@ function toDetail(row: DetailRow) {
     serviceChargePerSqft: num(row.serviceChargePerSqft),
     description: row.description,
     updatedAt: row.updatedAt,
+    location: approximateLocation(row.propertyType, row.latitude, row.longitude),
   };
 }
 
@@ -191,6 +213,9 @@ export class PublicPortalService {
       ...(q.completion ? { completion: q.completion } : {}),
       ...(q.furnished ? { furnishing: q.furnished } : {}),
       ...(q.beds !== undefined ? { bedrooms: q.beds >= 7 ? { gte: 7 } : q.beds } : {}),
+      ...(q.baths !== undefined ? { bathrooms: { gte: q.baths } } : {}),
+      ...(q.amenity ? { amenities: { has: q.amenity } } : {}),
+      ...(q.agent ? { assignedMembershipId: q.agent } : {}),
       ...(q.minPrice !== undefined || q.maxPrice !== undefined
         ? {
             price: {
@@ -249,9 +274,85 @@ export class PublicPortalService {
     });
   }
 
+  /** Up to six other live listings like this one: same purpose and type, nearest area first. */
+  similar(id: string) {
+    return this.run(async (tx) => {
+      const base = await tx.property.findUnique({
+        where: { id },
+        select: { listingType: true, propertyType: true, community: true, emirate: true },
+      });
+      if (!base) throw notFound();
+      const like = {
+        id: { not: id },
+        listingType: base.listingType,
+        propertyType: base.propertyType,
+      } satisfies Prisma.PropertyWhereInput;
+      const take = 6;
+      const near = base.community
+        ? await tx.property.findMany({
+            where: { ...like, community: base.community, emirate: base.emirate },
+            select: cardSelect,
+            orderBy: [{ verifiedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+            take,
+          })
+        : [];
+      const rest =
+        near.length < take
+          ? await tx.property.findMany({
+              where: {
+                ...like,
+                emirate: base.emirate,
+                id: { notIn: [id, ...near.map((r) => r.id)] },
+              },
+              select: cardSelect,
+              orderBy: [{ verifiedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+              take: take - near.length,
+            })
+          : [];
+      return { data: [...near, ...rest].map(toCard) };
+    });
+  }
+
+  /** An agent's public profile: who they are, their agency, and how many live listings they have. */
+  agent(id: string) {
+    return this.run(async (tx) => {
+      const where = { assignedMembershipId: id } satisfies Prisma.PropertyWhereInput;
+      const [row, sale, rent, communities] = await Promise.all([
+        tx.property.findFirst({
+          where,
+          select: { assigned: { select: agentSelect }, agency: { select: agencySelect } },
+        }),
+        tx.property.count({ where: { ...where, listingType: 'sale' } }),
+        tx.property.count({ where: { ...where, listingType: 'rent' } }),
+        tx.property.groupBy({
+          by: ['community'],
+          where,
+          _count: { _all: true },
+          orderBy: { _count: { community: 'desc' } },
+          take: 5,
+        }),
+      ]);
+      const agent = row ? toAgent(row) : null;
+      // An agent is only public while they have at least one live listing.
+      if (!row || !agent) {
+        throw new AppError(404, 'NOT_FOUND', 'This agent has no live listings.');
+      }
+      return {
+        ...agent,
+        agency: row.agency,
+        listings: { sale, rent, total: sale + rent },
+        communities: communities.flatMap((c) => (c.community ? [c.community] : [])),
+      };
+    });
+  }
+
   /** Values for the search filters, with how many live listings each has. */
   facets() {
     return this.run(async (tx) => {
+      const amenities = await tx.$queryRaw<{ name: string; count: bigint }[]>`
+        SELECT a AS name, count(*) AS count
+        FROM property, unnest(amenities) AS a
+        GROUP BY a ORDER BY count(*) DESC, a ASC LIMIT 30`;
       const [communities, types] = await Promise.all([
         tx.property.groupBy({
           by: ['emirate', 'community'],
@@ -266,6 +367,7 @@ export class PublicPortalService {
           .filter((c) => c.community)
           .map((c) => ({ emirate: c.emirate, community: c.community, count: c._count._all })),
         types: types.map((t) => ({ type: t.propertyType, count: t._count._all })),
+        amenities: amenities.map((a) => ({ name: a.name, count: Number(a.count) })),
       };
     });
   }
@@ -369,6 +471,7 @@ export class PublicPortalService {
       this.log.warn({ msg: 'Portal enquiry dropped as likely spam', listingId: id });
       return accepted;
     }
+    await this.checkCaptcha(input.captchaToken, visitor);
     if ((input.message.match(/https?:\/\//gi) ?? []).length > 2) {
       throw new AppError(400, 'VALIDATION_FAILED', 'Please remove the links from your message.', [
         { path: 'message', message: 'Too many links' },
@@ -441,5 +544,60 @@ export class PublicPortalService {
       this.log.error({ msg: 'Portal enquiry email to agent failed', enquiryId, err });
     }
     return accepted;
+  }
+
+  /** Files a visitor's report about a listing under its agency, for the agency and PropForce to review. */
+  async report(id: string, input: ReportInput, visitor: Visitor) {
+    const accepted = { status: 'received' as const };
+    if (input.website) return accepted;
+    await this.checkCaptcha(input.captchaToken, visitor);
+    return this.run(async (tx) => {
+      const row = await tx.property.findUnique({
+        where: { id },
+        select: { id: true, tenantId: true },
+      });
+      if (!row) throw notFound();
+      const ipHash = visitor.ip ? keyedHash(this.hashKey, 'ip', visitor.ip) : null;
+      const limits: [string, number, number][] = [
+        [`report-dup:${ipHash ?? 'anon'}:${row.id}`, 1, DAY],
+        [`report-ip:${ipHash ?? 'anon'}`, 10, DAY],
+      ];
+      for (const [bucket, limit, windowMs] of limits) {
+        if (!(await hitRateLimit(tx, bucket, limit, windowMs))) {
+          throw new AppError(
+            429,
+            'RATE_LIMITED',
+            bucket.startsWith('report-dup')
+              ? 'Thanks, you already reported this listing. We are looking into it.'
+              : 'Too many reports. Please try again later.',
+          );
+        }
+      }
+      await tx.portalListingReport.createMany({
+        data: [
+          {
+            tenantId: row.tenantId,
+            propertyId: row.id,
+            reason: input.reason,
+            details: input.details ?? null,
+            email: input.email ?? null,
+            ipHash,
+            userAgent: visitor.userAgent?.slice(0, 300) ?? null,
+          },
+        ],
+      });
+      return accepted;
+    });
+  }
+
+  private async checkCaptcha(token: string | undefined, visitor: Visitor) {
+    const result = await verifyCaptcha(this.config.portal.turnstileSecret, token, visitor.ip);
+    if (result === 'failed') {
+      throw new AppError(
+        400,
+        'CAPTCHA_FAILED',
+        'Please confirm you are not a robot and try again.',
+      );
+    }
   }
 }

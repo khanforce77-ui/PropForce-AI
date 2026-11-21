@@ -131,7 +131,7 @@ importers:
         version: 2.0.0(@swc/core@1.16.22(@swc/helpers@0.5.23))(esbuild@0.25.12)(rolldown@1.2.19)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   apps/portal:
     dependencies:
@@ -147,6 +147,9 @@ importers:
       next:
         specifier: ^16.4.6
         version: 16.4.6(@playwright/test@1.63.0)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -169,6 +172,9 @@ importers:
       '@types/node':
         specifier: ^22.18.0
         version: 22.20.5
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       '@types/react':
         specifier: ^19.2.0
         version: 19.3.0
@@ -180,7 +186,7 @@ importers:
         version: 4.3.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   apps/web:
     dependencies:
@@ -247,7 +253,7 @@ importers:
         version: 4.3.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   apps/worker:
     dependencies:
@@ -296,7 +302,7 @@ importers:
         version: 2.0.0(@swc/core@1.16.22(@swc/helpers@0.5.23))(esbuild@0.25.12)(rolldown@1.2.19)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/ai:
     dependencies:
@@ -312,7 +318,7 @@ importers:
         version: 22.20.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/calendar:
     dependencies:
@@ -328,7 +334,7 @@ importers:
         version: 22.20.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/config: {}
 
@@ -346,7 +352,7 @@ importers:
         version: 22.20.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/db:
     dependencies:
@@ -374,7 +380,7 @@ importers:
         version: 7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/media:
     dependencies:
@@ -390,7 +396,7 @@ importers:
         version: 22.20.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
   packages/whatsapp:
     dependencies:
@@ -406,7 +412,7 @@ importers:
         version: 22.20.5
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+        version: 5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
 
 packages:
 
@@ -4740,7 +4746,7 @@ snapshots:
       d3-time-format: 4.1.0
       internmap: 2.0.3
 
-  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))':
+  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.1.1
@@ -6233,10 +6239,10 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
 
-  vitest@5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0)):
+  vitest@5.1.1(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
+      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@22.20.5)(esbuild@0.25.12)(jiti@2.7.0))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0

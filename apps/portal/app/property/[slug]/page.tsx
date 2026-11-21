@@ -10,15 +10,23 @@ import {
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AgentAvatar } from '@/components/agent-avatar';
+import { Breadcrumbs } from '@/components/breadcrumbs';
+import { ListingCard } from '@/components/listing-card';
+import { LocationMap } from '@/components/location-map';
+import { PermitQr } from '@/components/permit-qr';
+import { ReportListing } from '@/components/report-listing';
+import { areaCrumbs } from '@/components/search-page';
+import { ShareButtons } from '@/components/share-buttons';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { ContactActions } from '@/components/contact-actions';
 import { EnquiryForm } from '@/components/enquiry-form';
 import { PhotoPlaceholder } from '@/components/listing-card';
 import { PhotoGallery } from '@/components/photo-gallery';
 import { photoUrl } from '@/lib/photos';
-import { getListing, type ListingDetail } from '@/lib/api';
-import { siteUrl } from '@/lib/config';
+import { getListing, getSimilar, type ListingDetail } from '@/lib/api';
+import { siteUrl, SITE_NAME } from '@/lib/config';
 import {
+  agentPath,
   bedsLabel,
   formatArea,
   formatPrice,
@@ -26,9 +34,11 @@ import {
   idFromSlug,
   listingPath,
   listingTitle,
-  PURPOSE_PATH,
   TYPE_LABEL,
 } from '@/lib/format';
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' });
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -70,6 +80,7 @@ export default async function PropertyPage({ params }: Props) {
   if (`/property/${slug}` !== canonical) permanentRedirect(canonical);
 
   const title = listingTitle(l);
+  const similar = await getSimilar(l.id);
   const facts: [string, string | null][] = [
     ['Type', TYPE_LABEL[l.type] ?? 'Property'],
     ['Purpose', l.purpose === 'rent' ? 'For rent' : 'For sale'],
@@ -116,29 +127,15 @@ export default async function PropertyPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
-      <nav className="mb-4 text-sm text-muted-foreground" aria-label="Breadcrumb">
-        <Link href={`/${PURPOSE_PATH[l.purpose]}`} className="hover:text-primary">
-          {l.purpose === 'rent' ? 'Rent' : 'Buy'}
-        </Link>
-        {' / '}
-        <Link
-          href={`/${PURPOSE_PATH[l.purpose]}?emirate=${encodeURIComponent(l.emirate)}`}
-          className="hover:text-primary"
-        >
-          {l.emirate}
-        </Link>
-        {l.community ? (
-          <>
-            {' / '}
-            <Link
-              href={`/${PURPOSE_PATH[l.purpose]}?community=${encodeURIComponent(l.community)}`}
-              className="hover:text-primary"
-            >
-              {l.community}
-            </Link>
-          </>
-        ) : null}
-      </nav>
+      <Breadcrumbs
+        items={[
+          ...areaCrumbs(l.purpose, {
+            emirate: l.emirate,
+            ...(l.community ? { community: l.community } : {}),
+          }),
+          { name: title, href: canonical },
+        ]}
+      />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -169,17 +166,27 @@ export default async function PropertyPage({ params }: Props) {
                   <Ruler className="h-4 w-4" aria-hidden /> {formatArea(l.areaSqft)}
                 </li>
               ) : null}
+            </ul>
+            <ul className="mt-3 flex flex-wrap gap-2 text-xs">
+              {l.permit ? (
+                <li className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {l.permit.authority} permit
+                  {l.permit.validUntil ? ` valid until ${shortDate(l.permit.validUntil)}` : ''}
+                </li>
+              ) : null}
               {l.verifiedAt ? (
-                <li className="flex items-center gap-1.5 text-primary">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Checked by agent{' '}
-                  {new Date(l.verifiedAt).toLocaleDateString('en-AE', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                <li
+                  className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 font-medium"
+                  title="The agent confirmed this property is still available on this date. Listings that are not re-confirmed leave the site."
+                >
+                  <BadgeCheck className="h-3.5 w-3.5 text-primary" aria-hidden /> Availability
+                  confirmed by agent {shortDate(l.verifiedAt)}
                 </li>
               ) : null}
             </ul>
+            <div className="mt-4">
+              <ShareButtons url={`${siteUrl()}${canonical}`} title={title} />
+            </div>
           </div>
 
           {l.description ? (
@@ -230,6 +237,15 @@ export default async function PropertyPage({ params }: Props) {
             </section>
           ) : null}
 
+          {l.location ? (
+            <LocationMap
+              lat={l.location.lat}
+              lng={l.location.lng}
+              radiusM={l.location.radiusM}
+              label={location(l)}
+            />
+          ) : null}
+
           {l.permit ? (
             <section className="rounded-xl border border-border p-4" aria-labelledby="permit">
               <h2 id="permit" className="flex items-center gap-2 font-semibold">
@@ -240,7 +256,9 @@ export default async function PropertyPage({ params }: Props) {
                   <dt className="text-muted-foreground">
                     Advertising permit ({l.permit.authority})
                   </dt>
-                  <dd className="font-semibold">{l.permit.number}</dd>
+                  <dd className="font-semibold">
+                    {l.permit.number ?? `${l.permit.authority} permit on file with the agency`}
+                  </dd>
                 </div>
                 {l.permit.validUntil ? (
                   <div>
@@ -263,8 +281,21 @@ export default async function PropertyPage({ params }: Props) {
                   </div>
                 ) : null}
               </dl>
+              {l.permit.verificationUrl ? (
+                <div className="mt-4 flex items-center gap-4">
+                  <PermitQr
+                    url={l.permit.verificationUrl}
+                    label={`Check this ${l.permit.authority} permit on the regulator's website`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Scan or tap the QR code to check this permit on the {l.permit.authority}{' '}
+                    website.
+                  </p>
+                </div>
+              ) : null}
               <p className="mt-3 text-xs text-muted-foreground">
-                Permit details are provided by the listing agency.
+                Permit details are provided by the listing agency. Listings leave {SITE_NAME} when
+                their permit expires.
               </p>
             </section>
           ) : null}
@@ -276,7 +307,14 @@ export default async function PropertyPage({ params }: Props) {
             <div className="mt-2 flex items-center gap-3">
               {l.agent ? <AgentAvatar agent={l.agent} size={56} /> : null}
               <div className="min-w-0">
-                <p className="text-lg font-semibold">{l.agent?.name}</p>
+                {l.agent ? (
+                  <Link
+                    href={agentPath(l.agent)}
+                    className="text-lg font-semibold hover:text-primary"
+                  >
+                    {l.agent.name}
+                  </Link>
+                ) : null}
                 {l.agent?.brn ? (
                   <p className="text-xs text-muted-foreground">BRN {l.agent.brn}</p>
                 ) : null}
@@ -307,8 +345,22 @@ export default async function PropertyPage({ params }: Props) {
               defaultMessage={`Hi, I'm interested in "${title}" (Ref ${l.reference}). Please contact me.`}
             />
           </div>
+          <ReportListing listingId={l.id} />
         </aside>
       </div>
+
+      {similar.length > 0 ? (
+        <section className="mt-12" aria-labelledby="similar">
+          <h2 id="similar" className="text-xl font-semibold">
+            Similar properties
+          </h2>
+          <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {similar.map((s) => (
+              <ListingCard key={s.id} listing={s} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

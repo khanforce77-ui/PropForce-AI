@@ -20,12 +20,18 @@ export const publicSearchSchema = z.strictObject({
   maxPrice: queryMoney.optional(),
   /** Minimum bedrooms; 0 = studio. */
   beds: queryInt(0, 50).optional(),
+  /** Minimum bathrooms. */
+  baths: queryInt(1, 20).optional(),
+  /** Listings that have this amenity (exact name, any case). */
+  amenity: queryText(60).optional(),
   minArea: queryMoney.optional(),
   maxArea: queryMoney.optional(),
   furnished: z.enum(['unfurnished', 'semi_furnished', 'furnished']).optional(),
   q: queryText(100).optional(),
   /** One agency's listings, by its public slug. */
   agency: queryText(80).optional(),
+  /** One agent's listings, by their public id. */
+  agent: z.uuid().optional(),
   sort: z.enum(publicSorts).default('newest'),
   page: queryInt(1, 200).default(1),
   pageSize: queryInt(1, 48).default(24),
@@ -67,8 +73,38 @@ export const enquirySchema = z.strictObject({
   website: z.string().max(200).optional(),
   /** Milliseconds between the form appearing and being sent; bots are instant. */
   elapsedMs: z.number().int().min(0).max(86_400_000).optional(),
+  /** Cloudflare Turnstile token; required once TURNSTILE_SECRET_KEY is set. */
+  captchaToken: z.string().max(4096).optional(),
 });
 export type EnquiryInput = z.infer<typeof enquirySchema>;
+
+export const reportReasons = [
+  'not_available',
+  'wrong_price',
+  'wrong_details',
+  'wrong_photos',
+  'fraud',
+  'other',
+] as const;
+
+/** A visitor reporting a problem with a listing. */
+export const reportSchema = z.strictObject({
+  reason: z.enum(reportReasons),
+  details: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .transform((v) => v || undefined),
+  email: z
+    .email()
+    .max(254)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  website: z.string().max(200).optional(),
+  captchaToken: z.string().max(4096).optional(),
+});
+export type ReportInput = z.infer<typeof reportSchema>;
 
 export const contactSchema = z.strictObject({ channel: z.enum(['whatsapp', 'call']) });
 

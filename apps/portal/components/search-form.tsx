@@ -158,6 +158,72 @@ export function SearchForm({
               </option>
             ))}
           </select>
+          <label className="sr-only" htmlFor="baths">
+            Bathrooms
+          </label>
+          <select id="baths" name="baths" defaultValue={v('baths')} className={field}>
+            <option value="">Any baths</option>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n}+ {n === 1 ? 'Bath' : 'Baths'}
+              </option>
+            ))}
+          </select>
+          <label className="sr-only" htmlFor="minArea">
+            Minimum area (sqft)
+          </label>
+          <input
+            id="minArea"
+            name="minArea"
+            type="number"
+            min={0}
+            step={50}
+            inputMode="numeric"
+            placeholder="Min area (sqft)"
+            defaultValue={v('minArea')}
+            className={field}
+          />
+          <label className="sr-only" htmlFor="maxArea">
+            Maximum area (sqft)
+          </label>
+          <input
+            id="maxArea"
+            name="maxArea"
+            type="number"
+            min={0}
+            step={50}
+            inputMode="numeric"
+            placeholder="Max area (sqft)"
+            defaultValue={v('maxArea')}
+            className={field}
+          />
+          {facets?.amenities && facets.amenities.length > 0 ? (
+            <>
+              <label className="sr-only" htmlFor="amenity">
+                Amenity
+              </label>
+              <select id="amenity" name="amenity" defaultValue={v('amenity')} className={field}>
+                <option value="">Any amenities</option>
+                {facets.amenities.map((a) => (
+                  <option key={a.name} value={a.name}>
+                    {a.name} ({a.count})
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
+          <label className="sr-only" htmlFor="q">
+            Keywords
+          </label>
+          <input
+            id="q"
+            name="q"
+            type="search"
+            maxLength={100}
+            placeholder="Keywords, building or reference"
+            defaultValue={v('q')}
+            className={`${field} lg:col-span-2`}
+          />
           <label className="sr-only" htmlFor="sort">
             Sort
           </label>
@@ -167,6 +233,7 @@ export function SearchForm({
             <option value="price_desc">Price: high to low</option>
           </select>
           {values.agency ? <input type="hidden" name="agency" value={values.agency} /> : null}
+          {values.agent ? <input type="hidden" name="agent" value={values.agent} /> : null}
         </>
       )}
     </form>

@@ -40,7 +40,14 @@ export interface ListingCard {
   furnishing: string | null;
   verifiedAt: string | null;
   listedAt: string;
-  permit: { authority: string; number: string; validUntil: string | null } | null;
+  /** number is null when the agency uploaded the permit document instead of typing it. */
+  permit: {
+    authority: string;
+    number: string | null;
+    validUntil: string | null;
+    /** The link inside the regulator's QR code (https, .gov.ae); the portal draws the QR. */
+    verificationUrl?: string | null;
+  } | null;
   agent: PublicAgent | null;
   /** Cover only on cards; all photos, in order, on the listing detail. */
   photos: ListingPhoto[];
@@ -59,6 +66,14 @@ export interface ListingDetail extends ListingCard {
   serviceChargePerSqft: number | null;
   description: string | null;
   updatedAt: string;
+  /** Rounded on purpose (about 150 m, or 1 km for villas); null when the agency set no pin. */
+  location?: { lat: number; lng: number; radiusM: number } | null;
+}
+
+export interface AgentProfile extends PublicAgent {
+  agency: ListingCard['agency'];
+  listings: { sale: number; rent: number; total: number };
+  communities: string[];
 }
 
 export interface SearchResult {
@@ -72,6 +87,7 @@ export interface Facets {
   emirates: string[];
   communities: { emirate: string; community: string; count: number }[];
   types: { type: string; count: number }[];
+  amenities?: { name: string; count: number }[];
 }
 
 export class ApiError extends Error {
@@ -107,6 +123,24 @@ export const searchListings = (query: URLSearchParams) =>
 export async function getListing(id: string): Promise<ListingDetail | null> {
   try {
     return await call<ListingDetail>(`/listings/${encodeURIComponent(id)}`);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
+    throw err;
+  }
+}
+
+export async function getSimilar(id: string): Promise<ListingCard[]> {
+  try {
+    return (await call<{ data: ListingCard[] }>(`/listings/${encodeURIComponent(id)}/similar`))
+      .data;
+  } catch {
+    return [];
+  }
+}
+
+export async function getAgent(id: string): Promise<AgentProfile | null> {
+  try {
+    return await call<AgentProfile>(`/agents/${encodeURIComponent(id)}`);
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
     throw err;
@@ -153,6 +187,14 @@ export async function recordContact(id: string, channel: 'whatsapp' | 'call') {
 
 export async function sendEnquiry(id: string, body: unknown) {
   return call<{ status: 'received' }>(`/listings/${encodeURIComponent(id)}/enquiries`, {
+    method: 'POST',
+    headers: await visitorHeaders(),
+    body: JSON.stringify(body),
+  });
+}
+
+export async function sendReport(id: string, body: unknown) {
+  return call<{ status: 'received' }>(`/listings/${encodeURIComponent(id)}/reports`, {
     method: 'POST',
     headers: await visitorHeaders(),
     body: JSON.stringify(body),

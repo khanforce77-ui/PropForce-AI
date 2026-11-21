@@ -4,6 +4,7 @@ import { AgentAvatar } from '@/components/agent-avatar';
 import type { ListingCard as Card } from '@/lib/api';
 import { photoUrl } from '@/lib/photos';
 import {
+  agentPath,
   bedsLabel,
   formatArea,
   formatPrice,
@@ -56,7 +57,7 @@ export function ListingCard({ listing }: { listing: Card }) {
           </span>
           {listing.permit ? (
             <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-              <ShieldCheck className="h-3 w-3" aria-hidden /> Permit
+              <ShieldCheck className="h-3 w-3" aria-hidden /> {listing.permit.authority} permit
             </span>
           ) : null}
         </div>
@@ -88,10 +89,13 @@ export function ListingCard({ listing }: { listing: Card }) {
       </Link>
       <div className="flex items-center justify-between border-t border-border px-4 py-2 text-xs text-muted-foreground">
         {listing.agent ? (
-          <span className="flex min-w-0 items-center gap-2">
+          <Link
+            href={agentPath(listing.agent)}
+            className="flex min-w-0 items-center gap-2 hover:text-primary"
+          >
             <AgentAvatar agent={listing.agent} size={28} />
             <span className="line-clamp-1 font-medium text-foreground">{listing.agent.name}</span>
-          </span>
+          </Link>
         ) : (
           <span />
         )}

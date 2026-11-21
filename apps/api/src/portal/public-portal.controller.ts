@@ -15,7 +15,7 @@ import type { Request } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { parseBody } from '../common/zod';
 import { APP_CONFIG, type AppConfig } from '../config/env';
-import { contactSchema, enquirySchema, publicSearchSchema } from './portal.schemas';
+import { contactSchema, enquirySchema, publicSearchSchema, reportSchema } from './portal.schemas';
 import { PublicPortalService, type Visitor } from './public-portal.service';
 
 const uuid = () => new ParseUUIDPipe();
@@ -44,6 +44,18 @@ export class PublicPortalController {
     return this.portal.get(id);
   }
 
+  @Get('listings/:id/similar')
+  @Header('Cache-Control', CACHE)
+  similar(@Param('id', uuid()) id: string) {
+    return this.portal.similar(id);
+  }
+
+  @Get('agents/:id')
+  @Header('Cache-Control', CACHE)
+  agent(@Param('id', uuid()) id: string) {
+    return this.portal.agent(id);
+  }
+
   @Get('facets')
   @Header('Cache-Control', CACHE)
   facets() {
@@ -69,6 +81,13 @@ export class PublicPortalController {
   @Header('Cache-Control', 'no-store')
   enquire(@Param('id', uuid()) id: string, @Body() body: unknown, @Req() req: Request) {
     return this.portal.enquire(id, parseBody(enquirySchema, body), this.visitor(req));
+  }
+
+  @Post('listings/:id/reports')
+  @HttpCode(202)
+  @Header('Cache-Control', 'no-store')
+  reportListing(@Param('id', uuid()) id: string, @Body() body: unknown, @Req() req: Request) {
+    return this.portal.report(id, parseBody(reportSchema, body), this.visitor(req));
   }
 
   /**

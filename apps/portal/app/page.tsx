@@ -3,6 +3,7 @@ import { ListingCard } from '@/components/listing-card';
 import { SearchForm } from '@/components/search-form';
 import { getFacets, searchListings, type Facets, type SearchResult } from '@/lib/api';
 import { SITE_NAME } from '@/lib/config';
+import { areaPath } from '@/lib/format';
 
 // Rendered per request (API responses are still cached for a minute), so an API hiccup at
 // build time is never frozen into the page.
@@ -31,8 +32,8 @@ export default async function HomePage() {
             Find your next home in the UAE
           </h1>
           <p className="mt-3 max-w-xl text-muted-foreground">
-            Verified listings from licensed agencies on {SITE_NAME}. Talk to the agent directly on
-            WhatsApp or phone.
+            Listings with advertising permits from licensed agencies on {SITE_NAME}. Talk to the
+            agent directly on WhatsApp or phone.
           </p>
           <div className="mt-8 rounded-2xl border border-border bg-background p-4 shadow-sm">
             <SearchForm facets={facets} compact />
@@ -47,7 +48,7 @@ export default async function HomePage() {
             {popular.map((c) => (
               <Link
                 key={`${c.emirate}-${c.community}`}
-                href={`/for-sale?community=${encodeURIComponent(c.community)}`}
+                href={areaPath('sale', { emirate: c.emirate, community: c.community })}
                 className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary hover:text-primary"
               >
                 {c.community} <span className="text-muted-foreground">({c.count})</span>
