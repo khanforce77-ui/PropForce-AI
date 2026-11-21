@@ -8,6 +8,7 @@ import {
   type TransactionClient,
 } from '@propforce/db';
 import { AppError } from '../common/app-error';
+import { randomUUID } from 'node:crypto';
 import { PRISMA } from '../database/database.module';
 
 export interface AgencyPlanInput {
@@ -77,6 +78,7 @@ export class PlatformService {
           plan: true,
           seatLimit: true,
           listingLimit: true,
+          isPlatformOwned: true,
           memberships: {
             where: { status: 'active' },
             select: { role: true, user: { select: { fullName: true, email: true } } },
@@ -121,6 +123,101 @@ export class PlatformService {
       });
       return users;
     });
+  }
+
+  /** Listings across all agencies, newest first, for the admin "All listings" view. */
+  listings(adminUserId: string, q: { q?: string | undefined; status?: string | undefined }) {
+    return withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>
+      tx.property.findMany({
+        where: {
+          deletedAt: null,
+          ...(q.status ? { status: q.status as Prisma.EnumPropertyStatusFilter['equals'] } : {}),
+          ...(q.q
+            ? {
+                OR: [
+                  { reference: { contains: q.q, mode: 'insensitive' } },
+                  { title: { contains: q.q, mode: 'insensitive' } },
+                  { community: { contains: q.q, mode: 'insensitive' } },
+                  { building: { contains: q.q, mode: 'insensitive' } },
+                  { agency: { name: { contains: q.q, mode: 'insensitive' } } },
+                ],
+              }
+            : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 200,
+        select: {
+          id: true,
+          reference: true,
+          title: true,
+          listingType: true,
+          propertyType: true,
+          status: true,
+          emirate: true,
+          community: true,
+          building: true,
+          bedrooms: true,
+          price: true,
+          rentPeriod: true,
+          createdAt: true,
+          agency: { select: { id: true, name: true, isPlatformOwned: true } },
+          assigned: { select: { user: { select: { fullName: true } } } },
+        },
+      }),
+    );
+  }
+
+  /**
+   * The platform's own agency, "PropForce Direct", where platform admins list properties
+   * themselves. Created on first use; the calling admin becomes an owner member so listings can
+   * be assigned to them and shown on the portal under their name.
+   */
+  async direct(adminUserId: string) {
+    const existing = await withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>
+      tx.agency.findFirst({ where: { isPlatformOwned: true }, select: { id: true } }),
+    );
+    const agencyId = existing?.id ?? randomUUID();
+    await withTenant(this.prisma, { tenantId: agencyId, userId: adminUserId }, async (tx) => {
+      if (!existing) {
+        await tx.agency.create({
+          data: {
+            id: agencyId,
+            name: 'PropForce Direct',
+            slug: `propforce-direct-${agencyId.slice(0, 6)}`,
+            emirate: 'Dubai',
+            status: 'active',
+            onboardedAt: new Date(),
+            approvalStatus: 'not_required',
+            plan: 'platform',
+            isPlatformOwned: true,
+            settings: { create: {} },
+          },
+        });
+        await this.platformAudit(
+          tx,
+          adminUserId,
+          'platform.direct_agency_created',
+          'agency',
+          agencyId,
+          {},
+          'PropForce Direct',
+        );
+      }
+      const membership = await tx.membership.findUnique({
+        where: { tenantId_userId: { tenantId: agencyId, userId: adminUserId } },
+      });
+      if (!membership) {
+        await tx.membership.create({
+          data: { tenantId: agencyId, userId: adminUserId, role: 'owner' },
+        });
+      } else if (membership.status !== 'active' || membership.role !== 'owner') {
+        await tx.membership.update({
+          where: { id: membership.id },
+          data: { status: 'active', role: 'owner' },
+        });
+      }
+    });
+    return { agencyId };
   }
 
   // ───── agency controls ─────

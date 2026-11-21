@@ -11,7 +11,7 @@ import { mayContact } from '../crm/consent';
 import { PRISMA } from '../database/database.module';
 import { EncryptionService } from '../security/encryption.service';
 import { hasPermission } from '../tenancy/permissions';
-import type { TenantRequestContext } from '../tenancy/tenant.guard';
+import { ownMembershipId, type TenantRequestContext } from '../tenancy/tenant.guard';
 import { audit } from '../tenancy/tenancy.service';
 import { EMBEDDED_SIGNUP, WHATSAPP_CLIENT } from './whatsapp.providers';
 import type {
@@ -46,8 +46,8 @@ export class ConversationsService {
     if (hasPermission(ctx.role, 'crm:manage')) return {};
     return {
       OR: [
-        { assignedMembershipId: ctx.membershipId },
-        { contact: { ownerMembershipId: ctx.membershipId } },
+        { assignedMembershipId: ownMembershipId(ctx) },
+        { contact: { ownerMembershipId: ownMembershipId(ctx) } },
       ],
     };
   }
@@ -141,7 +141,7 @@ export class ConversationsService {
             { tenantId: ctx.tenantId },
             this.scope(ctx),
             q.mode ? { mode: q.mode } : {},
-            q.mine ? { assignedMembershipId: ctx.membershipId } : {},
+            q.mine && ctx.membershipId ? { assignedMembershipId: ctx.membershipId } : {},
             q.unread ? { unreadCount: { gt: 0 } } : {},
           ],
         },

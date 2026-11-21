@@ -12,9 +12,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
+import { AgencyContext, type AgencyMembership } from '@/lib/agency-context';
+import type { Membership } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -22,23 +24,43 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   const { agencyId } = useParams<{ agencyId: string }>();
   const pathname = usePathname();
   const router = useRouter();
-  const { me, signOut } = useAuth();
-  const membership = me?.memberships.find((m) => m.agency.id === agencyId);
+  const { me, request, signOut } = useAuth();
+  const own = me?.memberships.find((m) => m.agency.id === agencyId);
+  const isPlatformAdmin = me?.user.isPlatformAdmin === true;
+  const [platformView, setPlatformView] = useState<AgencyMembership | null>(null);
+
+  // A platform admin may open any agency; the API grants admin rights and audits every change.
+  useEffect(() => {
+    if (!me || own || !isPlatformAdmin) return;
+    let cancelled = false;
+    void request<Membership['agency']>('/agency', { tenantId: agencyId })
+      .then((agency) => {
+        if (!cancelled) setPlatformView({ id: '', role: 'admin', agency, platform: true });
+      })
+      .catch(() => router.replace('/app/admin'));
+    return () => {
+      cancelled = true;
+    };
+  }, [me, own, isPlatformAdmin, agencyId, request, router]);
+
+  const membership: AgencyMembership | null = own ? { ...own, platform: false } : platformView;
 
   useEffect(() => {
-    if (me && !membership) router.replace('/app');
+    if (me && !own && !isPlatformAdmin) router.replace('/app');
     else if (
       me?.mfaRequired &&
       !me.user.mfaEnabled &&
-      membership &&
-      ['owner', 'admin'].includes(membership.role)
+      own &&
+      ['owner', 'admin'].includes(own.role)
     ) {
       router.replace('/app/security?required=1');
     }
-  }, [me, membership, router]);
+  }, [me, own, isPlatformAdmin, router]);
 
   if (!membership) return null;
-  const closed = ['suspended', 'cancelled'].includes(membership.agency.status);
+  // Platform admins still see a suspended or closed agency's data.
+  const closed =
+    !membership.platform && ['suspended', 'cancelled'].includes(membership.agency.status);
   const base = `/app/${agencyId}`;
   const isActive = (href: string) =>
     href === base ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
@@ -58,7 +80,9 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
           <Building2 className="h-5 w-5 text-primary" aria-hidden />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{membership.agency.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{membership.role}</p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {membership.platform ? 'Platform admin view' : membership.role}
+            </p>
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col" aria-label="Main">
@@ -89,6 +113,21 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="flex-1 px-4 py-6 md:px-10 md:py-10">
+        {isPlatformAdmin ? (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+            <span>
+              {membership.platform
+                ? `You are viewing ${membership.agency.name} as platform admin. You can change anything here, and every change is logged.`
+                : `You are in ${membership.agency.name}.`}
+              {membership.platform && membership.agency.status !== 'active'
+                ? ` Status: ${membership.agency.status}.`
+                : ''}
+            </span>
+            <Link href="/app/admin" className="font-medium underline">
+              Back to platform admin
+            </Link>
+          </div>
+        ) : null}
         {closed ? (
           <div className="max-w-xl rounded-xl border border-red-300 bg-red-50 p-6 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
             <h1 className="text-lg font-semibold">
@@ -106,7 +145,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
             </p>
           </div>
         ) : (
-          children
+          <AgencyContext.Provider value={membership}>{children}</AgencyContext.Provider>
         )}
       </main>
     </div>

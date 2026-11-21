@@ -208,6 +208,7 @@ export interface PlatformAgency {
   plan: string;
   seatLimit: number | null;
   listingLimit: number | null;
+  isPlatformOwned?: boolean;
 }
 
 export interface PlatformUser {
@@ -238,4 +239,22 @@ export interface PlatformAuditEntry {
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   createdAt: string;
+}
+
+export interface PlatformListing {
+  id: string;
+  reference: string;
+  title: string | null;
+  listingType: string;
+  propertyType: string;
+  status: PropertyStatus;
+  emirate: string;
+  community: string | null;
+  building: string | null;
+  bedrooms: number | null;
+  price: string | null;
+  rentPeriod: 'yearly' | 'monthly' | null;
+  createdAt: string;
+  agency: { id: string; name: string; isPlatformOwned: boolean };
+  assigned: { user: { fullName: string } } | null;
 }

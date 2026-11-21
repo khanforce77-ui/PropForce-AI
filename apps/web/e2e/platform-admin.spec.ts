@@ -129,15 +129,45 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
     ).toBeVisible();
     await expect(ownerPage.getByText('Reason: Trade licence expired')).toBeVisible();
 
+    // The admin can open any agency (even a suspended one) and work in it.
+    await row.getByRole('link', { name: /Open agency/ }).click();
+    await expect(page.getByText(`You are viewing ${agencyName} as platform admin.`)).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: 'Contacts' })
+      .click();
+    await page.getByRole('button', { name: 'Add contact' }).click();
+    await page.getByLabel('Full name').fill('Admin Added');
+    await page.getByLabel('Phone', { exact: true }).fill('050 111 2233');
+    await page.getByRole('button', { name: 'Save contact' }).click();
+    await expect(page.getByRole('heading', { name: 'Admin Added' })).toBeVisible();
+    await page.getByRole('link', { name: 'Back to platform admin' }).click();
+
     // Every action shows up in the activity log.
     await page.getByRole('button', { name: 'Activity', exact: true }).click();
     await expect(page.getByText('platform.agency_suspended')).toBeVisible();
     await expect(page.getByText('platform.agency_approved')).toBeVisible();
     await expect(page.getByText('platform.setting_changed').first()).toBeVisible();
+    await expect(page.getByText('agency_data.contact.created')).toBeVisible();
     await ownerContext.close();
   } finally {
     await setFlag('platform.require_agency_approval', false);
   }
+
+  // The admin lists a property directly, under PropForce Direct.
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('button', { name: 'Add listing' }).first().click();
+  await expect(page.getByLabel('Property type')).toBeVisible();
+  await page.getByLabel('Property type').selectOption('villa');
+  await page.getByLabel('Community').fill('Arabian Ranches');
+  await page.getByLabel('Building').fill(`Direct Villa ${run}`);
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible();
+  await expect(page.getByText('You are in PropForce Direct.')).toBeVisible();
+  await page.getByRole('link', { name: 'Back to platform admin' }).click();
+  await page.getByRole('button', { name: 'All listings', exact: true }).click();
+  const directRow = page.getByRole('row').filter({ hasText: `Direct Villa ${run}` });
+  await expect(directRow).toContainText('PropForce Direct');
 
   // The agency dashboard is still one click away.
   await page.getByRole('link', { name: 'My agency dashboard' }).click();

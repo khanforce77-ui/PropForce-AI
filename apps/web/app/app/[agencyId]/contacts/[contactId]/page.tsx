@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 import {
   budgetLabel,
@@ -102,8 +103,8 @@ function ConsentRow({
 export default function ContactPage() {
   const { agencyId, contactId } = useParams<{ agencyId: string; contactId: string }>();
   const router = useRouter();
-  const { me, request } = useAuth();
-  const role = me?.memberships.find((m) => m.agency.id === agencyId)?.role;
+  const { request } = useAuth();
+  const role = useAgencyMembership()?.role;
   const [contact, setContact] = useState<ContactDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

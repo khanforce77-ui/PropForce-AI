@@ -89,7 +89,7 @@ export class InventoryService {
         ...(q.listingType ? { listingType: q.listingType } : {}),
         ...(q.propertyType ? { propertyType: q.propertyType } : {}),
         ...(q.emirate ? { emirate: q.emirate } : {}),
-        ...(q.mine ? { assignedMembershipId: ctx.membershipId } : {}),
+        ...(q.mine && ctx.membershipId ? { assignedMembershipId: ctx.membershipId } : {}),
         ...(q.bedrooms !== undefined ? { bedrooms: q.bedrooms } : {}),
         ...(q.minPrice !== undefined || q.maxPrice !== undefined
           ? {
@@ -413,9 +413,15 @@ export class InventoryService {
         tx.property.count({
           where: { ...base, status: 'active', listingExpiresAt: { lte: soon } },
         }),
-        tx.property.count({
-          where: { ...base, assignedMembershipId: ctx.membershipId, status: { not: 'archived' } },
-        }),
+        ctx.membershipId
+          ? tx.property.count({
+              where: {
+                ...base,
+                assignedMembershipId: ctx.membershipId,
+                status: { not: 'archived' },
+              },
+            })
+          : Promise.resolve(0),
         tx.membership.count({ where: { tenantId: ctx.tenantId, status: 'active' } }),
         tx.invitation.count({
           where: {
