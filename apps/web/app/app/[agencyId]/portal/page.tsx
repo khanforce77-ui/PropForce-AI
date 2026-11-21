@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 
 interface PortalAgent {
@@ -93,8 +94,8 @@ function ProfileForm({
 
 export default function PortalPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
-  const { me, request } = useAuth();
-  const membership = me?.memberships.find((m) => m.agency.id === agencyId);
+  const { request } = useAuth();
+  const membership = useAgencyMembership();
   const isManager = ['owner', 'admin', 'manager'].includes(membership?.role ?? '');
 
   const [agents, setAgents] = useState<PortalAgent[]>([]);

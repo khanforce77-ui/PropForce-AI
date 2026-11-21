@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
 import { ApiError, type Invitation, type Member } from '@/lib/api';
+import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 
 function Members() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const welcome = useSearchParams().get('welcome') === '1';
   const { me, request } = useAuth();
-  const role = me?.memberships.find((m) => m.agency.id === agencyId)?.role;
+  const role = useAgencyMembership()?.role;
   const canManage = role === 'owner' || role === 'admin';
 
   const [members, setMembers] = useState<Member[]>([]);

@@ -4,7 +4,7 @@ import { AppError } from '../common/app-error';
 import { PRISMA } from '../database/database.module';
 import { hasPermission } from '../tenancy/permissions';
 import { audit } from '../tenancy/tenancy.service';
-import type { TenantRequestContext } from '../tenancy/tenant.guard';
+import { ownMembershipId, type TenantRequestContext } from '../tenancy/tenant.guard';
 import type { AgentProfileInput, ListEnquiriesQuery } from './portal.schemas';
 
 const DAY = 86_400_000;
@@ -39,7 +39,7 @@ export class AgencyPortalService {
           where: {
             tenantId: ctx.tenantId,
             status: 'active',
-            ...(this.seesAll(ctx) ? {} : { id: ctx.membershipId }),
+            ...(this.seesAll(ctx) ? {} : { id: ownMembershipId(ctx) }),
           },
           select: profileSelect,
           orderBy: { createdAt: 'asc' },
@@ -128,7 +128,11 @@ export class AgencyPortalService {
       const where: Prisma.PortalEnquiryWhereInput = {
         tenantId: ctx.tenantId,
         ...(q.status ? { status: q.status } : {}),
-        ...(!this.seesAll(ctx) || q.mine ? { membershipId: ctx.membershipId } : {}),
+        ...(!this.seesAll(ctx)
+          ? { membershipId: ownMembershipId(ctx) }
+          : q.mine && ctx.membershipId
+            ? { membershipId: ctx.membershipId }
+            : {}),
       };
       const [rows, total] = await Promise.all([
         tx.portalEnquiry.findMany({
@@ -166,7 +170,7 @@ export class AgencyPortalService {
         where: {
           id,
           tenantId: ctx.tenantId,
-          ...(this.seesAll(ctx) ? {} : { membershipId: ctx.membershipId }),
+          ...(this.seesAll(ctx) ? {} : { membershipId: ownMembershipId(ctx) }),
         },
       });
       if (!current) throw new AppError(404, 'NOT_FOUND', 'Enquiry not found.');

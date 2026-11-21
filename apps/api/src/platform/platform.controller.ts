@@ -26,6 +26,10 @@ const planSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
 const flagSchema = z.strictObject({ enabled: z.boolean() });
+const listingsQuery = z.object({
+  q: z.string().trim().min(1).max(80).optional(),
+  status: z.enum(['draft', 'active', 'under_offer', 'sold', 'rented', 'archived']).optional(),
+});
 const usersQuery = z.object({ q: z.string().trim().min(1).max(80).optional() });
 const uuid = () => new ParseUUIDPipe();
 
@@ -103,6 +107,18 @@ export class PlatformController {
   @HttpCode(200)
   reactivateUser(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
     return this.platform.reactivateUser(req.auth.userId, id);
+  }
+
+  @Get('listings')
+  async listings(@Req() req: AuthenticatedRequest, @Query() query: unknown) {
+    return { data: await this.platform.listings(req.auth.userId, parseBody(listingsQuery, query)) };
+  }
+
+  /** Opens (creating on first use) the platform's own agency, PropForce Direct. */
+  @Post('direct')
+  @HttpCode(200)
+  direct(@Req() req: AuthenticatedRequest) {
+    return this.platform.direct(req.auth.userId);
   }
 
   @Get('settings')

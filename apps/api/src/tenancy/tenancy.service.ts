@@ -26,7 +26,7 @@ export async function audit(tx: TransactionClient, ctx: TenantRequestContext, en
   await tx.auditLog.create({
     data: {
       tenantId: ctx.tenantId,
-      actorType: 'user',
+      actorType: ctx.platform ? 'platform' : 'user',
       actorUserId: ctx.userId,
       action: entry.action,
       entityType: entry.entityType,
@@ -35,6 +35,18 @@ export async function audit(tx: TransactionClient, ctx: TenantRequestContext, en
       ...(entry.after != null ? { after: entry.after } : {}),
     },
   });
+  if (ctx.platform) {
+    // A platform admin changed an agency they are not a member of: also log it platform-wide.
+    await tx.platformAuditLog.create({
+      data: {
+        actorUserId: ctx.userId,
+        action: `agency_data.${entry.action}`,
+        targetType: entry.entityType,
+        targetId: entry.entityId ?? null,
+        after: { tenantId: ctx.tenantId, ...((entry.after as object | null | undefined) ?? {}) },
+      },
+    });
+  }
 }
 
 /**
