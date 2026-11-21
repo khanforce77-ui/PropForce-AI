@@ -242,3 +242,36 @@ describe('public portal enquiries and contact clicks', () => {
     }
   });
 });
+
+describe('agent photos', () => {
+  const photo = (t: SeededTenant) => ({
+    membershipId: t.membershipId,
+    tenantId: t.agencyId,
+    contentType: 'image/png',
+    bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    sha256: 'a'.repeat(64),
+  });
+
+  it('are private to the agency, and public only for agents the portal can show', async () => {
+    await owner.memberPhoto.create({ data: photo(a) });
+    await owner.memberPhoto.create({ data: photo(b) });
+    expect(await withTenant(app, { tenantId: a.agencyId }, (tx) => tx.memberPhoto.count())).toBe(1);
+    expect(await withPublicPortal(app, (tx) => tx.memberPhoto.count())).toBe(2);
+
+    await owner.agency.update({ where: { id: a.agencyId }, data: { status: 'suspended' } });
+    await owner.user.update({ where: { id: b.ownerUserId }, data: { suspendedAt: new Date() } });
+    expect(await withPublicPortal(app, (tx) => tx.memberPhoto.count())).toBe(0);
+  });
+
+  it('cannot be written by the portal or another agency', async () => {
+    await expect(
+      withPublicPortal(app, (tx) => tx.memberPhoto.createMany({ data: [photo(a)] })),
+    ).rejects.toThrow();
+    await expect(
+      withTenant(app, { tenantId: b.agencyId }, (tx) =>
+        tx.memberPhoto.createMany({ data: [photo(a)] }),
+      ),
+    ).rejects.toThrow();
+    expect(await owner.memberPhoto.count()).toBe(0);
+  });
+});

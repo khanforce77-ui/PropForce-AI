@@ -415,3 +415,63 @@ describe('public portal: enquiries', () => {
     await http().post(`/v1/public/listings/${p.id}/enquiries`).send(enquiryBody()).expect(404);
   });
 });
+
+describe('agent profile photos', () => {
+  // A minimal valid PNG header is enough: the API checks bytes, it does not decode images.
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from('fake-image-body'),
+  ]);
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
+
+  it('lets an agent upload a photo that then shows on the public listing', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p = await publishedListing(a);
+    let card = (await http().get('/v1/public/listings').expect(200)).body.data[0];
+    expect(card.agent.photoVersion).toBeNull();
+
+    await http()
+      .put(`/v1/portal/agents/${a.membershipId}/photo`)
+      .set(a.h)
+      .send({ image: dataUrl })
+      .expect(200);
+    const mine = await http().get(`/v1/portal/agents/${a.membershipId}/photo`).set(a.h).expect(200);
+    expect(mine.body.photo.dataUrl).toBe(dataUrl);
+
+    card = (await http().get('/v1/public/listings').expect(200)).body.data[0];
+    expect(card.agent.photoVersion).toMatch(/^[0-9a-f]{16}$/);
+    const detail = await http().get(`/v1/public/listings/${p.id}`).expect(200);
+    expect(detail.body.agent.photoVersion).toBe(card.agent.photoVersion);
+
+    const img = await http().get(`/v1/public/agents/${a.membershipId}/photo`).expect(200);
+    expect(img.headers['content-type']).toBe('image/png');
+    expect(img.headers['cache-control']).toContain('immutable');
+    expect(Buffer.from(img.body as Buffer).equals(png)).toBe(true);
+
+    await http().delete(`/v1/portal/agents/${a.membershipId}/photo`).set(a.h).expect(204);
+    await http().get(`/v1/public/agents/${a.membershipId}/photo`).expect(404);
+  });
+
+  it('refuses non-images and other agencies, and hides photos of suspended agencies', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const b = await createAgency('b@example.test', 'Bravo Realty');
+    await http()
+      .put(`/v1/portal/agents/${a.membershipId}/photo`)
+      .set(a.h)
+      .send({ image: `data:image/png;base64,${Buffer.from('<svg onload=x>').toString('base64')}` })
+      .expect(400);
+    await http()
+      .put(`/v1/portal/agents/${a.membershipId}/photo`)
+      .set(b.h)
+      .send({ image: dataUrl })
+      .expect(404);
+    await http()
+      .put(`/v1/portal/agents/${a.membershipId}/photo`)
+      .set(a.h)
+      .send({ image: dataUrl })
+      .expect(200);
+    await http().get(`/v1/public/agents/${a.membershipId}/photo`).expect(200);
+    await t.owner.agency.update({ where: { id: a.tenantId }, data: { status: 'suspended' } });
+    await http().get(`/v1/public/agents/${a.membershipId}/photo`).expect(404);
+  });
+});
