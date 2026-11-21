@@ -285,7 +285,11 @@ export default async function PropertyPage({ params }: Props) {
             </div>
           </div>
           <div className="rounded-2xl border border-border p-4 shadow-sm">
-            <h2 className="mb-3 font-semibold">Send an enquiry</h2>
+            <h2 className="font-semibold">Email the agent</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Your message goes straight to the agent&apos;s inbox. Their email address and number
+              stay private.
+            </p>
             <EnquiryForm
               listingId={l.id}
               defaultMessage={`Hi, I'm interested in "${title}" (Ref ${l.reference}). Please contact me.`}

@@ -3,6 +3,7 @@ import { Prisma, withPublicPortal, type PrismaClient, type TransactionClient } f
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
+import { EmailSender } from '../email/email.sender';
 import { PRISMA } from '../database/database.module';
 import {
   CONSENT_CONTACT_TEXT,
@@ -11,6 +12,7 @@ import {
   type PublicSearchQuery,
 } from './portal.schemas';
 import { convertEnquiryToLead } from './enquiry-to-lead';
+import { notifyAgentOfEnquiry } from './enquiry-email';
 import { whatsappLink } from './phone';
 import { hitRateLimit, keyedHash } from './rate-limit';
 
@@ -158,6 +160,7 @@ export class PublicPortalService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly email: EmailSender,
   ) {
     // Derived, purpose-bound key; development falls back to a fixed non-secret value.
     this.hashKey = createHash('sha256')
@@ -416,10 +419,17 @@ export class PublicPortalService {
     });
     // The enquiry is safely stored; turning it into a CRM lead is a separate step in the
     // agency's own transaction. If it fails, the enquiry stays in the portal inbox (lead_id null).
+    let leadId: string | null = null;
     try {
-      await convertEnquiryToLead(this.prisma, tenantId, enquiryId);
+      leadId = await convertEnquiryToLead(this.prisma, tenantId, enquiryId);
     } catch (err) {
       this.log.error({ msg: 'Portal enquiry could not become a lead', enquiryId, err });
+    }
+    // The visitor never sees the agent's email address: the API emails the agent directly.
+    try {
+      await notifyAgentOfEnquiry(this.prisma, this.email, this.config, tenantId, enquiryId, leadId);
+    } catch (err) {
+      this.log.error({ msg: 'Portal enquiry email to agent failed', enquiryId, err });
     }
     return accepted;
   }
