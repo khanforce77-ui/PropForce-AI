@@ -136,7 +136,7 @@ describe('logos', () => {
 
 describe('normaliseDocument', () => {
   it('keeps PDFs, re-encodes scans without metadata, refuses anything else', async () => {
-        const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF');
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF');
     expect((await normaliseDocument(pdf)).contentType).toBe('application/pdf');
     const scan = await sharp({
       create: { width: 800, height: 600, channels: 3, background: '#fff' },
