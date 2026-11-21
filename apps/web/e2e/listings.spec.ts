@@ -106,6 +106,7 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   });
   const body = (await res.json()) as {
     data: {
+      id: string;
       building: string;
       agent: { name: string; canWhatsapp: boolean };
       photoCount: number;
@@ -130,4 +131,39 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
       )
     ).status(),
   ).toBe(404);
+
+  // A visitor reports the listing on the portal; the agency sees it and resolves it.
+  const reported = await page.request.post(
+    `http://localhost:4000/v1/public/listings/${mine!.id}/reports`,
+    { data: { reason: 'wrong_price', details: 'Price changed last week' } },
+  );
+  expect(reported.status()).toBe(202);
+  await page.reload();
+  await expect(page.getByText('1 open')).toBeVisible();
+  await expect(page.getByText('Wrong price')).toBeVisible();
+  await expect(page.getByText('Price changed last week')).toBeVisible();
+  await page.getByLabel(/^Status of report on /).selectOption('resolved');
+  await expect(page.getByText('No open reports. Good work.')).toBeVisible();
+
+  // Brokers estimate a client's costs in the CRM; sample fees are flagged, and the owner verifies one.
+  await page.getByRole('link', { name: 'Cost calculator' }).click();
+  await page.getByLabel('Property price (AED)').fill('2000000');
+  await page.getByLabel('Broker’s share of commission (%)').fill('40');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+  await expect(page.getByRole('heading', { name: 'Estimate', exact: true })).toBeVisible();
+  const dldRow = page.getByRole('row', { name: /DLD transfer fee/ });
+  await expect(dldRow).toContainText('AED 80,580');
+  await expect(dldRow).toContainText('UNVERIFIED – sample');
+  await expect(page.getByLabel('Quote for the client')).toHaveValue(
+    /^ESTIMATE – Ready property sale, Dubai/,
+  );
+  const dldRule = page.getByRole('listitem').filter({ hasText: 'DLD transfer fee' });
+  await dldRule.getByRole('button', { name: 'Edit' }).click();
+  await dldRule.getByLabel('Source', { exact: true }).fill('DLD fees page, checked by owner');
+  await dldRule.getByLabel('I checked this against the official source').check();
+  await dldRule.getByRole('button', { name: 'Save fee' }).click();
+  await expect(page.getByText('Fee saved.')).toBeVisible();
+  await expect(dldRule.getByText('Verified', { exact: true })).toBeVisible();
+  await dldRule.getByRole('button', { name: 'Reset to sample' }).click();
+  await expect(page.getByText('Fee reset to the PropForce sample.')).toBeVisible();
 });

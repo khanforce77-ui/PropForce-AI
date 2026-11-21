@@ -25,11 +25,13 @@ import {
   Shuffle,
   Users,
   type LucideIcon,
+  Flag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { DailyBarChart } from '@/components/admin/bar-chart';
+import { AdminListingReports } from '@/components/admin/listing-reports';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -220,6 +222,7 @@ const TABS = [
   ['overview', 'Overview'],
   ['agencies', 'Agencies'],
   ['listings', 'All listings'],
+  ['reports', 'Listing reports'],
   ['users', 'Users'],
   ['settings', 'Settings'],
   ['activity', 'Activity'],
@@ -230,6 +233,7 @@ const TAB_ICONS: Record<Tab, LucideIcon> = {
   overview: LayoutDashboard,
   agencies: Building2,
   listings: Home,
+  reports: Flag,
   users: Users,
   settings: Settings,
   activity: Activity,
@@ -977,6 +981,8 @@ export default function PlatformAdminPage() {
             )}
           </Card>
         ) : null}
+
+        {tab === 'reports' ? <AdminListingReports /> : null}
 
         {tab === 'users' ? (
           <Card>

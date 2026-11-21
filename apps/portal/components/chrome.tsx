@@ -19,9 +19,6 @@ export function SiteHeader() {
           <Link href="/new-projects" className="hidden hover:text-primary sm:inline">
             New projects
           </Link>
-          <Link href="/mortgage-calculator" className="hidden hover:text-primary md:inline">
-            Mortgage
-          </Link>
         </nav>
         <Link
           href="/saved"
@@ -48,9 +45,6 @@ export function SiteFooter() {
         <div className="flex gap-4 sm:justify-end">
           <Link href="/new-projects" className="hover:text-foreground">
             New projects
-          </Link>
-          <Link href="/mortgage-calculator" className="hover:text-foreground">
-            Mortgage calculator
           </Link>
           <Link href="/privacy" className="hover:text-foreground">
             Privacy

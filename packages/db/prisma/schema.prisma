@@ -195,6 +195,7 @@ model Agency {
   portalEnquiries  PortalEnquiry[]
   portalContacts   PortalContactEvent[]
   listingReports   PortalListingReport[]
+  feeRules         FeeRule[]
   propertyPhotos   PropertyPhoto[]
   logo             AgencyLogo?
 
@@ -954,4 +955,39 @@ model Message {
   @@unique([tenantId, wamid])
   @@index([tenantId, conversationId, createdAt(sort: Desc)])
   @@map("message")
+}
+
+// ───────────────────────────── Cost calculator ─────────────────────────────
+/// One fee in the UAE cost calculator. Rows without a tenant are PropForce's templates (seeded as
+/// unverified samples); an agency's row with the same emirate + code overrides the template for
+/// that agency. Every output built from these rules is labelled an estimate.
+model FeeRule {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  emirate       String
+  code          String
+  label         String
+  /// Which calculators include it: ready_sale, off_plan_sale, mortgage, rental, commercial_rental.
+  calculators   String[]
+  /// buyer | seller | tenant | landlord
+  payer         String
+  /// price | loan | annual_rent: what ratePct applies to.
+  basis         String
+  ratePct       Decimal?  @map("rate_pct") @db.Decimal(7, 4)
+  /// Fixed amount in AED, added to the percentage part.
+  amount        Decimal?  @db.Decimal(12, 2)
+  vat           Boolean   @default(false)
+  refundable    Boolean   @default(false)
+  source        String
+  /// unverified_sample | verified
+  status        String    @default("unverified_sample")
+  verifiedBy    String?   @map("verified_by") @db.Uuid
+  verifiedAt    DateTime? @map("verified_at") @db.Timestamptz(3)
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, emirate])
+  @@map("fee_rule")
 }

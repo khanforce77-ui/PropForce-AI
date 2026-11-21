@@ -5,7 +5,7 @@ import { PRISMA } from '../database/database.module';
 import { hasPermission } from '../tenancy/permissions';
 import { audit } from '../tenancy/tenancy.service';
 import { ownMembershipId, type TenantRequestContext } from '../tenancy/tenant.guard';
-import type { AgentProfileInput, ListEnquiriesQuery } from './portal.schemas';
+import type { AgentProfileInput, ListEnquiriesQuery, ListReportsQuery } from './portal.schemas';
 
 const DAY = 86_400_000;
 const profileSelect = {
@@ -182,6 +182,81 @@ export class AgencyPortalService {
       await audit(tx, ctx, {
         action: 'portal_enquiry.status_changed',
         entityType: 'portal_enquiry',
+        entityId: current.id,
+        before: { status: current.status },
+        after: { status },
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * Visitors' reports about the agency's listings. Managers see all; agents see reports on the
+   * listings assigned to them. The reporter's IP hash is never returned.
+   */
+  reports(ctx: TenantRequestContext, q: ListReportsQuery) {
+    return this.run(ctx, async (tx) => {
+      const where: Prisma.PortalListingReportWhereInput = {
+        tenantId: ctx.tenantId,
+        ...(q.status ? { status: q.status } : {}),
+        ...(this.seesAll(ctx) ? {} : { property: { assignedMembershipId: ownMembershipId(ctx) } }),
+      };
+      const [rows, total, open] = await Promise.all([
+        tx.portalListingReport.findMany({
+          where,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: (q.page - 1) * q.pageSize,
+          take: q.pageSize,
+          select: {
+            id: true,
+            reason: true,
+            details: true,
+            email: true,
+            status: true,
+            createdAt: true,
+            property: {
+              select: {
+                id: true,
+                reference: true,
+                title: true,
+                community: true,
+                status: true,
+                assigned: { select: { id: true, user: { select: { fullName: true } } } },
+              },
+            },
+          },
+        }),
+        tx.portalListingReport.count({ where }),
+        tx.portalListingReport.count({ where: { ...where, status: 'open' } }),
+      ]);
+      return { data: rows, total, open, page: q.page, pageSize: q.pageSize };
+    });
+  }
+
+  setReportStatus(
+    ctx: TenantRequestContext,
+    id: string,
+    status: 'open' | 'resolved' | 'dismissed',
+  ) {
+    return this.run(ctx, async (tx) => {
+      const current = await tx.portalListingReport.findFirst({
+        where: {
+          id,
+          tenantId: ctx.tenantId,
+          ...(this.seesAll(ctx)
+            ? {}
+            : { property: { assignedMembershipId: ownMembershipId(ctx) } }),
+        },
+      });
+      if (!current) throw new AppError(404, 'NOT_FOUND', 'Report not found.');
+      const updated = await tx.portalListingReport.update({
+        where: { id: current.id },
+        data: { status },
+        select: { id: true, status: true },
+      });
+      await audit(tx, ctx, {
+        action: 'portal_report.status_changed',
+        entityType: 'portal_listing_report',
         entityId: current.id,
         before: { status: current.status },
         after: { status },

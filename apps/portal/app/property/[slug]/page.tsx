@@ -13,7 +13,6 @@ import { AgentAvatar } from '@/components/agent-avatar';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { ListingCard } from '@/components/listing-card';
 import { LocationMap } from '@/components/location-map';
-import { MortgageCalculator } from '@/components/mortgage-calculator';
 import { PermitQr } from '@/components/permit-qr';
 import { ReportListing } from '@/components/report-listing';
 import { areaCrumbs } from '@/components/search-page';
@@ -243,15 +242,6 @@ export default async function PropertyPage({ params }: Props) {
                   </li>
                 ))}
               </ul>
-            </section>
-          ) : null}
-
-          {l.purpose === 'sale' && l.price ? (
-            <section aria-labelledby="mortgage" className="rounded-xl border border-border p-4">
-              <h2 id="mortgage" className="mb-3 text-lg font-semibold">
-                Mortgage estimate
-              </h2>
-              <MortgageCalculator initialPrice={l.price} />
             </section>
           ) : null}
 
