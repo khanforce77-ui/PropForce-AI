@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AgentAvatar } from '@/components/agent-avatar';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { ContactActions } from '@/components/contact-actions';
 import { EnquiryForm } from '@/components/enquiry-form';
@@ -260,10 +261,15 @@ export default async function PropertyPage({ params }: Props) {
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
           <div className="rounded-2xl border border-border p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Listed by</p>
-            <p className="mt-1 text-lg font-semibold">{l.agent?.name}</p>
-            {l.agent?.brn ? (
-              <p className="text-xs text-muted-foreground">BRN {l.agent.brn}</p>
-            ) : null}
+            <div className="mt-2 flex items-center gap-3">
+              {l.agent ? <AgentAvatar agent={l.agent} size={56} /> : null}
+              <div className="min-w-0">
+                <p className="text-lg font-semibold">{l.agent?.name}</p>
+                {l.agent?.brn ? (
+                  <p className="text-xs text-muted-foreground">BRN {l.agent.brn}</p>
+                ) : null}
+              </div>
+            </div>
             <Link
               href={`/agency/${l.agency.slug}`}
               className="mt-1 block text-sm font-medium text-primary"

@@ -268,6 +268,7 @@ model Membership {
   assignedConversations Conversation[]
   portalEnquiries       PortalEnquiry[]
   portalContacts        PortalContactEvent[]
+  photo                 MemberPhoto?
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -541,6 +542,25 @@ model PortalContactEvent {
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, membershipId, createdAt(sort: Desc)])
   @@map("portal_contact_event")
+}
+
+/// An agent's profile photo, shown with their listings on the public portal. Small images only
+/// (the CRM resizes to 256x256 before upload); served by the API with the hash in the URL.
+model MemberPhoto {
+  membershipId String   @id @map("membership_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  /// image/webp, image/jpeg or image/png, detected from the file's bytes.
+  contentType  String   @map("content_type")
+  bytes        Bytes
+  /// SHA-256 of the bytes (hex); changes whenever the photo changes, so URLs can be cached forever.
+  sha256       String
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  member Membership @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([membershipId, tenantId])
+  @@index([tenantId])
+  @@map("member_photo")
 }
 
 /// Rate-limit hits for public endpoints. Holds only keyed hashes, no tenant data.

@@ -9,6 +9,8 @@ export interface PublicAgent {
   brn: string | null;
   canCall: boolean;
   canWhatsapp: boolean;
+  /** Changes whenever the agent's photo changes; null when the agent has no photo. */
+  photoVersion: string | null;
 }
 
 export interface ListingCard {

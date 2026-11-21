@@ -1,5 +1,6 @@
 import { Bath, BedDouble, Building2, Home, MapPin, Ruler, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import { AgentAvatar } from '@/components/agent-avatar';
 import type { ListingCard as Card } from '@/lib/api';
 import {
   bedsLabel,
@@ -69,7 +70,14 @@ export function ListingCard({ listing }: { listing: Card }) {
         </div>
       </Link>
       <div className="flex items-center justify-between border-t border-border px-4 py-2 text-xs text-muted-foreground">
-        <span className="line-clamp-1">{listing.agent?.name}</span>
+        {listing.agent ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <AgentAvatar agent={listing.agent} size={28} />
+            <span className="line-clamp-1 font-medium text-foreground">{listing.agent.name}</span>
+          </span>
+        ) : (
+          <span />
+        )}
         <Link
           href={`/agency/${listing.agency.slug}`}
           className="line-clamp-1 font-medium hover:text-primary"

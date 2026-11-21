@@ -3,6 +3,7 @@
 import { ExternalLink, MessageCircle, Phone } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { AgentPhoto } from '@/components/agent-photo';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -178,11 +179,14 @@ export default function PortalPage() {
 
       {mine ? (
         <Card>
-          <h2 className="font-medium">Your public contact details</h2>
+          <h2 className="font-medium">Your public profile</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Visitors reach you on these numbers from your listings. Without a number, only the
             enquiry form is shown.
           </p>
+          <div className="mt-4">
+            <AgentPhoto agencyId={agencyId} membershipId={mine.id} name={mine.name} />
+          </div>
           <div className="mt-4">
             <ProfileForm key={formKey(mine)} agent={mine} onSave={saveProfile} />
           </div>
@@ -206,6 +210,9 @@ export default function PortalPage() {
                     {a.last30Days.callClicks} calls (30 days)
                   </span>
                 </p>
+                <div className="mb-3">
+                  <AgentPhoto agencyId={agencyId} membershipId={a.id} name={a.name} />
+                </div>
                 <ProfileForm key={formKey(a)} agent={a} onSave={saveProfile} />
               </div>
             ))}

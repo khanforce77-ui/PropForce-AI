@@ -73,7 +73,7 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   // The live listing is on the public portal under this agent; adding a WhatsApp number makes it
   // reachable from there.
   await page.getByRole('link', { name: 'Property portal' }).click();
-  await expect(page.getByRole('heading', { name: 'Your public contact details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your public profile' })).toBeVisible();
   await page.getByLabel('WhatsApp').fill('050 123 4567');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Contact details saved.')).toBeVisible();

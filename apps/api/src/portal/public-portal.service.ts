@@ -34,6 +34,7 @@ const agentSelect = {
   publicPhoneE164: true,
   whatsappE164: true,
   user: { select: { fullName: true } },
+  photo: { select: { sha256: true } },
 } as const;
 const agencySelect = { name: true, slug: true, orn: true, emirate: true } as const;
 
@@ -95,6 +96,8 @@ function toAgent(row: CardRow) {
     // The numbers themselves are only handed out through the contact endpoint, which records it.
     canCall: Boolean(a.publicPhoneE164 ?? a.whatsappE164),
     canWhatsapp: Boolean(a.whatsappE164 ?? a.publicPhoneE164),
+    /** Changes whenever the photo changes; null when the agent has none. */
+    photoVersion: a.photo ? a.photo.sha256.slice(0, 16) : null,
   };
 }
 
