@@ -29,6 +29,9 @@ const flagSchema = z.strictObject({ enabled: z.boolean() });
 const dashboardQuery = z.object({
   days: z.coerce.number().int().min(7).max(90).default(30),
 });
+const listingReportsQuery = z.strictObject({
+  status: z.enum(['open', 'resolved', 'dismissed']).optional(),
+});
 const listingsQuery = z.object({
   q: z.string().trim().min(1).max(80).optional(),
   status: z.enum(['draft', 'active', 'under_offer', 'sold', 'rented', 'archived']).optional(),
@@ -115,6 +118,12 @@ export class PlatformController {
   @Get('dashboard')
   dashboard(@Req() req: AuthenticatedRequest, @Query() query: unknown) {
     return this.platform.dashboard(req.auth.userId, parseBody(dashboardQuery, query).days);
+  }
+
+  @Get('listing-reports')
+  async listingReports(@Req() req: AuthenticatedRequest, @Query() query: unknown) {
+    const { status } = parseBody(listingReportsQuery, query);
+    return { data: await this.platform.listingReports(req.auth.userId, status) };
   }
 
   @Get('listings')

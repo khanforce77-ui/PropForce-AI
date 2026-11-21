@@ -155,4 +155,15 @@ export const listEnquiriesSchema = z.strictObject({
 });
 export type ListEnquiriesQuery = z.infer<typeof listEnquiriesSchema>;
 
+export const reportStatuses = ['open', 'resolved', 'dismissed'] as const;
+
+export const listReportsSchema = z.strictObject({
+  status: z.enum(reportStatuses).optional(),
+  page: queryInt(1, 1000).default(1),
+  pageSize: queryInt(1, 100).default(25),
+});
+export type ListReportsQuery = z.infer<typeof listReportsSchema>;
+
+export const reportStatusSchema = z.strictObject({ status: z.enum(reportStatuses) });
+
 export const enquiryStatusSchema = z.strictObject({ status: z.enum(enquiryStatuses) });

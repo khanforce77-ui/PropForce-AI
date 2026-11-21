@@ -106,6 +106,7 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   });
   const body = (await res.json()) as {
     data: {
+      id: string;
       building: string;
       agent: { name: string; canWhatsapp: boolean };
       photoCount: number;
@@ -130,4 +131,17 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
       )
     ).status(),
   ).toBe(404);
+
+  // A visitor reports the listing on the portal; the agency sees it and resolves it.
+  const reported = await page.request.post(
+    `http://localhost:4000/v1/public/listings/${mine!.id}/reports`,
+    { data: { reason: 'wrong_price', details: 'Price changed last week' } },
+  );
+  expect(reported.status()).toBe(202);
+  await page.reload();
+  await expect(page.getByText('1 open')).toBeVisible();
+  await expect(page.getByText('Wrong price')).toBeVisible();
+  await expect(page.getByText('Price changed last week')).toBeVisible();
+  await page.getByLabel(/^Status of report on /).selectOption('resolved');
+  await expect(page.getByText('No open reports. Good work.')).toBeVisible();
 });

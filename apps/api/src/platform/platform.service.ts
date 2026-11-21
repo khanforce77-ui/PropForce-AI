@@ -212,6 +212,29 @@ export class PlatformService {
   }
 
   /** Listings across all agencies, newest first, for the admin "All listings" view. */
+  /** Every visitor report about a public listing, across agencies (read-only for admins). */
+  listingReports(adminUserId: string, status?: 'open' | 'resolved' | 'dismissed') {
+    return withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>
+      tx.portalListingReport.findMany({
+        where: status ? { status } : {},
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 200,
+        select: {
+          id: true,
+          reason: true,
+          details: true,
+          email: true,
+          status: true,
+          createdAt: true,
+          agency: { select: { id: true, name: true } },
+          property: {
+            select: { id: true, reference: true, title: true, community: true, status: true },
+          },
+        },
+      }),
+    );
+  }
+
   listings(adminUserId: string, q: { q?: string | undefined; status?: string | undefined }) {
     return withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>
       tx.property.findMany({

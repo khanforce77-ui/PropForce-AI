@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { AgencyLogo } from '@/components/agency-logo';
 import { AgentPhoto } from '@/components/agent-photo';
+import { ListingReportsCard } from '@/components/portal/listing-reports-card';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -308,6 +309,8 @@ export default function PortalPage() {
           </ul>
         )}
       </Card>
+
+      <ListingReportsCard agencyId={agencyId} isManager={isManager} />
     </div>
   );
 }

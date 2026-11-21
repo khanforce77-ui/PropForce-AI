@@ -746,3 +746,65 @@ describe('public portal: saved listings and new projects', () => {
     expect(detail.project).toBe('Marina Vista');
   });
 });
+
+describe('listing reports: agency and platform screens', () => {
+  it('shows reports to the listing agency only, lets it close them, and lists all for admins', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const b = await createAgency('b@example.test', 'Bravo Realty');
+    const pa = await publishedListing(a);
+    const pb = await publishedListing(b);
+    const report = (id: string, ip: string, reason: string) =>
+      http()
+        .post(`/v1/public/listings/${id}/reports`)
+        .set('x-portal-key', PORTAL_KEY)
+        .set('x-portal-client-ip', ip)
+        .send({ reason, details: 'Sold last week', email: 'v@example.test' })
+        .expect(202);
+    await report(pa.id, '203.0.113.1', 'not_available');
+    await report(pa.id, '203.0.113.2', 'wrong_price');
+    await report(pb.id, '203.0.113.1', 'fraud');
+
+    const list = await http().get('/v1/portal/reports').set(a.h).expect(200);
+    expect(list.body).toMatchObject({ total: 2, open: 2 });
+    expect(list.body.data.every((r: { property: { id: string } }) => r.property.id === pa.id)).toBe(
+      true,
+    );
+    expect(JSON.stringify(list.body)).not.toContain('ipHash');
+
+    const id = list.body.data[0].id as string;
+    await http()
+      .post(`/v1/portal/reports/${id}/status`)
+      .set(a.h)
+      .send({ status: 'resolved' })
+      .expect(200);
+    const after = await http()
+      .get('/v1/portal/reports')
+      .set(a.h)
+      .query({ status: 'open' })
+      .expect(200);
+    expect(after.body).toMatchObject({ total: 1, open: 1 });
+    // Another agency cannot see or change it.
+    await http()
+      .post(`/v1/portal/reports/${id}/status`)
+      .set(b.h)
+      .send({ status: 'dismissed' })
+      .expect(404);
+    expect((await http().get('/v1/portal/reports').set(b.h).expect(200)).body.total).toBe(1);
+
+    await t.owner.user.update({ where: { id: b.userId }, data: { isPlatformAdmin: true } });
+    const admin = await http()
+      .get('/v1/platform/listing-reports')
+      .set({ Authorization: b.h.Authorization! })
+      .expect(200);
+    expect(admin.body.data).toHaveLength(3);
+    expect(admin.body.data.map((r: { agency: { name: string } }) => r.agency.name).sort()).toEqual([
+      'Alpha Homes',
+      'Alpha Homes',
+      'Bravo Realty',
+    ]);
+    await http()
+      .get('/v1/platform/listing-reports')
+      .set({ Authorization: a.h.Authorization! })
+      .expect(403);
+  });
+});
