@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ListingForm } from '@/components/listings/listing-form';
+import { ListingPhotos } from '@/components/listings/listing-photos';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -180,6 +181,8 @@ function ListingDetail() {
           ) : null}
         </div>
       ) : null}
+
+      <ListingPhotos agencyId={agencyId} propertyId={p.id} canEdit={Boolean(canEdit)} />
 
       <Card>
         <h2 className="font-medium">Advertising permits</h2>

@@ -194,6 +194,8 @@ model Agency {
   messages         Message[]
   portalEnquiries  PortalEnquiry[]
   portalContacts   PortalContactEvent[]
+  propertyPhotos   PropertyPhoto[]
+  logo             AgencyLogo?
 
   @@map("agency")
 }
@@ -441,6 +443,7 @@ model Property {
   portalEnquiries PortalEnquiry[]
   portalContacts  PortalContactEvent[]
   leads           Lead[]
+  photos          PropertyPhoto[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -561,6 +564,56 @@ model MemberPhoto {
   @@unique([membershipId, tenantId])
   @@index([tenantId])
   @@map("member_photo")
+}
+
+/// A listing photo. The clean original stays private; the portal and the app only ever get the
+/// display and thumbnail versions, which carry the agency's logo (or the PropForce mark) as a
+/// faint watermark.
+model PropertyPhoto {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  propertyId  String   @map("property_id") @db.Uuid
+  /// 0 is the cover photo.
+  position    Int
+  /// SHA-256 of the clean original (hex); used to refuse the same photo twice on one listing.
+  sha256      String
+  width       Int
+  height      Int
+  /// Upright JPEG with EXIF/GPS removed, at most 2560 px. Never served to the public.
+  original    Bytes
+  /// 1600 px watermarked WebP.
+  display     Bytes
+  /// 480 px watermarked WebP.
+  thumb       Bytes
+  /// SHA-256 of the logo the watermark was made from; null for the PropForce mark.
+  markSha256  String?  @map("mark_sha256")
+  /// Goes up whenever the watermarked versions are re-rendered, so their URLs can be cached forever.
+  version     Int      @default(1)
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([id, tenantId])
+  @@unique([propertyId, sha256])
+  @@index([tenantId, propertyId, position])
+  @@map("property_photo")
+}
+
+/// The agency's logo, used as the watermark on its listing photos. PNG, at most 800 px.
+model AgencyLogo {
+  tenantId  String   @id @map("tenant_id") @db.Uuid
+  bytes     Bytes
+  sha256    String
+  width     Int
+  height    Int
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("agency_logo")
 }
 
 /// Rate-limit hits for public endpoints. Holds only keyed hashes, no tenant data.

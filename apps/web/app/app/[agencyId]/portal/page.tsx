@@ -3,6 +3,7 @@
 import { ExternalLink, MessageCircle, Phone } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { AgencyLogo } from '@/components/agency-logo';
 import { AgentPhoto } from '@/components/agent-photo';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -176,6 +177,11 @@ export default function PortalPage() {
       </div>
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
+
+      <AgencyLogo
+        agencyId={agencyId}
+        canEdit={['owner', 'admin'].includes(membership?.role ?? '')}
+      />
 
       {mine ? (
         <Card>
