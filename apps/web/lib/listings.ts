@@ -35,8 +35,8 @@ export function nextStatuses(p: Pick<PropertySummary, 'status' | 'listingType'>)
   const closed: PropertyStatus = p.listingType === 'sale' ? 'sold' : 'rented';
   const map: Record<PropertyStatus, PropertyStatus[]> = {
     draft: ['active', 'archived'],
-    active: ['under_offer', closed, 'archived'],
-    under_offer: ['active', closed, 'archived'],
+    active: ['draft', 'under_offer', closed, 'archived'],
+    under_offer: ['active', 'draft', closed, 'archived'],
     sold: ['archived'],
     rented: ['active', 'archived'],
     archived: ['draft'],

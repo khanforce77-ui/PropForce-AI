@@ -104,14 +104,41 @@ export type PropertyUpdateInput = z.output<typeof propertyUpdateSchema>;
 
 export const statusSchema = z.strictObject({ status: z.enum(propertyStatuses) });
 
+/** The number is optional: an agency may upload the permit document instead (see the document route). */
 export const permitSchema = z
   .strictObject({
     authority: text(32),
-    permitNumber: text(64),
+    permitNumber: optionalText(64),
     validUntil: isoDate,
   })
-  .transform((v) => ({ ...v, validUntil: new Date(v.validUntil) }));
+  .transform((v) => ({
+    ...v,
+    permitNumber: v.permitNumber ?? null,
+    validUntil: new Date(v.validUntil),
+  }));
 export type PermitInput = z.output<typeof permitSchema>;
+
+/** Renewing a permit: a new expiry date and, if it changed, a new number. */
+export const permitUpdateSchema = z
+  .strictObject({ permitNumber: optionalText(64), validUntil: isoDate.optional() })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' })
+  .transform((v) => ({
+    ...(v.permitNumber !== undefined ? { permitNumber: v.permitNumber } : {}),
+    ...(v.validUntil ? { validUntil: new Date(v.validUntil) } : {}),
+  }));
+export type PermitUpdateInput = z.output<typeof permitUpdateSchema>;
+
+export const permitDocumentQuery = z.strictObject({
+  fileName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    // No path separators or control characters (code points below 32).
+    .refine((v) => !/[\\/]/.test(v) && [...v].every((c) => c.charCodeAt(0) >= 32), {
+      message: 'Invalid file name',
+    }),
+});
 
 export const projectSchema = z
   .strictObject({

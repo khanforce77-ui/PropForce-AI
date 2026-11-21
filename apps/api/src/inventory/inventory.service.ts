@@ -7,6 +7,7 @@ import {
   type PropertyStatus,
   type TransactionClient,
 } from '@propforce/db';
+import { MediaError, normaliseDocument } from '@propforce/media';
 import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
@@ -16,6 +17,7 @@ import type { TenantRequestContext } from '../tenancy/tenant.guard';
 import type {
   ListPropertiesQuery,
   PermitInput,
+  PermitUpdateInput,
   ProjectInput,
   PropertyCreateInput,
   PropertyUpdateInput,
@@ -27,8 +29,9 @@ const DAY_MS = 86_400_000;
 /** Which status a listing may move to from each status. */
 export const STATUS_TRANSITIONS: Record<PropertyStatus, readonly PropertyStatus[]> = {
   draft: ['active', 'archived'],
-  active: ['under_offer', 'sold', 'rented', 'archived'],
-  under_offer: ['active', 'sold', 'rented', 'archived'],
+  // Back to draft = unpublish: off the portal, still editable, can be published again.
+  active: ['draft', 'under_offer', 'sold', 'rented', 'archived'],
+  under_offer: ['draft', 'active', 'sold', 'rented', 'archived'],
   sold: ['archived'],
   rented: ['active', 'archived'],
   archived: ['draft'],
@@ -60,7 +63,10 @@ const listSelect = {
 const detailInclude = {
   assigned: { select: { id: true, user: { select: { fullName: true, email: true } } } },
   project: { select: { id: true, name: true } },
-  permits: { orderBy: { validUntil: 'desc' } },
+  permits: {
+    orderBy: { validUntil: 'desc' },
+    include: { document: { select: { contentType: true, fileName: true, updatedAt: true } } },
+  },
 } as const;
 
 @Injectable()
@@ -299,11 +305,13 @@ export class InventoryService {
   remove(ctx: TenantRequestContext, id: string) {
     return this.run(ctx, async (tx) => {
       const current = await this.loadEditable(tx, ctx, id);
-      if (!['draft', 'archived'].includes(current.status)) {
-        throw new AppError(409, 'INVALID_STATUS_CHANGE', 'Archive the listing before deleting it.');
-      }
+      // Managers can delete any listing (a live one leaves the portal at once); agents their drafts.
       if (!this.canManage(ctx) && current.status !== 'draft') {
-        throw new AppError(403, 'PERMISSION_DENIED', 'Only managers can delete archived listings.');
+        throw new AppError(
+          403,
+          'PERMISSION_DENIED',
+          'Only managers can delete published listings.',
+        );
       }
       await tx.property.update({ where: { id: current.id }, data: { deletedAt: new Date() } });
       await audit(tx, ctx, {
@@ -354,6 +362,100 @@ export class InventoryService {
         entityType: 'property',
         entityId: property.id,
       });
+    });
+  }
+
+  /** Renews a permit: new expiry date (and number). A listing hidden for an expired permit returns. */
+  updatePermit(
+    ctx: TenantRequestContext,
+    propertyId: string,
+    permitId: string,
+    input: PermitUpdateInput,
+  ) {
+    return this.run(ctx, async (tx) => {
+      const property = await this.loadEditable(tx, ctx, propertyId);
+      const before = await tx.propertyPermit.findFirst({
+        where: { id: permitId, propertyId: property.id },
+      });
+      if (!before) throw notFound('Permit');
+      const permit = await tx.propertyPermit
+        .update({ where: { id: before.id }, data: input })
+        .catch((err: unknown) => {
+          if (isUniqueViolation(err)) {
+            throw new AppError(
+              409,
+              'CONFLICT_DUPLICATE',
+              'This permit number is already used on another listing.',
+            );
+          }
+          throw err;
+        });
+      await audit(tx, ctx, {
+        action: 'property.permit_updated',
+        entityType: 'property',
+        entityId: property.id,
+        before: { permitNumber: before.permitNumber, validUntil: before.validUntil },
+        after: { permitNumber: permit.permitNumber, validUntil: permit.validUntil },
+      });
+      return permit;
+    });
+  }
+
+  /** Stores (or replaces) the permit document: a PDF, or a photo/scan re-encoded without metadata. */
+  async setPermitDocument(
+    ctx: TenantRequestContext,
+    propertyId: string,
+    permitId: string,
+    fileName: string,
+    input: Buffer,
+  ) {
+    const doc = await normaliseDocument(input).catch((err: unknown) => {
+      if (err instanceof MediaError) {
+        throw new AppError(err.code === 'IMAGE_TOO_LARGE' ? 413 : 415, err.code, err.message);
+      }
+      throw err;
+    });
+    return this.run(ctx, async (tx) => {
+      const property = await this.loadEditable(tx, ctx, propertyId);
+      const permit = await tx.propertyPermit.findFirst({
+        where: { id: permitId, propertyId: property.id },
+        select: { id: true },
+      });
+      if (!permit) throw notFound('Permit');
+      const name =
+        doc.contentType === 'application/pdf'
+          ? fileName.replace(/(\.pdf)?$/i, '.pdf')
+          : fileName.replace(/\.[a-z0-9]{1,5}$/i, '') + '.jpg';
+      const data = {
+        contentType: doc.contentType,
+        fileName: name,
+        bytes: new Uint8Array(doc.bytes),
+        sha256: doc.sha256,
+        uploadedBy: ctx.userId,
+      };
+      await tx.propertyPermitDocument.upsert({
+        where: { permitId: permit.id },
+        create: { permitId: permit.id, tenantId: ctx.tenantId, ...data },
+        update: data,
+        select: { permitId: true },
+      });
+      await audit(tx, ctx, {
+        action: 'property.permit_document_uploaded',
+        entityType: 'property',
+        entityId: property.id,
+        after: { permitId: permit.id, sha256: doc.sha256, bytes: doc.bytes.length },
+      });
+      return { contentType: doc.contentType, fileName: name };
+    });
+  }
+
+  permitDocument(ctx: TenantRequestContext, propertyId: string, permitId: string) {
+    return this.run(ctx, async (tx) => {
+      const doc = await tx.propertyPermitDocument.findFirst({
+        where: { permitId, permit: { propertyId, property: { deletedAt: null } } },
+      });
+      if (!doc) throw notFound('Permit document');
+      return doc;
     });
   }
 
@@ -510,11 +612,19 @@ export class InventoryService {
     });
     if (settings.requirePermitToPublish) {
       const today = new Date(new Date().toISOString().slice(0, 10));
+      // A permit counts once it has its number or its document on file.
       const valid = await tx.propertyPermit.count({
-        where: { propertyId: p.id, validUntil: { gte: today } },
+        where: {
+          propertyId: p.id,
+          validUntil: { gte: today },
+          OR: [{ permitNumber: { not: null } }, { document: { isNot: null } }],
+        },
       });
       if (valid === 0) {
-        missing.push({ path: 'permits', message: 'Add a valid advertising permit to publish' });
+        missing.push({
+          path: 'permits',
+          message: 'Add an unexpired advertising permit (its number or the permit document)',
+        });
       }
     }
     if (missing.length > 0) {

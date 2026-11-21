@@ -371,27 +371,118 @@ describe('listings', () => {
     expect((await http().get('/v1/projects').set(a.h).expect(200)).body.data).toEqual([]);
   });
 
-  it('soft-deletes drafts only', async () => {
+  it('lets managers delete any listing, live ones included, and agents only their drafts', async () => {
     const o = await createOwner('owner@a.test', 'Alpha Realty');
     await t.owner.agencySettings.update({
       where: { tenantId: o.tenantId },
       data: { requirePermitToPublish: false },
     });
+    const agent = await inviteNew(o, 'agent@a.test', 'agent');
+    const live = (await http().post('/v1/properties').set(agent.h).send(draft()).expect(201)).body;
+    await http()
+      .post(`/v1/properties/${live.id}/status`)
+      .set(agent.h)
+      .send({ status: 'active' })
+      .expect(200);
+    await http().delete(`/v1/properties/${live.id}`).set(agent.h).expect(403);
+    await http().delete(`/v1/properties/${live.id}`).set(o.h).expect(204);
+    await http().get(`/v1/properties/${live.id}`).set(o.h).expect(404);
+
+    const agentDraft = (await http().post('/v1/properties').set(agent.h).send(draft()).expect(201))
+      .body;
+    await http().delete(`/v1/properties/${agentDraft.id}`).set(agent.h).expect(204);
+    expect(await t.owner.property.count()).toBe(2);
+  });
+
+  it('unpublishes a live listing back to draft and publishes it again', async () => {
+    const o = await createOwner('owner@a.test', 'Alpha Realty');
     const p = (await http().post('/v1/properties').set(o.h).send(draft()).expect(201)).body;
+    await http().post(`/v1/properties/${p.id}/permits`).set(o.h).send(permit).expect(201);
+    const move = (status: string) =>
+      http().post(`/v1/properties/${p.id}/status`).set(o.h).send({ status }).expect(200);
+    await move('active');
+    expect((await move('draft')).body.status).toBe('draft');
+    expect((await move('active')).body.status).toBe('active');
+  });
+
+  it('accepts a permit document instead of a number, keeps it private, and renews permits', async () => {
+    const o = await createOwner('owner@a.test', 'Alpha Realty');
+    const b = await createOwner('owner@b.test', 'Bravo Realty');
+    const p = (await http().post('/v1/properties').set(o.h).send(draft()).expect(201)).body;
+    const created = await http()
+      .post(`/v1/properties/${p.id}/permits`)
+      .set(o.h)
+      .send({ authority: 'DLD', validUntil: '2099-12-31' })
+      .expect(201);
+    const permitId = created.body.id as string;
+    expect(created.body.permitNumber).toBeNull();
+
+    // Without its number or its document, the permit does not count yet.
+    const blocked = await http()
+      .post(`/v1/properties/${p.id}/status`)
+      .set(o.h)
+      .send({ status: 'active' })
+      .expect(422);
+    expect(blocked.body.errors.map((e: { path: string }) => e.path)).toEqual(['permits']);
+
+    const docUrl = `/v1/properties/${p.id}/permits/${permitId}/document`;
+    await http()
+      .put(`${docUrl}?fileName=permit.html`)
+      .set(o.h)
+      .set('Content-Type', 'application/octet-stream')
+      .send(Buffer.from('<html><script>alert(1)</script></html>'))
+      .expect(415);
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF');
+    const saved = await http()
+      .put(`${docUrl}?fileName=Trakheesi%20permit.pdf`)
+      .set(o.h)
+      .set('Content-Type', 'application/pdf')
+      .send(pdf)
+      .expect(200);
+    expect(saved.body).toEqual({
+      contentType: 'application/pdf',
+      fileName: 'Trakheesi permit.pdf',
+    });
+
+    const file = await http().get(docUrl).set(o.h).buffer(true).expect(200);
+    expect(file.headers['content-type']).toBe('application/pdf');
+    expect(file.headers['content-disposition']).toContain('attachment');
+    await http().get(docUrl).set(b.h).expect(404);
+    await http()
+      .put(`${docUrl}?fileName=x.pdf`)
+      .set(b.h)
+      .set('Content-Type', 'application/pdf')
+      .send(pdf)
+      .expect(404);
+
+    const detail = await http().get(`/v1/properties/${p.id}`).set(o.h).expect(200);
+    expect(detail.body.permits[0].document).toMatchObject({ fileName: 'Trakheesi permit.pdf' });
     await http()
       .post(`/v1/properties/${p.id}/status`)
       .set(o.h)
       .send({ status: 'active' })
       .expect(200);
-    await http().delete(`/v1/properties/${p.id}`).set(o.h).expect(409);
+
+    // The public listing never carries the document.
+    await t.owner.agency.update({ where: { id: o.tenantId }, data: { status: 'active' } });
+    const pub = await http().get(`/v1/public/listings/${p.id}`).expect(200);
+    expect(JSON.stringify(pub.body)).not.toContain('Trakheesi permit.pdf');
+    expect(pub.body.permit).toMatchObject({ authority: 'DLD', number: null });
+
+    // An expired permit takes the listing off the portal; renewing it brings it back.
     await http()
-      .post(`/v1/properties/${p.id}/status`)
+      .patch(`/v1/properties/${p.id}/permits/${permitId}`)
       .set(o.h)
-      .send({ status: 'archived' })
+      .send({ validUntil: '2020-01-01' })
       .expect(200);
-    await http().delete(`/v1/properties/${p.id}`).set(o.h).expect(204);
-    await http().get(`/v1/properties/${p.id}`).set(o.h).expect(404);
-    expect(await t.owner.property.count()).toBe(1);
+    await http().get(`/v1/public/listings/${p.id}`).expect(404);
+    const renewed = await http()
+      .patch(`/v1/properties/${p.id}/permits/${permitId}`)
+      .set(o.h)
+      .send({ validUntil: '2099-06-30', permitNumber: '7100099999' })
+      .expect(200);
+    expect(renewed.body.permitNumber).toBe('7100099999');
+    await http().get(`/v1/public/listings/${p.id}`).expect(200);
   });
 });
 

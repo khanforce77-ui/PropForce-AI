@@ -57,10 +57,20 @@ test('owner adds a listing, publishes it with a permit and sees it on the dashbo
   // Publishing needs a permit first.
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('This listing is not ready to publish.')).toBeVisible();
-  await page.getByLabel('Permit number').fill(`71${Date.now().toString().slice(-8)}`);
-  await page.getByLabel('Valid until').fill('2099-12-31');
+  // The permit paper is enough; the number is optional.
+  await page.getByLabel('Expiry date').fill('2099-12-31');
+  await page.getByLabel('Permit document (PDF or photo)').setInputFiles(fixture('permit.pdf'));
   await page.getByRole('button', { name: 'Add permit' }).click();
   await expect(page.getByText('Permit added.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View document' })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish' }).click();
+  await expect(page.getByText('Listing is now live.')).toBeVisible();
+
+  // Unpublish takes it off the portal; publishing again brings it back.
+  await page.getByRole('button', { name: 'Unpublish' }).click();
+  await expect(
+    page.getByText('Unpublished. The listing is no longer on the portal.'),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('Listing is now live.')).toBeVisible();
 

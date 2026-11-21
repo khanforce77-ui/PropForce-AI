@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultWatermark,
   MediaError,
+  normaliseDocument,
   normaliseLogo,
   prepareWatermark,
   processListingPhoto,
@@ -130,5 +131,24 @@ describe('logos', () => {
     expect(alphaAt(5, 5)).toBe(0); // the white background became transparent
     expect(alphaAt(200, 100)).toBeGreaterThan(40); // the logo shows, faintly
     expect(alphaAt(200, 100)).toBeLessThan(120);
+  });
+});
+
+describe('normaliseDocument', () => {
+  it('keeps PDFs, re-encodes scans without metadata, refuses anything else', async () => {
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF');
+    expect((await normaliseDocument(pdf)).contentType).toBe('application/pdf');
+    const scan = await sharp({
+      create: { width: 800, height: 600, channels: 3, background: '#fff' },
+    })
+      .withExif({ IFD0: { Make: 'Scanner' } })
+      .png()
+      .toBuffer();
+    const out = await normaliseDocument(scan);
+    expect(out.contentType).toBe('image/jpeg');
+    expect((await sharp(out.bytes).metadata()).exif).toBeUndefined();
+    await expect(normaliseDocument(Buffer.from('<html><script>x</script></html>'))).rejects.toThrow(
+      /Upload a PDF/,
+    );
   });
 });

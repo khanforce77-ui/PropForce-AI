@@ -29,6 +29,8 @@ export interface RequestOptions {
   query?: Record<string, string | number | undefined>;
   /** Adds the CSRF header required by cookie-authenticated endpoints. */
   csrf?: boolean;
+  /** 'blob' returns the response body as a Blob (file downloads). */
+  responseType?: 'json' | 'blob';
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -52,6 +54,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     body: raw ?? (options.body === undefined ? null : JSON.stringify(options.body)),
   });
   if (res.status === 204) return undefined as T;
+  if (res.ok && options.responseType === 'blob') return (await res.blob()) as T;
   if (res.status === 413) {
     throw new ApiError(413, { detail: 'This file is too large to upload. Try a smaller photo.' });
   }
@@ -148,7 +151,9 @@ export interface PropertySummary {
 export interface Permit {
   id: string;
   authority: string;
-  permitNumber: string;
+  permitNumber: string | null;
+  /** The uploaded permit document (private to the agency), if any. */
+  document: { contentType: string; fileName: string; updatedAt: string } | null;
   validUntil: string;
 }
 

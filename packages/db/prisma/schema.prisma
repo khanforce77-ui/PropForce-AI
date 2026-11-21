@@ -461,16 +461,39 @@ model PropertyPermit {
   tenantId     String   @map("tenant_id") @db.Uuid
   propertyId   String   @map("property_id") @db.Uuid
   authority    String
-  permitNumber String   @map("permit_number")
+  /// Optional when the agency uploads the permit document instead.
+  permitNumber String?  @map("permit_number")
   validUntil   DateTime @map("valid_until") @db.Date
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  agency   Agency                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property                @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  document PropertyPermitDocument?
 
   @@unique([tenantId, authority, permitNumber])
+  @@unique([id, tenantId])
   @@index([propertyId])
   @@map("property_permit")
+}
+
+/// The scanned or PDF permit issued by the regulator. Private to the agency: the public portal has
+/// no access to this table.
+model PropertyPermitDocument {
+  permitId    String   @id @map("permit_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  /// application/pdf, image/jpeg or image/png, detected from the file's bytes.
+  contentType String   @map("content_type")
+  fileName    String   @map("file_name")
+  bytes       Bytes
+  sha256      String
+  uploadedBy  String   @map("uploaded_by") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permit PropertyPermit @relation(fields: [permitId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([permitId, tenantId])
+  @@index([tenantId])
+  @@map("property_permit_document")
 }
 
 // ───────────────────────────── Public portal ─────────────────────────────
