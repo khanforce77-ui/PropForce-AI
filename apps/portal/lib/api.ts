@@ -40,6 +40,9 @@ export interface ListingCard {
   furnishing: string | null;
   verifiedAt: string | null;
   listedAt: string;
+  /** Off-plan project name and expected handover (YYYY-MM-DD), when set. */
+  project?: string | null;
+  handoverDate?: string | null;
   /** number is null when the agency uploaded the permit document instead of typing it. */
   permit: {
     authority: string;
@@ -60,8 +63,6 @@ export interface ListingDetail extends ListingCard {
   parking: number | null;
   view: string | null;
   developer: string | null;
-  project: string | null;
-  handoverDate: string | null;
   paymentPlan: { milestone: string; percent: number }[] | null;
   serviceChargePerSqft: number | null;
   description: string | null;

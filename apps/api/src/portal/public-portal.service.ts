@@ -63,6 +63,8 @@ const cardSelect = {
   furnishing: true,
   verifiedAt: true,
   createdAt: true,
+  handoverDate: true,
+  project: { select: { name: true } },
   agency: { select: agencySelect },
   assigned: { select: agentSelect },
   permits: {
@@ -81,12 +83,10 @@ const detailSelect = {
   parking: true,
   view: true,
   developer: true,
-  handoverDate: true,
   paymentPlan: true,
   serviceChargePerSqft: true,
   description: true,
   updatedAt: true,
-  project: { select: { name: true } },
   latitude: true,
   longitude: true,
   photos: { select: photoSelect, orderBy: { position: 'asc' } },
@@ -150,6 +150,8 @@ function toCard(row: CardRow) {
     furnishing: row.furnishing,
     verifiedAt: row.verifiedAt,
     listedAt: row.createdAt,
+    project: row.project?.name ?? null,
+    handoverDate: day(row.handoverDate),
     permit: permit
       ? {
           authority: permit.authority,
@@ -173,8 +175,6 @@ function toDetail(row: DetailRow) {
     parking: row.parking,
     view: row.view,
     developer: row.developer,
-    project: row.project?.name ?? null,
-    handoverDate: day(row.handoverDate),
     paymentPlan: row.paymentPlan,
     serviceChargePerSqft: num(row.serviceChargePerSqft),
     description: row.description,
@@ -216,6 +216,8 @@ export class PublicPortalService {
       ...(q.baths !== undefined ? { bathrooms: { gte: q.baths } } : {}),
       ...(q.amenity ? { amenities: { has: q.amenity } } : {}),
       ...(q.agent ? { assignedMembershipId: q.agent } : {}),
+      ...(q.project ? { project: { name: { equals: q.project, mode: 'insensitive' } } } : {}),
+      ...(q.ids ? { id: { in: q.ids } } : {}),
       ...(q.minPrice !== undefined || q.maxPrice !== undefined
         ? {
             price: {
@@ -250,7 +252,9 @@ export class PublicPortalService {
         ? [{ price: 'asc' }, { id: 'desc' }]
         : q.sort === 'price_desc'
           ? [{ price: 'desc' }, { id: 'desc' }]
-          : [{ verifiedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }];
+          : q.sort === 'handover'
+            ? [{ handoverDate: { sort: 'asc', nulls: 'last' } }, { id: 'desc' }]
+            : [{ verifiedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }];
     return this.run(async (tx) => {
       const [rows, total] = await Promise.all([
         tx.property.findMany({

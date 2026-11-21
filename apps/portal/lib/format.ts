@@ -94,6 +94,7 @@ const SEARCH_KEYS = [
   'q',
   'agency',
   'agent',
+  'project',
   'sort',
   'page',
 ] as const;

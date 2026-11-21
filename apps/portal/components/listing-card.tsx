@@ -1,6 +1,7 @@
 import { Bath, BedDouble, Building2, Camera, Home, MapPin, Ruler, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { AgentAvatar } from '@/components/agent-avatar';
+import { SaveButton } from '@/components/save-button';
 import type { ListingCard as Card } from '@/lib/api';
 import { photoUrl } from '@/lib/photos';
 import {
@@ -46,6 +47,10 @@ export function ListingCard({ listing }: { listing: Card }) {
           ) : (
             <PhotoPlaceholder type={listing.type} className="h-44" />
           )}
+          <SaveButton
+            id={listing.id}
+            className="absolute bottom-3 left-3 rounded-full bg-background/90 p-2 hover:text-red-500"
+          />
           {listing.photoCount ? (
             <span className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
               <Camera className="h-3 w-3" aria-hidden /> {listing.photoCount}
@@ -53,7 +58,9 @@ export function ListingCard({ listing }: { listing: Card }) {
           ) : null}
           <span className="absolute left-3 top-3 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium">
             {TYPE_LABEL[listing.type] ?? 'Property'}
-            {listing.completion === 'off_plan' ? ' · Off-plan' : ''}
+            {listing.completion === 'off_plan'
+              ? ` · Off-plan${listing.handoverDate ? `, handover ${listing.handoverDate.slice(0, 4)}` : ''}`
+              : ''}
           </span>
           {listing.permit ? (
             <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">

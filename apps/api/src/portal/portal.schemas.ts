@@ -7,7 +7,7 @@ const queryInt = (min: number, max: number) => z.coerce.number().int().min(min).
 const queryMoney = z.coerce.number().min(0).max(1_000_000_000_000);
 const queryText = (max: number) => z.string().trim().min(1).max(max);
 
-export const publicSorts = ['newest', 'price_asc', 'price_desc'] as const;
+export const publicSorts = ['newest', 'price_asc', 'price_desc', 'handover'] as const;
 
 /** Search on the public portal. Unknown keys are refused, like every API input. */
 export const publicSearchSchema = z.strictObject({
@@ -32,6 +32,29 @@ export const publicSearchSchema = z.strictObject({
   agency: queryText(80).optional(),
   /** One agent's listings, by their public id. */
   agent: z.uuid().optional(),
+  /** Off-plan project name (exact, any case). */
+  project: queryText(120).optional(),
+  /** Specific listings, e.g. a visitor's saved ones: comma-separated ids, at most 100. */
+  ids: z
+    .string()
+    .max(100 * 37)
+    .transform((v, ctx) => {
+      const list = [
+        ...new Set(
+          v
+            .split(',')
+            .map((x) => x.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ];
+      const ok = list.length <= 100 && list.every((x) => z.uuid().safeParse(x).success);
+      if (!ok) {
+        ctx.addIssue({ code: 'custom', message: 'ids must be up to 100 listing ids' });
+        return z.NEVER;
+      }
+      return list;
+    })
+    .optional(),
   sort: z.enum(publicSorts).default('newest'),
   page: queryInt(1, 200).default(1),
   pageSize: queryInt(1, 48).default(24),

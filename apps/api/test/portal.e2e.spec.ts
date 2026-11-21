@@ -698,3 +698,51 @@ describe('public portal: Bayut-style discovery and trust', () => {
     expect(after.permit.verificationUrl).toBeNull();
   });
 });
+
+describe('public portal: saved listings and new projects', () => {
+  it('fetches saved listings by id, skipping hidden ones, and refuses bad ids', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const p1 = await publishedListing(a);
+    const p2 = await publishedListing(a);
+    const hidden = await publishedListing(a, { status: 'draft' });
+    await publishedListing(a);
+
+    const res = await http()
+      .get('/v1/public/listings')
+      .query({ ids: `${p1.id},${p2.id},${hidden.id}` })
+      .expect(200);
+    expect(res.body.data.map((r: { id: string }) => r.id).sort()).toEqual([p1.id, p2.id].sort());
+    await http().get('/v1/public/listings').query({ ids: 'nope' }).expect(400);
+  });
+
+  it('shows the off-plan project name and handover, filters by project, sorts by handover', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    const vista = await t.owner.project.create({
+      data: { tenantId: a.tenantId, name: 'Marina Vista', emirate: 'Dubai' },
+    });
+    const late = await publishedListing(a, {
+      completion: 'off_plan',
+      projectId: vista.id,
+      handoverDate: new Date('2029-03-31'),
+    });
+    const soon = await publishedListing(a, {
+      completion: 'off_plan',
+      projectId: vista.id,
+      handoverDate: new Date('2027-09-30'),
+    });
+    await publishedListing(a);
+
+    const res = await http()
+      .get('/v1/public/listings')
+      .query({ completion: 'off_plan', sort: 'handover' })
+      .expect(200);
+    expect(res.body.data.map((r: { id: string }) => r.id)).toEqual([soon.id, late.id]);
+    expect(res.body.data[0]).toMatchObject({ project: 'Marina Vista', handoverDate: '2027-09-30' });
+    expect(
+      (await http().get('/v1/public/listings').query({ project: 'marina vista' }).expect(200)).body
+        .total,
+    ).toBe(2);
+    const detail = (await http().get(`/v1/public/listings/${soon.id}`).expect(200)).body;
+    expect(detail.project).toBe('Marina Vista');
+  });
+});
