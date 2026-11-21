@@ -14,6 +14,8 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { ContactActions } from '@/components/contact-actions';
 import { EnquiryForm } from '@/components/enquiry-form';
 import { PhotoPlaceholder } from '@/components/listing-card';
+import { PhotoGallery } from '@/components/photo-gallery';
+import { photoUrl } from '@/lib/photos';
 import { getListing, type ListingDetail } from '@/lib/api';
 import { siteUrl } from '@/lib/config';
 import {
@@ -51,7 +53,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: listingPath(l) },
-    openGraph: { title, description, url: listingPath(l), type: 'website' },
+    openGraph: {
+      title,
+      description,
+      url: listingPath(l),
+      type: 'website',
+      ...(l.photos?.[0] ? { images: [photoUrl(l.photos[0], 'display')] } : {}),
+    },
   };
 }
 
@@ -134,7 +142,11 @@ export default async function PropertyPage({ params }: Props) {
 
       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          <PhotoPlaceholder type={l.type} className="h-64 rounded-2xl sm:h-96" />
+          {l.photos?.length ? (
+            <PhotoGallery photos={l.photos} title={title} />
+          ) : (
+            <PhotoPlaceholder type={l.type} className="h-64 rounded-2xl sm:h-96" />
+          )}
           <div>
             <p className="text-3xl font-bold">{formatPrice(l.price, l.rentPeriod)}</p>
             <h1 className="mt-1 text-xl font-semibold">{title}</h1>
