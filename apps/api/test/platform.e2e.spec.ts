@@ -433,3 +433,38 @@ describe('platform admin inside any agency', () => {
     await http().post('/v1/platform/direct').set(o.auth).expect(403);
   });
 });
+
+describe('platform dashboard', () => {
+  it('returns daily trends, totals and top agencies across all agencies', async () => {
+    const admin = await platformAdmin();
+    const a = await createOwner('owner@alpha.test', 'Alpha Realty');
+    await http()
+      .post('/v1/properties')
+      .set(a.h)
+      .send({ listingType: 'sale', propertyType: 'villa', emirate: 'Dubai' })
+      .expect(201);
+    const c = await http()
+      .post('/v1/contacts')
+      .set(a.h)
+      .send({ fullName: 'Buyer', phone: '0501231234' })
+      .expect(201);
+    await http()
+      .post('/v1/leads')
+      .set(a.h)
+      .send({ contactId: c.body.id, intent: 'buy' })
+      .expect(201);
+
+    const res = await http().get('/v1/platform/dashboard?days=14').set(admin.auth).expect(200);
+    expect(res.body.dates).toHaveLength(14);
+    const today = new Date(Date.now() + 4 * 3_600_000).toISOString().slice(0, 10);
+    expect(res.body.dates.at(-1)).toBe(today);
+    const sum = (xs: number[]) => xs.reduce((x, y) => x + y, 0);
+    expect(sum(res.body.series.agencies)).toBe(2);
+    expect(sum(res.body.series.listings)).toBe(1);
+    expect(sum(res.body.series.leads)).toBe(1);
+    expect(res.body.totals).toMatchObject({ leads: 1, openLeads: 1, enquiries: 0 });
+    expect(res.body.topAgencies[0]).toMatchObject({ name: 'Alpha Realty', listings: 1, leads: 1 });
+
+    await http().get('/v1/platform/dashboard').set(a.auth).expect(403);
+  });
+});
