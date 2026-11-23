@@ -49,6 +49,15 @@ const envSchema = z.object({
     .default('v21.0'),
   /** `fake` records sends in memory (development/test only). Default: fake locally, meta when deployed. */
   WHATSAPP_PROVIDER: z.enum(['meta', 'fake']).optional(),
+  /**
+   * AI replies on WhatsApp. `fake` uses a scripted model (development/test only). Default: fake
+   * locally, openai when deployed with OPENAI_API_KEY, otherwise off (agents reply by hand).
+   */
+  AI_PROVIDER: z.enum(['openai', 'fake', 'none']).optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().min(1).max(100).default('gpt-4.1-mini'),
+  /** Per-agency AI token cap per calendar month (input + output). */
+  AI_MONTHLY_TOKEN_CAP: z.coerce.number().int().min(0).default(2_000_000),
   /** Public URL of the property portal website (apps/portal), used in WhatsApp messages. */
   PORTAL_PUBLIC_URL: z.url().default('http://localhost:3100'),
   /**
@@ -94,6 +103,13 @@ export interface AppConfig {
     verifyToken?: string;
     graphVersion: string;
   };
+  ai: {
+    /** `none`: AI replies are off; conversations wait for an agent. */
+    provider: 'openai' | 'fake' | 'none';
+    openaiApiKey?: string;
+    model: string;
+    monthlyTokenCap: number;
+  };
 }
 
 /** Validates process environment once at boot. Invalid config stops the process. */
@@ -133,6 +149,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       'Invalid environment configuration: WHATSAPP_PROVIDER=fake is not allowed in staging/production',
     );
   }
+  if (deployed && e.AI_PROVIDER === 'fake') {
+    throw new Error(
+      'Invalid environment configuration: AI_PROVIDER=fake is not allowed in staging/production',
+    );
+  }
+  if (e.AI_PROVIDER === 'openai' && !e.OPENAI_API_KEY) {
+    throw new Error('Invalid environment configuration: AI_PROVIDER=openai needs OPENAI_API_KEY');
+  }
+  const aiProvider = e.AI_PROVIDER ?? (!deployed ? 'fake' : e.OPENAI_API_KEY ? 'openai' : 'none');
   const metaConfigured = Boolean(e.META_APP_ID && e.META_APP_SECRET);
   const waProvider =
     e.WHATSAPP_PROVIDER === 'fake' || (!e.WHATSAPP_PROVIDER && !deployed)
@@ -173,6 +198,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(e.META_APP_SECRET ? { appSecret: e.META_APP_SECRET } : {}),
       ...(e.META_WEBHOOK_VERIFY_TOKEN ? { verifyToken: e.META_WEBHOOK_VERIFY_TOKEN } : {}),
       graphVersion: e.META_GRAPH_VERSION,
+    },
+    ai: {
+      provider: aiProvider,
+      ...(e.OPENAI_API_KEY ? { openaiApiKey: e.OPENAI_API_KEY } : {}),
+      model: e.OPENAI_MODEL,
+      monthlyTokenCap: e.AI_MONTHLY_TOKEN_CAP,
     },
   };
 }

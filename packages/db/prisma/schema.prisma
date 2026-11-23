@@ -192,6 +192,8 @@ model Agency {
   whatsappAccounts WhatsAppAccount[]
   conversations    Conversation[]
   messages         Message[]
+  aiRuns           AiRun[]
+  aiToolCalls      AiToolCall[]
   portalEnquiries  PortalEnquiry[]
   portalContacts   PortalContactEvent[]
   listingReports   PortalListingReport[]
@@ -923,6 +925,7 @@ model Conversation {
   contact  Contact         @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
   assignee Membership?     @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
   messages Message[]
+  aiRuns   AiRun[]
 
   @@unique([tenantId, whatsappAccountId, contactId])
   @@unique([id, tenantId])
@@ -947,6 +950,8 @@ model Message {
   status         MessageStatus
   errorCode      Int?             @map("error_code")
   statusAt       DateTime?        @map("status_at") @db.Timestamptz(3)
+  /// Set when an AI turn takes this inbound message, so two webhook deliveries never answer twice.
+  aiClaimedAt    DateTime?        @map("ai_claimed_at") @db.Timestamptz(3)
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
   agency       Agency       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -955,6 +960,54 @@ model Message {
   @@unique([tenantId, wamid])
   @@index([tenantId, conversationId, createdAt(sort: Desc)])
   @@map("message")
+}
+
+/// One AI turn in a conversation: model, prompt version, tokens and outcome (for audit and spend).
+model AiRun {
+  id                 String   @id @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  conversationId     String   @map("conversation_id") @db.Uuid
+  provider           String
+  model              String
+  promptVersion      String   @map("prompt_version")
+  inputTokens        Int      @map("input_tokens")
+  outputTokens       Int      @map("output_tokens")
+  latencyMs          Int      @map("latency_ms")
+  /// reply | handover
+  outcome            String
+  handoverReason     String?  @map("handover_reason")
+  injectionSuspected Boolean  @map("injection_suspected")
+  groundingFailures  String[] @default([]) @map("grounding_failures")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency       Agency       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, conversationId, createdAt(sort: Desc)])
+  @@map("ai_run")
+}
+
+/// Every tool call the AI attempted, allowed or refused. Append-only.
+model AiToolCall {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  runId          String   @map("run_id") @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  tool           String
+  /// Validated arguments, or only the argument names when validation failed.
+  args           Json
+  /// ok | approval_required | refused | error
+  outcome        String
+  code           String?
+  latencyMs      Int      @map("latency_ms")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, runId])
+  @@index([tenantId, conversationId, createdAt(sort: Desc)])
+  @@map("ai_tool_call")
 }
 
 // ───────────────────────────── Cost calculator ─────────────────────────────

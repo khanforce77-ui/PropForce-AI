@@ -12,13 +12,14 @@ import {
 } from '@nestjs/common';
 import { parseWebhook, verifySubscription, verifyWebhookSignature } from '@propforce/whatsapp';
 import type { Request } from 'express';
+import { AiDispatcher } from '../ai/ai-dispatcher';
 import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { InboundService } from './inbound.service';
 
 /**
  * Meta WhatsApp webhook (public; authenticated by the X-Hub-Signature-256 HMAC over the raw body).
- * Processing is inline for now and only touches the database; the AI reply runs separately.
+ * Storage is inline (so a failure makes Meta retry); the AI reply runs after the response.
  */
 @Controller('webhooks/whatsapp')
 export class WhatsAppWebhookController {
@@ -26,6 +27,7 @@ export class WhatsAppWebhookController {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly inbound: InboundService,
+    private readonly ai: AiDispatcher,
   ) {}
 
   @Get()
@@ -56,10 +58,19 @@ export class WhatsAppWebhookController {
     }
     if (parsed.skipped > 0) this.log.warn({ skipped: parsed.skipped }, 'Skipped webhook items');
     // Errors propagate as 5xx so that Meta retries; storage is idempotent by message id.
+    const toAnswer = new Map<string, string>();
     for (const ev of parsed.events) {
-      if (ev.kind === 'message') await this.inbound.handleMessage(ev);
-      else await this.inbound.handleStatus(ev);
+      if (ev.kind === 'message') {
+        const out = await this.inbound.handleMessage(ev);
+        if (out.kind === 'stored' && out.mode === 'ai' && !out.optedOut) {
+          toAnswer.set(out.conversationId, out.tenantId);
+        }
+      } else {
+        await this.inbound.handleStatus(ev);
+      }
     }
+    // One AI turn per conversation, even when a delivery carries several messages.
+    for (const [conversationId, tenantId] of toAnswer) this.ai.dispatch(tenantId, conversationId);
     return { received: true };
   }
 }

@@ -311,3 +311,23 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - API: the display number is now optional on connect and is looked up from Meta with the agency's token.
 
 **Tested**: API e2e for connect without a display number; Graph lookup unit test (offline). The Meta popup itself is not tested yet (needs the real Meta app).
+
+## Phase 2 · PR 6 · AI replies on WhatsApp (2026-11-23)
+
+**Built**
+
+- When a client writes to a conversation in AI mode, the webhook stores the message, answers Meta, and then runs one AI turn (`AiDispatcher`, Vercel `waitUntil`). Unanswered client messages are claimed under a row lock (`message.ai_claimed_at`), so two deliveries never produce two answers.
+- Real tool handlers (`apps/api/src/ai/ai-tools.ts`), each in a tenant transaction for the agency the number belongs to:
+  - `search_properties`, `get_property_details`: active, unexpired listings only, deterministic filters. Agency-written text is sanitized and shortened.
+  - `create_lead`, `update_lead_requirement`, `get_client_history`, `suggest_property_matches` (filter-based for now), `create_followup_task`, `notify_assigned_agent`: on the CRM lead for this contact, audited as `actor_type = ai`.
+  - `request_viewing_booking`: recorded on the lead for the agent to confirm. Never a booking: auto-confirm stays off until the agent calendar is connected. Refused when no agent is assigned.
+  - `check_agent_availability`: returns no slots until Google Calendar is connected.
+  - `calculate_property_costs`: only when every fee rule involved is verified by the agency. The seeded samples are not, so the AI says the agent will share costs.
+  - `request_human_handover`: switches the conversation to human mode.
+- The AI acts within the assigned agent's role. Gates are re-checked just before sending: AI mode, consent, the 24-hour window, an active number, and no agent reply since the turn started. A failed send hands over.
+- Migration `20261123010000_ai_runs`: `ai_run` (model, prompt version, tokens, outcome) and `ai_tool_call` (every attempt, allowed or refused), append-only, tenant RLS. Spend cap per agency per month (`AI_MONTHLY_TOKEN_CAP`) and tool rate limits are counted from these tables, so they hold across serverless instances.
+- Config: `AI_PROVIDER` (`openai` | `fake` | `none`), `OPENAI_API_KEY`, `OPENAI_MODEL`. Deployed without a key, AI replies are off and conversations wait for an agent.
+
+**Tested**: 8 API e2e tests (grounded reply from own listings only, invented price → handover, scope argument refused and audited, lead + requirement, viewing request needs approval, unverified fees not quoted, silence after STOP and in human mode, no answer over an agent). All suites pass locally.
+
+**Pending**: the OpenAI adapter has not run against the live API (no key yet). `waitUntil` on Vercel needs a live check with a real number.

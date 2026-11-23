@@ -28,6 +28,8 @@ beforeAll(async () => {
     AUTH_RATE_LIMIT_PER_MINUTE: '1000',
     META_APP_SECRET: SECRET,
     META_WEBHOOK_VERIFY_TOKEN: 'verify-me',
+    // AI replies have their own suite (ai-replies.e2e.spec.ts).
+    AI_PROVIDER: 'none',
   });
   app = t.app;
 });
