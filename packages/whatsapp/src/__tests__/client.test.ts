@@ -154,6 +154,22 @@ describe('Embedded Signup (offline checks only)', () => {
     ).toThrow();
   });
 
+  it('looks up the display number with the business token', async () => {
+    let auth: string | null = null;
+    const es = new MetaEmbeddedSignup({
+      appId: '1',
+      appSecret: 's',
+      graphVersion: 'v21.0',
+      fetch: async (_u, init) => {
+        auth = new Headers(init?.headers).get('authorization');
+        return Response.json({ display_phone_number: '+971 4 123 4567' });
+      },
+    });
+    expect(await es.getDisplayPhoneNumber('106540352242922', 'biz')).toBe('+971 4 123 4567');
+    expect(auth).toBe('Bearer biz');
+    await expect(es.getDisplayPhoneNumber('../x', 'biz')).rejects.toThrow();
+  });
+
   it('fake records subscriptions', async () => {
     const f = new FakeEmbeddedSignup();
     await f.subscribeApp('102290129340398');

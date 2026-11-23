@@ -6,7 +6,8 @@ export const connectAccountSchema = z
     code: z.string().trim().min(10).max(1024),
     wabaId: z.string().regex(/^\d{1,32}$/),
     phoneNumberId: z.string().regex(/^\d{1,32}$/),
-    displayPhoneNumber: z.string().trim().min(5).max(32),
+    /** Optional: looked up from Meta when the signup popup did not provide it. */
+    displayPhoneNumber: z.string().trim().min(5).max(32).optional(),
   })
   .strict();
 export type ConnectAccountInput = z.infer<typeof connectAccountSchema>;

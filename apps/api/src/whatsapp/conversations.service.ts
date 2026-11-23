@@ -74,9 +74,13 @@ export class ConversationsService {
   async connectAccount(ctx: TenantRequestContext, input: ConnectAccountInput) {
     if (!this.signup) throw notConfigured();
     let token: string;
+    let display: string;
     try {
       token = (await this.signup.exchangeCode(input.code)).accessToken;
       await this.signup.subscribeApp(input.wabaId, token);
+      display =
+        input.displayPhoneNumber ??
+        (await this.signup.getDisplayPhoneNumber(input.phoneNumberId, token));
     } catch (e) {
       this.log.warn({ err: (e as Error).message }, 'WhatsApp Embedded Signup failed');
       throw new AppError(
@@ -94,7 +98,7 @@ export class ConversationsService {
             tenantId: ctx.tenantId,
             wabaId: input.wabaId,
             phoneNumberId: input.phoneNumberId,
-            displayPhoneNumber: input.displayPhoneNumber,
+            displayPhoneNumber: display,
             accessTokenEnc: new Uint8Array(this.crypto.encrypt(token, tokenAad(id))),
             connectedBy: ctx.userId,
           },
@@ -110,7 +114,7 @@ export class ConversationsService {
         action: 'whatsapp.connected',
         entityType: 'whatsapp_account',
         entityId: account.id,
-        after: { phoneNumberId: input.phoneNumberId, displayPhoneNumber: input.displayPhoneNumber },
+        after: { phoneNumberId: input.phoneNumberId, displayPhoneNumber: display },
       });
       return account;
     });

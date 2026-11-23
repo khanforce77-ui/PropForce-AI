@@ -26,6 +26,8 @@ export interface ConnectResult {
 export interface EmbeddedSignupPort {
   exchangeCode(code: string): Promise<ConnectResult>;
   subscribeApp(wabaId: string, accessToken: string): Promise<void>;
+  /** The number as shown to clients, e.g. "+971 4 123 4567". */
+  getDisplayPhoneNumber(phoneNumberId: string, accessToken: string): Promise<string>;
 }
 
 const ID = /^\d{1,32}$/;
@@ -69,6 +71,19 @@ export class MetaEmbeddedSignup implements EmbeddedSignupPort {
     });
     if (!res.ok) throw new Error(`Meta webhook subscription failed with HTTP ${res.status}`);
   }
+
+  async getDisplayPhoneNumber(phoneNumberId: string, accessToken: string): Promise<string> {
+    if (!ID.test(phoneNumberId)) throw new Error('Invalid phone number id');
+    const res = await (this.cfg.fetch ?? fetch)(
+      `${this.base}/${phoneNumberId}?fields=display_phone_number`,
+      { headers: { authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) },
+    );
+    const json = (await res.json().catch(() => ({}))) as { display_phone_number?: unknown };
+    if (!res.ok || typeof json.display_phone_number !== 'string') {
+      throw new Error(`Meta phone number lookup failed with HTTP ${res.status}`);
+    }
+    return json.display_phone_number.slice(0, 32);
+  }
 }
 
 export class FakeEmbeddedSignup implements EmbeddedSignupPort {
@@ -79,5 +94,8 @@ export class FakeEmbeddedSignup implements EmbeddedSignupPort {
   }
   async subscribeApp(wabaId: string): Promise<void> {
     this.subscribed.push(wabaId);
+  }
+  async getDisplayPhoneNumber(phoneNumberId: string): Promise<string> {
+    return `+971 4 ${phoneNumberId.slice(-7).padStart(7, '0')}`;
   }
 }

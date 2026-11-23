@@ -302,3 +302,12 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Unpublish: live or under-offer listings can go back to draft, which takes them off the portal; they can be published again.
 - Delete: managers can delete any listing, live ones included, behind a confirm step. It is a soft delete and the listing leaves the portal at once. Agents can delete only their own drafts.
 - Tests: 1 media test, 1 DB test (document private from the portal and from other agencies), 3 new or updated API tests, and the Playwright listing flow (permit by document only, unpublish, republish).
+
+## Phase 2 · PR 5 · Connect WhatsApp page (2026-11-23)
+
+**Built**
+
+- Web: `Settings → WhatsApp` (owners/admins) lists the agency's numbers, connects a new one with Meta's Embedded Signup popup (Meta JS SDK, `config_id`, code response; the WABA and phone number ids come from Meta's signup session message, accepted only from facebook.com origins) and disconnects. Needs `NEXT_PUBLIC_META_APP_ID` and `NEXT_PUBLIC_META_ES_CONFIG_ID`; without them the page says WhatsApp is not set up.
+- API: the display number is now optional on connect and is looked up from Meta with the agency's token.
+
+**Tested**: API e2e for connect without a display number; Graph lookup unit test (offline). The Meta popup itself is not tested yet (needs the real Meta app).
