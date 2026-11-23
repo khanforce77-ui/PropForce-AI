@@ -889,6 +889,8 @@ model WhatsAppAccount {
   displayPhoneNumber String                @map("display_phone_number")
   /// Business token, AES-256-GCM encrypted (associated data: account id).
   accessTokenEnc     Bytes                 @map("access_token_enc")
+  /// When Meta stops accepting the token (null = never). Agencies reconnect before this.
+  tokenExpiresAt     DateTime?             @map("token_expires_at") @db.Timestamptz(3)
   status             WhatsAppAccountStatus @default(active)
   connectedBy        String                @map("connected_by") @db.Uuid
   createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)

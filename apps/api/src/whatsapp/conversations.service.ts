@@ -64,6 +64,7 @@ export class ConversationsService {
           phoneNumberId: true,
           displayPhoneNumber: true,
           status: true,
+          tokenExpiresAt: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'asc' },
@@ -71,16 +72,27 @@ export class ConversationsService {
     );
   }
 
+  /**
+   * Connects a number, or reconnects one this agency already has (a fresh token, e.g. before the
+   * old one expires). A number connected by another agency stays theirs.
+   */
   async connectAccount(ctx: TenantRequestContext, input: ConnectAccountInput) {
     if (!this.signup) throw notConfigured();
     let token: string;
     let display: string;
+    let expiresAt: Date | null;
     try {
-      token = (await this.signup.exchangeCode(input.code)).accessToken;
+      const exchanged = await this.signup.exchangeCode(input.code);
+      token = exchanged.accessToken;
       await this.signup.subscribeApp(input.wabaId, token);
       display =
         input.displayPhoneNumber ??
         (await this.signup.getDisplayPhoneNumber(input.phoneNumberId, token));
+      expiresAt = await this.signup.tokenExpiry(token).catch((e: unknown) => {
+        // Not fatal: fall back to the exchange's expiry, else assume Meta's 60-day default.
+        this.log.warn({ err: (e as Error).message }, 'WhatsApp token expiry lookup failed');
+        return exchanged.expiresAt ?? new Date(Date.now() + 60 * 86_400_000);
+      });
     } catch (e) {
       this.log.warn({ err: (e as Error).message }, 'WhatsApp Embedded Signup failed');
       throw new AppError(
@@ -89,8 +101,42 @@ export class ConversationsService {
         'Meta did not accept the connection. Try again.',
       );
     }
-    const id = randomUUID();
     return this.run(ctx, async (tx) => {
+      const existing = await tx.whatsAppAccount.findFirst({
+        where: { tenantId: ctx.tenantId, phoneNumberId: input.phoneNumberId },
+        select: { id: true },
+      });
+      const select = {
+        id: true,
+        phoneNumberId: true,
+        displayPhoneNumber: true,
+        status: true,
+        tokenExpiresAt: true,
+      } as const;
+      if (existing) {
+        const account = await tx.whatsAppAccount.update({
+          where: { id: existing.id },
+          data: {
+            wabaId: input.wabaId,
+            displayPhoneNumber: display,
+            accessTokenEnc: new Uint8Array(this.crypto.encrypt(token, tokenAad(existing.id))),
+            tokenExpiresAt: expiresAt,
+            status: 'active',
+          },
+          select,
+        });
+        await audit(tx, ctx, {
+          action: 'whatsapp.reconnected',
+          entityType: 'whatsapp_account',
+          entityId: account.id,
+          after: {
+            phoneNumberId: input.phoneNumberId,
+            tokenExpiresAt: expiresAt?.toISOString() ?? null,
+          },
+        });
+        return account;
+      }
+      const id = randomUUID();
       const account = await tx.whatsAppAccount
         .create({
           data: {
@@ -100,9 +146,10 @@ export class ConversationsService {
             phoneNumberId: input.phoneNumberId,
             displayPhoneNumber: display,
             accessTokenEnc: new Uint8Array(this.crypto.encrypt(token, tokenAad(id))),
+            tokenExpiresAt: expiresAt,
             connectedBy: ctx.userId,
           },
-          select: { id: true, phoneNumberId: true, displayPhoneNumber: true, status: true },
+          select,
         })
         .catch((e: unknown) => {
           if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -244,6 +291,13 @@ export class ConversationsService {
           409,
           'INTEGRATION_DISCONNECTED',
           'This WhatsApp number is disconnected.',
+        );
+      }
+      if (account.tokenExpiresAt && account.tokenExpiresAt <= new Date()) {
+        throw new AppError(
+          409,
+          'INTEGRATION_EXPIRED',
+          'The WhatsApp connection has expired. An owner or admin must reconnect it in Settings.',
         );
       }
       const consent = await mayContact(tx, conv.contactId, 'whatsapp', 'service');

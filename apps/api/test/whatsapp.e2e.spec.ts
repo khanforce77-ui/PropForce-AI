@@ -414,4 +414,47 @@ describe('agent replies', () => {
     await deliver(inboundPayload('after disconnect'));
     expect(await t.owner.message.count()).toBe(0);
   });
+
+  it('tracks token expiry, reconnects the same number in place, and blocks sends once expired', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    const id = await connect(a);
+    const [acc] = (await http().get('/v1/whatsapp/accounts').set(a.h).expect(200)).body;
+    const days = (Date.parse(acc.tokenExpiresAt) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(59);
+    expect(days).toBeLessThan(61);
+
+    // Disconnected, then connected again from the popup: same account, new token, active.
+    await http().post(`/v1/whatsapp/accounts/${id}/disconnect`).set(a.h).expect(204);
+    await t.owner.whatsAppAccount.update({
+      where: { id },
+      data: { tokenExpiresAt: new Date(Date.now() - 1000) },
+    });
+    const again = await http()
+      .post('/v1/whatsapp/accounts')
+      .set(a.h)
+      .send({ code: 'AQD-signup-code-9999', wabaId: '102290129340398', phoneNumberId: PHONE_ID })
+      .expect(201);
+    expect(again.body).toMatchObject({ id, status: 'active' });
+    expect(Date.parse(again.body.tokenExpiresAt)).toBeGreaterThan(Date.now());
+    expect(await t.owner.whatsAppAccount.count()).toBe(1);
+    expect(
+      await t.owner.auditLog.count({ where: { action: 'whatsapp.reconnected', entityId: id } }),
+    ).toBe(1);
+
+    // An expired token: agent replies are refused with a clear reason.
+    await deliver(inboundPayload('hello'));
+    await t.owner.whatsAppAccount.update({
+      where: { id },
+      data: { tokenExpiresAt: new Date(Date.now() - 1000) },
+    });
+    const conv = (await http().get('/v1/conversations').set(a.h).expect(200)).body.data[0];
+    const sentBefore = fake().sent.length;
+    const res = await http()
+      .post(`/v1/conversations/${conv.id}/messages`)
+      .set(a.h)
+      .send({ body: 'Hi' })
+      .expect(409);
+    expect(res.body.code).toBe('INTEGRATION_EXPIRED');
+    expect(fake().sent).toHaveLength(sentBefore);
+  });
 });
