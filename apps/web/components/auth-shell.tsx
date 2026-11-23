@@ -15,8 +15,17 @@ export function AuthShell({
   return (
     <div className="flex min-h-screen flex-col bg-muted">
       <header className="flex items-center justify-between px-6 py-4">
-        <Link href="/" className="font-semibold tracking-tight">
-          PropForce <span className="text-primary">AI</span>
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          <img
+            src="/brand/propforce-logo.svg"
+            alt=""
+            width={28}
+            height={28}
+            className="rounded-md"
+          />
+          <span>
+            PropForce <span className="text-primary">AI</span>
+          </span>
         </Link>
         <ThemeToggle />
       </header>
