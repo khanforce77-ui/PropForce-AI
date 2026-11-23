@@ -25,4 +25,4 @@ export function apiUrl(): string {
 }
 
 /** Where people send privacy, data deletion and terms questions. The mailbox must exist. */
-export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'privacy@propforce.io';
+export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'contact@propforce.io';
