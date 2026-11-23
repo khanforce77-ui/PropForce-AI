@@ -6,9 +6,18 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/propforce-logo.svg" alt="" width={32} height={32} className="rounded-md" />
+          <img
+            src="/brand/propforce-logo.svg"
+            alt=""
+            width={32}
+            height={32}
+            className="rounded-md"
+          />
           {SITE_NAME}
         </Link>
         <nav className="flex gap-4 text-sm font-medium">
