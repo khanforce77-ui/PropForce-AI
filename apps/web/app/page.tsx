@@ -3,7 +3,11 @@ import Link from 'next/link';
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6">
-      <p className="text-sm font-medium tracking-wide text-primary uppercase">PropForce AI</p>
+      <div className="flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/propforce-logo.svg" alt="" width={48} height={48} className="rounded-xl" />
+        <p className="text-sm font-medium tracking-wide text-primary uppercase">PropForce AI</p>
+      </div>
       <h1 className="text-4xl font-semibold tracking-tight">
         The operating system for UAE real estate brokerages
       </h1>
