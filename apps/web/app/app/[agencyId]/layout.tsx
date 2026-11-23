@@ -9,6 +9,7 @@ import {
   KanbanSquare,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -73,6 +74,9 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },
     { href: `${base}/calculator`, label: 'Cost calculator', icon: Calculator },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
+    ...(membership.role === 'owner' || membership.role === 'admin'
+      ? [{ href: `${base}/settings/whatsapp`, label: 'WhatsApp', icon: MessageCircle }]
+      : []),
   ];
 
   return (

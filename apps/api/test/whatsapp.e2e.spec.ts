@@ -401,6 +401,13 @@ describe('agent replies', () => {
     expect(dup.body.code).toBe('CONFLICT_DUPLICATE');
     const list = await http().get('/v1/whatsapp/accounts').set(a.h).expect(200);
     expect(list.body[0]).not.toHaveProperty('accessTokenEnc');
+    // Without a display number from the popup, it is looked up from Meta.
+    const c = await http()
+      .post('/v1/whatsapp/accounts')
+      .set(b.h)
+      .send({ code: 'AQD-signup-code-5678', wabaId: '1', phoneNumberId: '3333333' })
+      .expect(201);
+    expect(c.body.displayPhoneNumber).toBe('+971 4 3333333');
     await http().post(`/v1/whatsapp/accounts/${id}/disconnect`).set(a.h).expect(204);
     await deliver(inboundPayload('after disconnect'));
     expect(await t.owner.message.count()).toBe(0);
