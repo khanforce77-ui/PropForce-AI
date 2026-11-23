@@ -15,37 +15,8 @@ export class CalculatorService {
     return withTenant(this.prisma, { tenantId: ctx.tenantId, userId: ctx.userId }, fn);
   }
 
-  /** PropForce's templates for the emirate, with this agency's own values in their place. */
-  private async effectiveRules(tx: TransactionClient, ctx: TenantRequestContext, emirate: string) {
-    const rows = await tx.feeRule.findMany({
-      where: { emirate, OR: [{ tenantId: null }, { tenantId: ctx.tenantId }] },
-      orderBy: [{ code: 'asc' }],
-    });
-    const own = new Map(rows.filter((r) => r.tenantId).map((r) => [r.code, r]));
-    return rows
-      .filter((r) => r.tenantId === null)
-      .map((t): FeeRuleInput & { template: { ratePct: number | null; amount: number | null } } => {
-        const r = own.get(t.code) ?? t;
-        return {
-          code: t.code,
-          label: t.label,
-          calculators: t.calculators,
-          payer: t.payer,
-          basis: t.basis,
-          ratePct: r.ratePct == null ? null : Number(r.ratePct),
-          amount: r.amount == null ? null : Number(r.amount),
-          vat: r.vat,
-          refundable: t.refundable,
-          source: r.source,
-          status: r.status,
-          verifiedAt: r.verifiedAt,
-          isOverride: r !== t,
-          template: {
-            ratePct: t.ratePct == null ? null : Number(t.ratePct),
-            amount: t.amount == null ? null : Number(t.amount),
-          },
-        };
-      });
+  private effectiveRules(tx: TransactionClient, ctx: TenantRequestContext, emirate: string) {
+    return effectiveFeeRules(tx, ctx.tenantId, emirate);
   }
 
   rules(ctx: TenantRequestContext, emirate: string) {
@@ -132,4 +103,37 @@ export class CalculatorService {
       });
     });
   }
+}
+
+/** PropForce's templates for the emirate, with this agency's own values in their place. */
+export async function effectiveFeeRules(tx: TransactionClient, tenantId: string, emirate: string) {
+  const rows = await tx.feeRule.findMany({
+    where: { emirate, OR: [{ tenantId: null }, { tenantId }] },
+    orderBy: [{ code: 'asc' }],
+  });
+  const own = new Map(rows.filter((r) => r.tenantId).map((r) => [r.code, r]));
+  return rows
+    .filter((r) => r.tenantId === null)
+    .map((t): FeeRuleInput & { template: { ratePct: number | null; amount: number | null } } => {
+      const r = own.get(t.code) ?? t;
+      return {
+        code: t.code,
+        label: t.label,
+        calculators: t.calculators,
+        payer: t.payer,
+        basis: t.basis,
+        ratePct: r.ratePct == null ? null : Number(r.ratePct),
+        amount: r.amount == null ? null : Number(r.amount),
+        vat: r.vat,
+        refundable: t.refundable,
+        source: r.source,
+        status: r.status,
+        verifiedAt: r.verifiedAt,
+        isOverride: r !== t,
+        template: {
+          ratePct: t.ratePct == null ? null : Number(t.ratePct),
+          amount: t.amount == null ? null : Number(t.amount),
+        },
+      };
+    });
 }

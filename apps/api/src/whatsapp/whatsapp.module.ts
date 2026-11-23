@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AiDispatcher } from '../ai/ai-dispatcher';
+import { AiReplyService } from '../ai/ai-reply.service';
+import { aiProviders } from '../ai/ai.providers';
 import { AuthModule } from '../auth/auth.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { ConversationsController } from './conversations.controller';
@@ -10,7 +13,15 @@ import { whatsappProviders } from './whatsapp.providers';
 @Module({
   imports: [AuthModule, TenancyModule],
   controllers: [WhatsAppWebhookController, ConversationsController],
-  providers: [...whatsappProviders, InboundService, ConversationsService],
+  // AI replies live here: they need the WhatsApp client and the webhook needs them.
+  providers: [
+    ...whatsappProviders,
+    ...aiProviders,
+    InboundService,
+    ConversationsService,
+    AiReplyService,
+    AiDispatcher,
+  ],
   exports: [InboundService, ConversationsService],
 })
 export class WhatsAppModule {}
