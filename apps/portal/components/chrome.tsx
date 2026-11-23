@@ -10,7 +10,6 @@ export function SiteHeader() {
           href="/"
           className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/propforce-logo.svg"
             alt=""
