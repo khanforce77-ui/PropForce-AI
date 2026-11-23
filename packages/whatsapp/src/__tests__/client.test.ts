@@ -170,6 +170,44 @@ describe('Embedded Signup (offline checks only)', () => {
     await expect(es.getDisplayPhoneNumber('../x', 'biz')).rejects.toThrow();
   });
 
+  it('reads token expiry from debug_token with the app token in a header, not the URL', async () => {
+    let url = '';
+    let auth: string | null = null;
+    let expiresAt: unknown = 1_800_000_000;
+    const es = new MetaEmbeddedSignup({
+      appId: '1',
+      appSecret: 's3cret',
+      graphVersion: 'v21.0',
+      fetch: async (u, init) => {
+        url = String(u);
+        auth = new Headers(init?.headers).get('authorization');
+        return Response.json({ data: { is_valid: true, expires_at: expiresAt } });
+      },
+    });
+    expect(await es.tokenExpiry('biz')).toEqual(new Date(1_800_000_000_000));
+    expect(url).toContain('/v21.0/debug_token?input_token=biz');
+    expect(url).not.toContain('s3cret');
+    expect(auth).toBe('Bearer 1|s3cret');
+    expiresAt = 0;
+    expect(await es.tokenExpiry('biz')).toBeNull();
+    expiresAt = 'soon';
+    await expect(es.tokenExpiry('biz')).rejects.toThrow();
+  });
+
+  it('takes expiry from the code exchange when Meta sends expires_in', async () => {
+    const es = new MetaEmbeddedSignup({
+      appId: '1',
+      appSecret: 's',
+      graphVersion: 'v21.0',
+      now: () => 1_000_000,
+      fetch: async () => Response.json({ access_token: 'biz', expires_in: 5_184_000 }),
+    });
+    expect(await es.exchangeCode('AQD-valid-code-123')).toEqual({
+      accessToken: 'biz',
+      expiresAt: new Date(1_000_000 + 5_184_000_000),
+    });
+  });
+
   it('fake records subscriptions', async () => {
     const f = new FakeEmbeddedSignup();
     await f.subscribeApp('102290129340398');

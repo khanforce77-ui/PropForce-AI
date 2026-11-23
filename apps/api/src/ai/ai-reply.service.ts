@@ -89,12 +89,13 @@ export class AiReplyService {
           contactId: true,
           summary: true,
           lastInboundAt: true,
-          account: { select: { status: true } },
+          account: { select: { status: true, tokenExpiresAt: true } },
           assignee: { select: { role: true, status: true } },
           agency: { select: { name: true, status: true } },
         },
       });
       if (!conv || conv.mode !== 'ai' || conv.account.status !== 'active') return null;
+      if (conv.account.tokenExpiresAt && conv.account.tokenExpiresAt <= now) return null;
       if (conv.agency.status !== 'active') return null;
       if (!(await mayContact(tx, conv.contactId, 'whatsapp', 'service'))) return null;
       const decision = checkOutboundSend({

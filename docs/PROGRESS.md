@@ -331,3 +331,13 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 **Tested**: 8 API e2e tests (grounded reply from own listings only, invented price → handover, scope argument refused and audited, lead + requirement, viewing request needs approval, unverified fees not quoted, silence after STOP and in human mode, no answer over an agent). All suites pass locally.
 
 **Pending**: the OpenAI adapter has not run against the live API (no key yet). `waitUntil` on Vercel needs a live check with a real number.
+
+## Phase 2 · PR 7 · WhatsApp token expiry and reconnect (2026-11-23)
+
+- Meta's Embedded Signup configuration for this app issues business tokens that expire after 60 days (not editable). Migration `20261123020000_whatsapp_token_expiry` adds `whatsapp_account.token_expires_at`.
+- On connect the API reads the expiry from Meta's `debug_token` (app token in the Authorization header, never in the URL), falling back to the exchange's `expires_in`, then to 60 days.
+- Connecting a number the agency already has now reconnects it in place (new token, new expiry, active again, audited `whatsapp.reconnected`) instead of failing as a duplicate. A number connected by another agency is still refused.
+- Expired tokens: agent replies answer `INTEGRATION_EXPIRED` and the AI does not reply.
+- Web: Settings → WhatsApp shows "Reconnect by <date>", warns 7 days before expiry or once expired, and offers a Reconnect button.
+- Tests: 2 unit tests (debug_token, expires_in) and 1 API e2e test (expiry stored, reconnect in place, send blocked once expired).
+- Not live-tested: Meta currently blocks onboarding ("can't onboard customers right now") until the app has Advanced Access for the WhatsApp permissions and is Live.

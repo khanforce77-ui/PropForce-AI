@@ -15,8 +15,15 @@ interface Account {
   phoneNumberId: string;
   displayPhoneNumber: string;
   status: 'active' | 'disconnected';
+  /** When Meta stops accepting the connection; null = never. */
+  tokenExpiresAt: string | null;
   createdAt: string;
 }
+
+const DAY_MS = 86_400_000;
+/** Days until the connection expires, or null when it does not expire. */
+const daysLeft = (a: Account, now: number) =>
+  a.tokenExpiresAt ? Math.ceil((Date.parse(a.tokenExpiresAt) - now) / DAY_MS) : null;
 
 /** Public Meta app values (not secrets). Read by name so Next.js inlines them. */
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID;
@@ -180,6 +187,18 @@ export default function WhatsAppSettings() {
       </div>
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="info">{notice}</Alert>}
+      {accounts
+        .filter((a) => a.status === 'active')
+        .map((a) => ({ a, left: daysLeft(a, Date.now()) }))
+        .filter(({ left }) => left !== null && left <= 7)
+        .map(({ a, left }) => (
+          <Alert key={a.id} tone="error">
+            {left! <= 0
+              ? `The WhatsApp connection for ${a.displayPhoneNumber} has expired. Messages cannot be sent until you reconnect it.`
+              : `The WhatsApp connection for ${a.displayPhoneNumber} expires in ${left} day${left === 1 ? '' : 's'}. Reconnect it to keep sending messages.`}{' '}
+            Use “Reconnect” and choose the same number in the Meta window.
+          </Alert>
+        ))}
       <Card className="space-y-4 p-6">
         {accounts.filter((a) => a.status === 'active').length === 0 && (
           <p className="text-sm">No WhatsApp number connected yet.</p>
@@ -194,14 +213,24 @@ export default function WhatsAppSettings() {
                   <p className="text-muted-foreground text-xs">
                     {a.status === 'active' ? 'Connected' : 'Disconnected'} ·{' '}
                     {new Date(a.createdAt).toLocaleDateString()}
+                    {a.status === 'active' && a.tokenExpiresAt
+                      ? ` · Reconnect by ${new Date(a.tokenExpiresAt).toLocaleDateString()}`
+                      : ''}
                   </p>
                 </div>
               </div>
-              {a.status === 'active' && (
-                <Button variant="outline" onClick={() => void disconnect(a.id)}>
-                  Disconnect
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {configured && (a.status !== 'active' || (daysLeft(a, Date.now()) ?? 99) <= 7) && (
+                  <Button onClick={() => void connect()} disabled={busy}>
+                    Reconnect
+                  </Button>
+                )}
+                {a.status === 'active' && (
+                  <Button variant="outline" onClick={() => void disconnect(a.id)}>
+                    Disconnect
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
