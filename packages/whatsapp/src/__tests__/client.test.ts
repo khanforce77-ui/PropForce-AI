@@ -208,6 +208,42 @@ describe('Embedded Signup (offline checks only)', () => {
     });
   });
 
+  it('registers the number with the PIN in the body, not the URL', async () => {
+    let url = '';
+    let init: RequestInit | undefined;
+    const es = new MetaEmbeddedSignup({
+      appId: '1',
+      appSecret: 's',
+      graphVersion: 'v21.0',
+      fetch: async (u, i) => {
+        url = String(u);
+        init = i;
+        return Response.json({ success: true });
+      },
+    });
+    await es.registerPhone('106540352242922', 'biz-token', '123456');
+    expect(url).toBe('https://graph.facebook.com/v21.0/106540352242922/register');
+    expect(url).not.toContain('123456');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      messaging_product: 'whatsapp',
+      pin: '123456',
+    });
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer biz-token');
+    await expect(es.registerPhone('../x', 't', '123456')).rejects.toThrow();
+    await expect(es.registerPhone('1', 't', '12ab')).rejects.toThrow();
+  });
+
+  it('reports Meta error codes when registration fails', async () => {
+    const es = new MetaEmbeddedSignup({
+      appId: '1',
+      appSecret: 's',
+      graphVersion: 'v21.0',
+      fetch: async () =>
+        Response.json({ error: { code: 133005, message: 'PIN mismatch' } }, { status: 400 }),
+    });
+    await expect(es.registerPhone('1', 't', '123456')).rejects.toThrow(/133005.*PIN mismatch/);
+  });
+
   it('fake records subscriptions', async () => {
     const f = new FakeEmbeddedSignup();
     await f.subscribeApp('102290129340398');
