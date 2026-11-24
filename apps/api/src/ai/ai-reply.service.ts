@@ -190,6 +190,12 @@ export class AiReplyService {
 
     const body = text.slice(0, MAX_TEXT_LENGTH);
     const result = await this.client!.send(prepared.creds, { type: 'text', to: prepared.to, body });
+    if (!result.ok) {
+      this.log.warn(
+        { conversationId, code: result.providerCode, reason: result.providerMessage },
+        'WhatsApp AI reply was not accepted by Meta',
+      );
+    }
     await withTenant(this.prisma, { tenantId }, async (tx) => {
       await tx.message.create({
         data: {

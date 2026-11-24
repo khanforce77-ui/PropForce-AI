@@ -31,6 +31,8 @@ export type SendResult =
       readonly retryable: boolean;
       readonly code: WhatsAppErrorCode;
       readonly providerCode?: number;
+      /** Meta's reason (message and details), for operator logs only. */
+      readonly providerMessage?: string;
     };
 
 export type WhatsAppErrorCode =
@@ -158,10 +160,17 @@ export class CloudApiClient implements WhatsAppClient {
     }
     const json = (await res.json().catch(() => ({}))) as {
       messages?: { id?: string }[];
-      error?: { code?: number };
+      error?: { code?: number; message?: string; error_data?: { details?: string } };
     };
     const wamid = json.messages?.[0]?.id;
     if (res.ok && wamid) return { ok: true, wamid };
-    return mapGraphError(res.status, json.error?.code);
+    const reason = [json.error?.message, json.error?.error_data?.details]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .join(': ')
+      .slice(0, 1000);
+    return {
+      ...mapGraphError(res.status, json.error?.code),
+      ...(reason ? { providerMessage: reason } : {}),
+    };
   }
 }
