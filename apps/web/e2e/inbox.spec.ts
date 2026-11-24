@@ -79,15 +79,14 @@ test('agent reads a WhatsApp chat in the inbox, replies, and hands it back to th
   const tenantId = /\/app\/([0-9a-f-]{36})/.exec(page.url())![1]!;
 
   // Connect a number through the API (the Meta popup cannot run in tests; the API uses a fake).
-  const login = await (
-    await api.post(`${API}/auth/login`, { data: { email: owner.email, password: owner.password } })
-  ).json();
-  // The browser just used this period's code; the next period's is accepted and not a replay.
-  const verified = await (
-    await api.post(`${API}/auth/mfa/verify`, {
-      data: { mfaToken: login.mfaToken, code: totp.generate({ timestamp: Date.now() + 30_000 }) },
-    })
-  ).json();
+  // The browser's refresh cookie gives an access token, without another MFA login (rate limited).
+  // Wait for the app's own token refresh to finish so the two never race (reuse detection).
+  await page.waitForLoadState('networkidle');
+  const refreshed = await page.request.post(`${API}/auth/refresh`, {
+    headers: { 'X-PropForce-CSRF': '1' },
+  });
+  expect(refreshed.status()).toBe(200);
+  const verified = (await refreshed.json()) as { accessToken: string };
   const connected = await api.post(`${API}/whatsapp/accounts`, {
     headers: { Authorization: `Bearer ${verified.accessToken}`, 'X-Tenant-Id': tenantId },
     data: {

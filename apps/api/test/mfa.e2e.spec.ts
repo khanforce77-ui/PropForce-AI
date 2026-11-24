@@ -31,8 +31,8 @@ beforeEach(async () => {
   t.emails.length = 0;
 });
 
-async function signedInUser() {
-  const body = registration();
+async function signedInUser(email?: string) {
+  const body = registration(email ? { email } : {});
   await http().post('/v1/auth/register').send(body).expect(202);
   await http()
     .post('/v1/auth/verify-email')
@@ -209,5 +209,24 @@ describe('disabling MFA', () => {
       .send({ email: u.email, password: u.password })
       .expect(200);
     expect(login.body.accessToken).toBeDefined();
+  });
+});
+
+describe('MFA rate limits', () => {
+  it('count guesses per account, so one person cannot lock out colleagues on the same network', async () => {
+    const a = await signedInUser('a@example.test');
+    const b = await signedInUser('b@example.test');
+    await http().post('/v1/me/mfa/totp/setup').set(a.auth).expect(200);
+    const setupB = await http().post('/v1/me/mfa/totp/setup').set(b.auth).expect(200);
+    for (let i = 0; i < 5; i++) {
+      await http().post('/v1/me/mfa/totp/confirm').set(a.auth).send({ code: '000000' }).expect(401);
+    }
+    await http().post('/v1/me/mfa/totp/confirm').set(a.auth).send({ code: '000000' }).expect(429);
+    // Same IP address, different account: not blocked.
+    await http()
+      .post('/v1/me/mfa/totp/confirm')
+      .set(b.auth)
+      .send({ code: totpFor(setupB.body.secret).generate() })
+      .expect(200);
   });
 });

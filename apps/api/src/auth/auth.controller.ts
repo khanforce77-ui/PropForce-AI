@@ -17,7 +17,7 @@ import type { Request, Response } from 'express';
 import { AppError } from '../common/app-error';
 import { parseBody } from '../common/zod';
 import { APP_CONFIG, type AppConfig } from '../config/env';
-import { AuthGuard, CurrentAuth } from './auth.guard';
+import { AuthGuard, CurrentAuth, UserThrottlerGuard } from './auth.guard';
 import {
   emailOnlySchema,
   loginSchema,
@@ -183,7 +183,7 @@ export class AuthController {
 }
 
 @Controller('me')
-@UseGuards(AuthGuard, ThrottlerGuard)
+@UseGuards(AuthGuard, UserThrottlerGuard)
 export class MeController {
   constructor(
     private readonly auth: AuthService,
