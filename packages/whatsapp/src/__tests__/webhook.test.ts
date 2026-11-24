@@ -91,7 +91,13 @@ describe('parseWebhook', () => {
             status: 'failed',
             timestamp: '1763668804',
             recipient_id: '971501234567',
-            errors: [{ code: 131047 }],
+            errors: [
+              {
+                code: 131047,
+                title: 'Re-engagement message',
+                error_data: { details: 'More than 24 hours have passed.' },
+              },
+            ],
           },
         ],
       }),
@@ -120,6 +126,7 @@ describe('parseWebhook', () => {
         wamid: 'wamid.OUT',
         status: 'failed',
         errorCodes: [131047],
+        errorDetail: 'Re-engagement message: More than 24 hours have passed.',
       }),
     ]);
     expect((events[0] as { sentAt: Date }).sentAt.toISOString()).toBe('2025-11-20T20:00:00.000Z');

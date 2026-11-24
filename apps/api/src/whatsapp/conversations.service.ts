@@ -400,6 +400,12 @@ export class ConversationsService {
       to: prepared.to,
       body: input.body,
     });
+    if (!result.ok) {
+      this.log.warn(
+        { conversationId: id, code: result.providerCode, reason: result.providerMessage },
+        'WhatsApp agent reply was not accepted by Meta',
+      );
+    }
 
     return this.run(ctx, async (tx) => {
       const message = await tx.message.create({

@@ -81,7 +81,14 @@ const statusUpdate = z.object({
   timestamp: z.string().regex(/^\d{1,12}$/),
   recipient_id: z.string().max(32),
   errors: z
-    .array(z.object({ code: z.number(), title: z.string().max(512).optional() }))
+    .array(
+      z.object({
+        code: z.number(),
+        title: z.string().max(512).optional(),
+        message: z.string().max(1024).optional(),
+        error_data: z.object({ details: z.string().max(2048).optional() }).optional(),
+      }),
+    )
     .max(5)
     .optional(),
 });
@@ -146,6 +153,8 @@ export interface StatusEvent {
   readonly status: 'sent' | 'delivered' | 'read' | 'failed' | 'deleted';
   readonly at: Date;
   readonly errorCodes: readonly number[];
+  /** Meta's human-readable reason for a failure (title and details), for operator logs. */
+  readonly errorDetail?: string;
 }
 
 export type WebhookEvent = InboundEvent | StatusEvent;
@@ -190,6 +199,13 @@ export const parseWebhook = (body: unknown): ParseResult => {
           status: s.status,
           at: new Date(Number(s.timestamp) * 1000),
           errorCodes: (s.errors ?? []).map((e) => e.code),
+          ...(s.errors?.[0]
+            ? {
+                errorDetail: [s.errors[0].title, s.errors[0].error_data?.details]
+                  .filter(Boolean)
+                  .join(': '),
+              }
+            : {}),
         });
       }
     }
