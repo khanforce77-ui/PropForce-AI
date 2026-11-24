@@ -52,6 +52,15 @@ export class ConversationsService {
     };
   }
 
+  /**
+   * The number's two-step verification PIN. Derived from our encryption key so it is secret,
+   * stable across reconnects, and needs no extra storage.
+   */
+  private phonePin(phoneNumberId: string): string {
+    const digest = Buffer.from(this.crypto.hmac(`whatsapp-pin:${phoneNumberId}`), 'base64url');
+    return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, '0');
+  }
+
   // ───── accounts ─────
 
   listAccounts(ctx: TenantRequestContext) {
@@ -85,6 +94,13 @@ export class ConversationsService {
       const exchanged = await this.signup.exchangeCode(input.code);
       token = exchanged.accessToken;
       await this.signup.subscribeApp(input.wabaId, token);
+      // Without registration the number cannot receive messages. Not fatal: a number that is
+      // already registered (e.g. on reconnect) can refuse a second registration.
+      await this.signup
+        .registerPhone(input.phoneNumberId, token, this.phonePin(input.phoneNumberId))
+        .catch((e: unknown) => {
+          this.log.warn({ err: (e as Error).message }, 'WhatsApp phone registration failed');
+        });
       display =
         input.displayPhoneNumber ??
         (await this.signup.getDisplayPhoneNumber(input.phoneNumberId, token));

@@ -5,7 +5,7 @@
  * Flow: the agency admin completes Meta's signup popup in the web app, which returns a short-lived
  * `code` plus the WABA id and phone number id. The API exchanges the code for a business token
  * server-side (the app secret never reaches the browser), subscribes our app to the WABA's
- * webhooks, and stores the token encrypted per tenant.
+ * webhooks, registers the number on the Cloud API, and stores the token encrypted per tenant.
  *
  * STATUS: PENDING. Needs Meta Business verification, a Meta app with WhatsApp product, and Tech
  * Provider access. Only checked offline.
@@ -29,6 +29,12 @@ export interface ConnectResult {
 export interface EmbeddedSignupPort {
   exchangeCode(code: string): Promise<ConnectResult>;
   subscribeApp(wabaId: string, accessToken: string): Promise<void>;
+  /**
+   * Registers the number on the Cloud API so it can send and receive messages. Embedded Signup
+   * only creates and verifies the number; until it is registered, WhatsApp shows it as not on
+   * WhatsApp. `pin` becomes the number's two-step verification PIN (6 digits).
+   */
+  registerPhone(phoneNumberId: string, accessToken: string, pin: string): Promise<void>;
   /** The number as shown to clients, e.g. "+971 4 123 4567". */
   getDisplayPhoneNumber(phoneNumberId: string, accessToken: string): Promise<string>;
   /**
@@ -111,6 +117,27 @@ export class MetaEmbeddedSignup implements EmbeddedSignupPort {
     if (!res.ok) throw new Error(`Meta webhook subscription failed with HTTP ${res.status}`);
   }
 
+  async registerPhone(phoneNumberId: string, accessToken: string, pin: string): Promise<void> {
+    if (!ID.test(phoneNumberId)) throw new Error('Invalid phone number id');
+    if (!/^\d{6}$/.test(pin)) throw new Error('Invalid PIN');
+    const res = await (this.cfg.fetch ?? fetch)(`${this.base}/${phoneNumberId}/register`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: { code?: unknown; error_subcode?: unknown; message?: unknown };
+      };
+      const e = json.error ?? {};
+      const msg = typeof e.message === 'string' ? e.message.slice(0, 200) : '';
+      throw new Error(
+        `Meta phone registration failed with HTTP ${res.status} (code ${String(e.code)}/${String(e.error_subcode)}): ${msg}`,
+      );
+    }
+  }
+
   async getDisplayPhoneNumber(phoneNumberId: string, accessToken: string): Promise<string> {
     if (!ID.test(phoneNumberId)) throw new Error('Invalid phone number id');
     const res = await (this.cfg.fetch ?? fetch)(
@@ -133,6 +160,11 @@ export class FakeEmbeddedSignup implements EmbeddedSignupPort {
   }
   async subscribeApp(wabaId: string): Promise<void> {
     this.subscribed.push(wabaId);
+  }
+  readonly registered: string[] = [];
+  async registerPhone(phoneNumberId: string, _token: string, pin: string): Promise<void> {
+    if (!/^\d{6}$/.test(pin)) throw new Error('Invalid PIN');
+    this.registered.push(phoneNumberId);
   }
   async getDisplayPhoneNumber(phoneNumberId: string): Promise<string> {
     return `+971 4 ${phoneNumberId.slice(-7).padStart(7, '0')}`;
