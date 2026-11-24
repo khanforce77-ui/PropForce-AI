@@ -28,6 +28,7 @@ beforeAll(async () => {
     AUTH_RATE_LIMIT_PER_MINUTE: '1000',
     META_APP_SECRET: SECRET,
     META_WEBHOOK_VERIFY_TOKEN: 'verify-me',
+    META_SYSTEM_USER_TOKEN: 'test-system-user-token-0123456789',
     // AI replies have their own suite (ai-replies.e2e.spec.ts).
     AI_PROVIDER: 'none',
   });
@@ -456,5 +457,40 @@ describe('agent replies', () => {
       .expect(409);
     expect(res.body.code).toBe('INTEGRATION_EXPIRED');
     expect(fake().sent).toHaveLength(sentBefore);
+  });
+
+  it('platform admins can attach a number directly with the system token; others cannot', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    const body = { wabaId: '1605617821605571', phoneNumberId: '7777777777' };
+    // An agency owner without the platform flag is refused.
+    const denied = await http()
+      .post('/v1/whatsapp/accounts/direct')
+      .set(a.h)
+      .send(body)
+      .expect(403);
+    expect(denied.body.code).toBe('PERMISSION_DENIED');
+    expect(await t.owner.whatsAppAccount.count()).toBe(0);
+
+    await t.owner.user.update({ where: { id: a.userId }, data: { isPlatformAdmin: true } });
+    await http()
+      .post('/v1/whatsapp/accounts/direct')
+      .set(a.h)
+      .send({ ...body, code: 'x' })
+      .expect(400);
+    const res = await http().post('/v1/whatsapp/accounts/direct').set(a.h).send(body).expect(201);
+    expect(res.body).toMatchObject({
+      phoneNumberId: '7777777777',
+      displayPhoneNumber: '+971 4 7777777',
+      status: 'active',
+      tokenExpiresAt: null,
+    });
+    expect(
+      await t.owner.auditLog.count({
+        where: { action: 'whatsapp.connected', entityId: res.body.id },
+      }),
+    ).toBe(1);
+    // The number now routes inbound messages to this agency.
+    await deliver(inboundPayload('hello direct', { phoneNumberId: '7777777777' }));
+    expect(await t.owner.message.count({ where: { tenantId: a.tenantId } })).toBe(1);
   });
 });

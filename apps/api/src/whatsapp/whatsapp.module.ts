@@ -3,6 +3,7 @@ import { AiDispatcher } from '../ai/ai-dispatcher';
 import { AiReplyService } from '../ai/ai-reply.service';
 import { aiProviders } from '../ai/ai.providers';
 import { AuthModule } from '../auth/auth.module';
+import { PlatformAdminGuard } from '../platform/platform.guard';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
@@ -21,6 +22,7 @@ import { whatsappProviders } from './whatsapp.providers';
     ConversationsService,
     AiReplyService,
     AiDispatcher,
+    PlatformAdminGuard,
   ],
   exports: [InboundService, ConversationsService],
 })

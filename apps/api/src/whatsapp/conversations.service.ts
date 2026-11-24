@@ -7,6 +7,7 @@ import {
 } from '@propforce/whatsapp';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../common/app-error';
+import { APP_CONFIG, type AppConfig } from '../config/env';
 import { mayContact } from '../crm/consent';
 import { PRISMA } from '../database/database.module';
 import { EncryptionService } from '../security/encryption.service';
@@ -16,6 +17,7 @@ import { audit } from '../tenancy/tenancy.service';
 import { EMBEDDED_SIGNUP, WHATSAPP_CLIENT } from './whatsapp.providers';
 import type {
   ConnectAccountInput,
+  ConnectDirectInput,
   ListConversationsQuery,
   ListMessagesQuery,
   SendMessageInput,
@@ -35,6 +37,7 @@ export class ConversationsService {
     @Inject(WHATSAPP_CLIENT) private readonly client: WhatsAppClient | null,
     @Inject(EMBEDDED_SIGNUP) private readonly signup: EmbeddedSignupPort | null,
     private readonly crypto: EncryptionService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   private run<T>(ctx: TenantRequestContext, fn: (tx: TransactionClient) => Promise<T>) {
@@ -117,6 +120,53 @@ export class ConversationsService {
         'Meta did not accept the connection. Try again.',
       );
     }
+    return this.saveAccount(ctx, {
+      wabaId: input.wabaId,
+      phoneNumberId: input.phoneNumberId,
+      display,
+      token,
+      expiresAt,
+    });
+  }
+
+  /**
+   * Attaches a number of the business that owns the Meta app, using that business's system user
+   * token (it never expires). Embedded Signup cannot onboard the app owner's own business.
+   */
+  async connectDirect(ctx: TenantRequestContext, input: ConnectDirectInput) {
+    const token = this.config.whatsapp.systemUserToken;
+    if (!this.signup || !token) throw notConfigured();
+    let display: string;
+    try {
+      await this.signup.subscribeApp(input.wabaId, token);
+      await this.signup
+        .registerPhone(input.phoneNumberId, token, this.phonePin(input.phoneNumberId))
+        .catch((e: unknown) => {
+          this.log.warn({ err: (e as Error).message }, 'WhatsApp phone registration failed');
+        });
+      display = await this.signup.getDisplayPhoneNumber(input.phoneNumberId, token);
+    } catch (e) {
+      this.log.warn({ err: (e as Error).message }, 'WhatsApp direct connect failed');
+      throw new AppError(
+        502,
+        'INTEGRATION_FAILED',
+        'Meta did not accept the connection. Check the WhatsApp account and phone number ids.',
+      );
+    }
+    return this.saveAccount(ctx, { ...input, display, token, expiresAt: null });
+  }
+
+  private saveAccount(
+    ctx: TenantRequestContext,
+    input: {
+      wabaId: string;
+      phoneNumberId: string;
+      display: string;
+      token: string;
+      expiresAt: Date | null;
+    },
+  ) {
+    const { display, token, expiresAt } = input;
     return this.run(ctx, async (tx) => {
       const existing = await tx.whatsAppAccount.findFirst({
         where: { tenantId: ctx.tenantId, phoneNumberId: input.phoneNumberId },

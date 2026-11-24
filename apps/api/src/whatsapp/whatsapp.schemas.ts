@@ -12,6 +12,21 @@ export const connectAccountSchema = z
   .strict();
 export type ConnectAccountInput = z.infer<typeof connectAccountSchema>;
 
+/** Platform admins only: a number of the app-owning business, attached with its system token. */
+export const connectDirectSchema = z
+  .object({
+    wabaId: z
+      .string()
+      .trim()
+      .regex(/^\d{1,32}$/),
+    phoneNumberId: z
+      .string()
+      .trim()
+      .regex(/^\d{1,32}$/),
+  })
+  .strict();
+export type ConnectDirectInput = z.infer<typeof connectDirectSchema>;
+
 export const listConversationsSchema = z
   .object({
     mode: z.enum(['ai', 'human']).optional(),

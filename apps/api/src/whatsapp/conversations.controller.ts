@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { PlatformAdminGuard } from '../platform/platform.guard';
 import { parseBody } from '../common/zod';
 import {
   CurrentTenant,
@@ -20,6 +21,7 @@ import {
 import { ConversationsService } from './conversations.service';
 import {
   connectAccountSchema,
+  connectDirectSchema,
   listConversationsSchema,
   listMessagesSchema,
   sendMessageSchema,
@@ -42,6 +44,14 @@ export class ConversationsController {
   @RequirePermission('integration:manage')
   connect(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
     return this.svc.connectAccount(ctx, parseBody(connectAccountSchema, body));
+  }
+
+  /** Attaches a number of the business that owns the Meta app (no popup). Platform admins only. */
+  @Post('whatsapp/accounts/direct')
+  @UseGuards(PlatformAdminGuard)
+  @RequirePermission('integration:manage')
+  connectDirect(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.svc.connectDirect(ctx, parseBody(connectDirectSchema, body));
   }
 
   @Post('whatsapp/accounts/:id/disconnect')

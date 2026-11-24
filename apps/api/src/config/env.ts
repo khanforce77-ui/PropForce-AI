@@ -43,6 +43,11 @@ const envSchema = z.object({
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  /**
+   * Optional never-expiring system user token of the business that owns the Meta app. Lets a
+   * platform admin attach a number from that (verified) business directly, without the popup.
+   */
+  META_SYSTEM_USER_TOKEN: z.string().min(20).optional(),
   META_GRAPH_VERSION: z
     .string()
     .regex(/^v\d+\.\d+$/)
@@ -101,6 +106,7 @@ export interface AppConfig {
     appId?: string;
     appSecret?: string;
     verifyToken?: string;
+    systemUserToken?: string;
     graphVersion: string;
   };
   ai: {
@@ -197,6 +203,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(e.META_APP_ID ? { appId: e.META_APP_ID } : {}),
       ...(e.META_APP_SECRET ? { appSecret: e.META_APP_SECRET } : {}),
       ...(e.META_WEBHOOK_VERIFY_TOKEN ? { verifyToken: e.META_WEBHOOK_VERIFY_TOKEN } : {}),
+      ...(e.META_SYSTEM_USER_TOKEN ? { systemUserToken: e.META_SYSTEM_USER_TOKEN } : {}),
       graphVersion: e.META_GRAPH_VERSION,
     },
     ai: {
