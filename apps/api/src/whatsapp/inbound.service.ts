@@ -221,6 +221,13 @@ export class InboundService {
           ? ['sent', 'delivered']
           : [];
     if (allowedFrom.length === 0) return;
+    if (status === 'failed') {
+      // No message content or customer number here: only Meta's code and reason.
+      this.log.warn(
+        { phoneNumberId: ev.phoneNumberId, code: ev.errorCodes[0], reason: ev.errorDetail },
+        'WhatsApp message delivery failed',
+      );
+    }
     await withTenant(this.prisma, { tenantId: account.tenantId }, (tx) =>
       tx.message.updateMany({
         where: { wamid: ev.wamid, direction: 'outbound', status: { in: allowedFrom } },
