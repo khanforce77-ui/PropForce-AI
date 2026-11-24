@@ -341,3 +341,8 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: Settings → WhatsApp shows "Reconnect by <date>", warns 7 days before expiry or once expired, and offers a Reconnect button.
 - Tests: 2 unit tests (debug_token, expires_in) and 1 API e2e test (expiry stored, reconnect in place, send blocked once expired).
 - Not live-tested: Meta currently blocks onboarding ("can't onboard customers right now") until the app has Advanced Access for the WhatsApp permissions and is Live.
+
+## Phase 2 · PR 8 · WhatsApp inbox in the CRM app (2026-11-24)
+
+- Web: new **Inbox** page (`/app/:agencyId/inbox`, in the side menu for every role). Conversation list with filters (All, Needs agent, AI handling, Unread, Mine), unread counts and AI/Agent badges; message thread with sender labels, delivery ticks and failed sends marked; reply box (Enter sends, Shift+Enter new line); "Take over from AI" and "Hand back to AI"; older messages on demand. The list and the open chat refresh every 10 seconds (no live push yet). Outside the 24-hour window the reply box explains why free text is not allowed. Agents see only their own chats, as the API already enforces.
+- Tests: Playwright flow (signed client message via webhook → appears in inbox → agent reply takes over → new client message shows up → hand back to AI). The e2e API now runs with a test-only Meta secret and `AI_PROVIDER=none`.
