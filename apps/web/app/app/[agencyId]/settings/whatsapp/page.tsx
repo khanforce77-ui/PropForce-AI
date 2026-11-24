@@ -2,9 +2,10 @@
 
 import { MessageCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
+import { Field, Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
 import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
@@ -78,7 +79,9 @@ const isMetaOrigin = (origin: string) => {
 
 export default function WhatsAppSettings() {
   const { agencyId } = useParams<{ agencyId: string }>();
-  const { request } = useAuth();
+  const { me, request } = useAuth();
+  const isPlatformAdmin = me?.user.isPlatformAdmin === true;
+  const [direct, setDirect] = useState({ wabaId: '', phoneNumberId: '' });
   const role = useAgencyMembership()?.role;
   const canManage = role === 'owner' || role === 'admin';
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -150,6 +153,27 @@ export default function WhatsAppSettings() {
       }
       await request('/whatsapp/accounts', { tenantId: agencyId, body: { code, ...info } });
       setNotice('WhatsApp number connected. Client messages will now appear in your inbox.');
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Platform admins: attach a number of PropForce's own business with its system token. */
+  async function connectDirect(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await request('/whatsapp/accounts/direct', {
+        tenantId: agencyId,
+        body: { wabaId: direct.wabaId.trim(), phoneNumberId: direct.phoneNumberId.trim() },
+      });
+      setNotice('WhatsApp number attached. Client messages will now appear in your inbox.');
+      setDirect({ wabaId: '', phoneNumberId: '' });
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : (err as Error).message);
@@ -244,6 +268,44 @@ export default function WhatsAppSettings() {
           </p>
         )}
       </Card>
+      {isPlatformAdmin && (
+        <Card className="space-y-4 p-6">
+          <div>
+            <h2 className="font-semibold">Attach a PropForce number (platform admin)</h2>
+            <p className="text-muted-foreground text-sm">
+              For numbers in the business that owns the PropForce Meta app, which the Meta window
+              cannot connect. Copy both ids from WhatsApp Manager or the app’s API setup page.
+            </p>
+          </div>
+          <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void connectDirect(e)}>
+            <Field id="direct-waba" label="WhatsApp Business Account id">
+              <Input
+                id="direct-waba"
+                inputMode="numeric"
+                pattern="\d{1,32}"
+                required
+                value={direct.wabaId}
+                onChange={(e) => setDirect((d) => ({ ...d, wabaId: e.target.value }))}
+              />
+            </Field>
+            <Field id="direct-phone" label="Phone number id">
+              <Input
+                id="direct-phone"
+                inputMode="numeric"
+                pattern="\d{1,32}"
+                required
+                value={direct.phoneNumberId}
+                onChange={(e) => setDirect((d) => ({ ...d, phoneNumberId: e.target.value }))}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={busy}>
+                {busy ? 'Attaching…' : 'Attach number'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }
