@@ -6,6 +6,7 @@ import {
   Contact,
   Globe,
   Home,
+  Inbox,
   KanbanSquare,
   LayoutDashboard,
   LogOut,
@@ -69,6 +70,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   const nav = [
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/listings`, label: 'Listings', icon: Home },
+    { href: `${base}/inbox`, label: 'Inbox', icon: Inbox },
     { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },
