@@ -1,3 +1,4 @@
+import { CampaignsService } from '../campaigns/campaigns.service';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   findWhatsAppAccountForWebhook,
@@ -110,6 +111,9 @@ export class InboundService {
         createdAt: ev.sentAt,
       },
     });
+
+    // A message after a Lead Booster campaign counts as a reply to it.
+    await CampaignsService.recordReply(tx, contact.id, ev.sentAt);
 
     const optOut = isOptOutMessage(ev.text);
     const lastInbound =

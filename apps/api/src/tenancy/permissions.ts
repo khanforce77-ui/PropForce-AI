@@ -33,6 +33,10 @@ export const PERMISSIONS = [
   'conversation:reply',
   /** Connect and disconnect the agency's WhatsApp numbers. */
   'integration:manage',
+  /** Create Lead Booster campaigns and prepare their audience. */
+  'campaign:write',
+  /** Approve a campaign for sending, send it or cancel it. */
+  'campaign:approve',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -53,6 +57,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'crm:manage',
     'conversation:read',
     'conversation:reply',
+    'campaign:write',
   ],
   agent: [
     'agency:read',

@@ -200,6 +200,8 @@ model Agency {
   feeRules         FeeRule[]
   propertyPhotos   PropertyPhoto[]
   viewings         Viewing[]
+  campaigns        Campaign[]
+  campaignRecipients CampaignRecipient[]
   logo             AgencyLogo?
 
   @@map("agency")
@@ -763,6 +765,7 @@ model Contact {
   consents      ConsentRecord[]
   leads         Lead[]
   conversations Conversation[]
+  campaignRecipients CampaignRecipient[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -902,6 +905,7 @@ model WhatsAppAccount {
 
   agency        Agency         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations Conversation[]
+  campaigns     Campaign[]
 
   @@unique([id, tenantId])
   @@index([tenantId])
@@ -1098,4 +1102,83 @@ model Viewing {
   @@index([tenantId, startsAt])
   @@index([tenantId, leadId])
   @@map("viewing")
+}
+
+// ───── Lead Booster: WhatsApp template campaigns (Phase 3) ─────
+
+enum CampaignStatus {
+  draft
+  pending_approval
+  approved
+  sending
+  completed
+  cancelled
+}
+
+enum CampaignRecipientStatus {
+  queued
+  skipped
+  sent
+  failed
+  replied
+}
+
+/// A WhatsApp template message to a consented segment of contacts. Never sends without approval.
+model Campaign {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  name              String
+  whatsappAccountId String         @map("whatsapp_account_id") @db.Uuid
+  /// Name of a template approved by Meta on the agency's WhatsApp Business account.
+  templateName      String         @map("template_name")
+  languageCode      String         @map("language_code")
+  /// Body parameters in order ({{1}}, {{2}}…); may use {first_name}, {full_name}, {agency_name}.
+  bodyParams        Json           @default("[]") @map("body_params")
+  /// Segment filter (tags, lead stages, intents, emirate, communities, sources).
+  audience          Json           @default("{}")
+  status            CampaignStatus @default(draft)
+  /// Most template messages this agency may send in any 24 hours (Meta messaging tier).
+  dailyLimit        Int            @default(250) @map("daily_limit")
+  createdBy         String         @map("created_by") @db.Uuid
+  submittedAt       DateTime?      @map("submitted_at") @db.Timestamptz(3)
+  approvedBy        String?        @map("approved_by") @db.Uuid
+  approvedAt        DateTime?      @map("approved_at") @db.Timestamptz(3)
+  startedAt         DateTime?      @map("started_at") @db.Timestamptz(3)
+  completedAt       DateTime?      @map("completed_at") @db.Timestamptz(3)
+  cancelledAt       DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency     Agency              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account    WhatsAppAccount     @relation(fields: [whatsappAccountId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  recipients CampaignRecipient[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("campaign")
+}
+
+model CampaignRecipient {
+  id         String                  @id @default(uuid(7)) @db.Uuid
+  tenantId   String                  @map("tenant_id") @db.Uuid
+  campaignId String                  @map("campaign_id") @db.Uuid
+  contactId  String                  @map("contact_id") @db.Uuid
+  status     CampaignRecipientStatus @default(queued)
+  /// Why the contact is not messaged (no consent, do not contact, no phone…).
+  skipReason String?                 @map("skip_reason")
+  wamid      String?
+  errorCode  Int?                    @map("error_code")
+  sentAt     DateTime?               @map("sent_at") @db.Timestamptz(3)
+  repliedAt  DateTime?               @map("replied_at") @db.Timestamptz(3)
+  createdAt  DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([tenantId, campaignId, status])
+  @@index([tenantId, contactId, sentAt])
+  @@index([tenantId, sentAt])
+  @@map("campaign_recipient")
 }
