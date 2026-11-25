@@ -356,3 +356,14 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: "Matching listings" card on each open lead (score, reasons, gaps, Copy portal link, Mark as suggested) and "Matching leads" card on each active listing.
 - Tested: 4 API e2e tests (ranking and hard rules, monthly rents and owner leads, agent scoping, suggestion recorded once, cross-agency 404s).
 - Not yet: semantic (pgvector) re-ranking; automatic alerts to clients when a new listing matches (needs WhatsApp templates and marketing consent).
+
+## Phase 1 · Bulk import (2026-11-25)
+
+- `POST /v1/import/contacts` (crm:write) and `POST /v1/import/listings` (property:write): rows parsed from a CSV in the browser (header → cell, up to 500 per request), `dryRun` for a preview that writes nothing.
+- Each row goes through the same schema, permission, plan-limit and audit path as adding it by hand (`CrmService`, `InventoryService`). Loose header matching (`apps/api/src/import/import-mapping.ts`): "Mobile"/"Phone"/"WhatsApp", "Purpose: For Rent", "Type: Flat", "AED 2,500,000", "Studio", etc. Unknown values are reported, never guessed.
+- Contacts: source `import`, duplicates by phone (in the agency or earlier in the file) are skipped. A "Looking to" column also creates a lead with the requirement columns. No consent is assumed, so imported contacts are not messaged until consent is recorded.
+- Listings: always drafts (going live still needs a permit); duplicate references skipped; stops at the plan's listing limit.
+- "Agent Email" column assigns rows; only managers may assign to others. One audit entry per import (`import.contacts` / `import.listings`) plus the usual per-record entries.
+- Web: **Bulk import** page (side menu) with templates, preview counts, per-row "what to fix" table, then Import. Files up to 2,000 rows are sent in batches of 200. JSON body limit raised to 2 MB.
+- Tested: 3 API e2e tests (preview writes nothing, import with leads and duplicates, consent stays unknown, listings as drafts, agent column rules, row cap) and 2 CSV parser unit tests.
+- Known limit: duplicate phones split across two batches of the same large file are caught by the database only at import time (shown as an error row), not in the preview.

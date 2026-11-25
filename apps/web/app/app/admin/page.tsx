@@ -297,7 +297,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Scored listing suggestions on every lead, matching leads on every listing',
       },
-      { label: 'Bulk import', icon: FileUp, status: 'soon', note: 'Planned' },
+      {
+        label: 'Bulk import',
+        icon: FileUp,
+        status: 'live',
+        note: 'CSV import of contacts, leads and draft listings with a preview',
+      },
     ],
   },
   {
