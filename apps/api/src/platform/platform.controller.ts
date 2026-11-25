@@ -16,6 +16,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { parseBody } from '../common/zod';
 import { PlatformAdminGuard } from './platform.guard';
 import { PlatformService } from './platform.service';
+import { agencyCreateSchema, agencyDetailsSchema, agencyInviteSchema } from './site-content.schemas';
 
 const reasonSchema = z.strictObject({ reason: z.string().trim().min(3).max(500) });
 const planSchema = z
@@ -53,6 +54,27 @@ export class PlatformController {
   @Get('agencies')
   async agencies(@Req() req: AuthenticatedRequest) {
     return { data: await this.platform.agencies(req.auth.userId) };
+  }
+
+  /** Creates an agency by hand, optionally inviting its owner by email. */
+  @Post('agencies')
+  createAgency(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
+    return this.platform.createAgency(req.auth.userId, parseBody(agencyCreateSchema, body));
+  }
+
+  @Post('agencies/:id/invitations')
+  invite(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string, @Body() body: unknown) {
+    const { email, role } = parseBody(agencyInviteSchema, body);
+    return this.platform.inviteToAgency(req.auth.userId, id, email, role);
+  }
+
+  @Patch('agencies/:id/details')
+  updateDetails(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', uuid()) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.platform.updateAgencyDetails(req.auth.userId, id, parseBody(agencyDetailsSchema, body));
   }
 
   @Post('agencies/:id/approve')

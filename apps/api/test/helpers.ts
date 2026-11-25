@@ -55,7 +55,7 @@ export async function resetDatabase(owner: PrismaClient): Promise<void> {
   await owner.$executeRawUnsafe(
     'TRUNCATE "audit_log", "property_permit", "property", "project", "invitation", "membership", "team", "agency_settings", "agency", "user_token", "mfa_factor", "session", "user" CASCADE',
   );
-  await owner.$executeRawUnsafe('TRUNCATE "platform_audit_log"');
+  await owner.$executeRawUnsafe('TRUNCATE "platform_audit_log", "site_banner", "site_setting"');
   await owner.$executeRawUnsafe(
     'INSERT INTO "fee_rule" SELECT * FROM json_populate_recordset(NULL::"fee_rule", $1::json)',
     JSON.stringify(templates[0]?.rows ?? []),
