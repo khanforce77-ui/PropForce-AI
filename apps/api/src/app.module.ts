@@ -20,6 +20,7 @@ import { MatchingModule } from './matching/matching.module';
 import { ImportModule } from './import/import.module';
 import { ViewingsModule } from './viewings/viewings.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { DealsModule } from './deals/deals.module';
 
 @Module({})
 export class AppModule {
@@ -62,6 +63,7 @@ export class AppModule {
         ImportModule,
         ViewingsModule,
         CampaignsModule,
+        DealsModule,
         CalculatorModule,
         PlatformModule,
         WhatsAppModule,

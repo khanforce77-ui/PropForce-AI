@@ -202,6 +202,9 @@ model Agency {
   viewings         Viewing[]
   campaigns        Campaign[]
   campaignRecipients CampaignRecipient[]
+  deals            Deal[]
+  dealSplits       DealCommissionSplit[]
+  dealTasks        DealTask[]
   logo             AgencyLogo?
 
   @@map("agency")
@@ -275,6 +278,8 @@ model Membership {
   ownedContacts         Contact[]
   assignedLeads         Lead[]
   viewings              Viewing[]
+  deals                 Deal[]
+  dealSplits            DealCommissionSplit[]
   assignedConversations Conversation[]
   portalEnquiries       PortalEnquiry[]
   portalContacts        PortalContactEvent[]
@@ -454,6 +459,7 @@ model Property {
   leads           Lead[]
   photos          PropertyPhoto[]
   viewings        Viewing[]
+  deals           Deal[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -766,6 +772,7 @@ model Contact {
   leads         Lead[]
   conversations Conversation[]
   campaignRecipients CampaignRecipient[]
+  deals         Deal[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -827,6 +834,7 @@ model Lead {
   property   Property?      @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: NoAction)
   activities LeadActivity[]
   viewings   Viewing[]
+  deals      Deal[]
 
   @@unique([id, tenantId])
   @@index([tenantId, stage])
@@ -1181,4 +1189,102 @@ model CampaignRecipient {
   @@index([tenantId, contactId, sentAt])
   @@index([tenantId, sentAt])
   @@map("campaign_recipient")
+}
+
+// ───── Deals and commissions (Phase 3) ─────
+
+enum DealType {
+  sale
+  rental
+}
+
+enum CommissionStatus {
+  pending
+  invoiced
+  received
+}
+
+/// A transaction in progress. Stages are validated per type in the API.
+model Deal {
+  id                   String           @id @default(uuid(7)) @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  reference            String
+  type                 DealType
+  stage                String
+  leadId               String?          @map("lead_id") @db.Uuid
+  /// Buyer or tenant.
+  contactId            String           @map("contact_id") @db.Uuid
+  propertyId           String?          @map("property_id") @db.Uuid
+  agentMembershipId    String           @map("agent_membership_id") @db.Uuid
+  /// Agreed price (sale) or yearly rent (rental), AED.
+  price                Decimal          @db.Decimal(14, 2)
+  /// Gross commission before VAT: a percentage of the price, or a fixed amount.
+  commissionPercent    Decimal?         @map("commission_percent") @db.Decimal(5, 2)
+  commissionAmount     Decimal?         @map("commission_amount") @db.Decimal(14, 2)
+  vatPercent           Decimal          @default(5) @map("vat_percent") @db.Decimal(5, 2)
+  commissionStatus     CommissionStatus @default(pending) @map("commission_status")
+  invoiceNumber        String?          @map("invoice_number")
+  invoicedAt           DateTime?        @map("invoiced_at") @db.Timestamptz(3)
+  commissionReceivedAt DateTime?        @map("commission_received_at") @db.Timestamptz(3)
+  expectedCloseDate    DateTime?        @map("expected_close_date") @db.Date
+  closedAt             DateTime?        @map("closed_at") @db.Timestamptz(3)
+  lostReason           String?          @map("lost_reason")
+  notes                String?
+  createdBy            String           @map("created_by") @db.Uuid
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead?                 @relation(fields: [leadId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  contact  Contact               @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  property Property?             @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  agent    Membership            @relation(fields: [agentMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  splits   DealCommissionSplit[]
+  tasks    DealTask[]
+
+  @@unique([tenantId, reference])
+  @@unique([id, tenantId])
+  @@index([tenantId, type, stage])
+  @@index([tenantId, agentMembershipId])
+  @@index([tenantId, closedAt])
+  @@map("deal")
+}
+
+/// Who gets what share of the gross commission: a team member or an outside party (co-broker).
+model DealCommissionSplit {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  dealId       String   @map("deal_id") @db.Uuid
+  membershipId String?  @map("membership_id") @db.Uuid
+  /// For outside parties (e.g. co-broker agency name).
+  partyName    String?  @map("party_name")
+  percent      Decimal  @db.Decimal(5, 2)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency Agency      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deal   Deal        @relation(fields: [dealId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  member Membership? @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+
+  @@index([tenantId, dealId])
+  @@index([tenantId, membershipId])
+  @@map("deal_commission_split")
+}
+
+/// Checklist item / milestone on a deal.
+model DealTask {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  dealId    String    @map("deal_id") @db.Uuid
+  title     String
+  dueDate   DateTime? @map("due_date") @db.Date
+  doneAt    DateTime? @map("done_at") @db.Timestamptz(3)
+  doneBy    String?   @map("done_by") @db.Uuid
+  position  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deal   Deal   @relation(fields: [dealId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, dealId, position])
+  @@map("deal_task")
 }
