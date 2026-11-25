@@ -13,6 +13,7 @@ import {
   type ToolContext,
   type ToolHandlers,
 } from '@propforce/ai';
+import { DEFAULT_SLOT_OPTIONS, DUBAI_DEFAULT_HOURS, findFreeSlots } from '@propforce/calendar';
 import { estimate, type Calculator } from '../calculator/calculator';
 import { effectiveFeeRules } from '../calculator/calculator.service';
 import { hasPermission } from '../tenancy/permissions';
@@ -420,14 +421,46 @@ export function createToolHandlers(prisma: PrismaClient): ToolHandlers {
         );
       }),
 
-    // The agent calendar is not connected yet (Google OAuth pending), so there are no slots.
-    check_agent_availability: async () => ({
-      data: {
-        slots: [],
-        message:
-          'Live availability is not connected. Ask the client for preferred times; the agent will confirm.',
-      },
-    }),
+    // Free time on the assigned agent's PropForce calendar (working hours minus viewings).
+    // Google Calendar busy times are added once agents can connect Google (OAuth pending).
+    check_agent_availability: (input, ctx) =>
+      run(ctx, async (tx) => {
+        const conv = await conversationScope(tx, ctx);
+        if (!conv.assignedMembershipId) {
+          return {
+            data: {
+              slots: [],
+              message: 'No agent is assigned yet. Ask the client for preferred times.',
+            },
+          };
+        }
+        const range = { start: new Date(input.from), end: new Date(input.to) };
+        const busy = await tx.viewing.findMany({
+          where: {
+            agentMembershipId: conv.assignedMembershipId,
+            status: { in: ['requested', 'confirmed'] },
+            startsAt: { lt: range.end },
+            endsAt: { gt: range.start },
+          },
+          select: { startsAt: true, endsAt: true },
+        });
+        const slots = findFreeSlots(
+          busy.map((b) => ({ start: b.startsAt, end: b.endsAt })),
+          DUBAI_DEFAULT_HOURS,
+          range,
+          new Date(),
+          { ...DEFAULT_SLOT_OPTIONS, maxSlots: 6 },
+        );
+        return {
+          data: {
+            slots: slots.map((x) => ({
+              start: x.start.toISOString(),
+              dubaiTime: dubaiTime(x.start.toISOString()),
+            })),
+            message: 'Times the agent is free. The agent still confirms the viewing.',
+          },
+        };
+      }),
 
     // Never a final booking: the request is recorded on the lead and the agent confirms it.
     request_viewing_booking: (input, ctx) =>
@@ -461,6 +494,37 @@ export function createToolHandlers(prisma: PrismaClient): ToolHandlers {
           lead.id,
           `Viewing requested on WhatsApp for ${p.reference} at ${dubaiTime(input.slotStart)} (Dubai time). Please confirm with the client.${input.notes ? ` Client notes: ${input.notes}` : ''}`,
         );
+        // Hold the time on the agent's calendar as "requested" when it is free; the agent confirms.
+        const agentId = conv.assignedMembershipId;
+        if (agentId) {
+          const start = new Date(input.slotStart);
+          const end = new Date(start.getTime() + DEFAULT_SLOT_OPTIONS.durationMinutes * 60_000);
+          const pad = DEFAULT_SLOT_OPTIONS.bufferMinutes * 60_000;
+          const clash = await tx.viewing.count({
+            where: {
+              agentMembershipId: agentId,
+              status: { in: ['requested', 'confirmed'] },
+              startsAt: { lt: new Date(end.getTime() + pad) },
+              endsAt: { gt: new Date(start.getTime() - pad) },
+            },
+          });
+          if (!clash && start.getTime() > Date.now()) {
+            await tx.viewing.create({
+              data: {
+                tenantId: ctx.tenantId,
+                leadId: lead.id,
+                propertyId: p.id,
+                agentMembershipId: agentId,
+                startsAt: start,
+                endsAt: end,
+                status: 'requested',
+                source: 'ai',
+                notes: input.notes ?? null,
+                createdBy: conv.account.connectedBy,
+              },
+            });
+          }
+        }
         await aiAudit(tx, ctx, 'viewing.requested', 'lead', lead.id, {
           propertyId: p.id,
           slotStart: input.slotStart,

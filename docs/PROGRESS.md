@@ -367,3 +367,17 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: **Bulk import** page (side menu) with templates, preview counts, per-row "what to fix" table, then Import. Files up to 2,000 rows are sent in batches of 200. JSON body limit raised to 2 MB.
 - Tested: 3 API e2e tests (preview writes nothing, import with leads and duplicates, consent stays unknown, listings as drafts, agent column rules, row cap) and 2 CSV parser unit tests.
 - Known limit: duplicate phones split across two batches of the same large file are caught by the database only at import time (shown as an error row), not in the preview.
+
+## Phase 2 · Calendar and viewings (2026-11-25)
+
+- Migration `20261126010000_viewings`: table `viewing` (lead, listing, agent, start/end, status `requested | confirmed | completed | cancelled | no_show`, source `agent | ai | portal`, notes, outcome, `external_event_id` for Google later), tenant RLS + platform-admin read, `ends_at > starts_at` check.
+- API (`apps/api/src/viewings`): `GET /v1/viewings` (range ≤ 62 days, by agent/lead/status), `GET /v1/viewings/availability` (an agent's free slots on a UAE day: Mon–Sat 9–7, around their viewings with a 15-minute travel buffer, using `@propforce/calendar`), `POST /v1/viewings`, `PATCH /v1/viewings/:id` (move / change agent), `POST /v1/viewings/:id/status`.
+- Rules: only active or under-offer listings; no times in the past; a clash with the agent's other requested/confirmed viewings (including the buffer) is refused with `SLOT_CONFLICT` (bookings for one agent are serialized with an advisory lock); done/no-show only after the start time; cancelling needs a reason; closed statuses are final. Agents book only on their own leads and for themselves; managers book for anyone. Agents see viewings they run or on their leads.
+- A confirmed viewing moves a New/Contacted/Qualified lead to Viewing. Every booking, move and status change is written on the lead timeline and audited.
+- AI on WhatsApp: `check_agent_availability` now returns the assigned agent's real free times from this calendar; `request_viewing_booking` also holds the time as a **requested** viewing (source `ai`) when it is free. The agent still confirms; nothing is auto-confirmed.
+- Web: **Calendar** page (week view in UAE time, agent filter for managers, "to confirm" count, Confirm / Mark done / No-show / Move / Cancel on each viewing) and a **Viewings** card with booking form and free-slot picker on each lead.
+- Tested: 3 API e2e tests (booking, buffer clash, availability, stage change, timeline, reschedule, status rules, agent scoping, agency isolation, draft listing and past time refused), AI e2e extended (request held as `requested`), 2 web unit tests for UAE dates.
+- Not yet / pending:
+  - Google Calendar sync: adapter exists in `packages/calendar` but is **pending** — needs a Google OAuth client (client id/secret, consent screen) before agents can connect; until then Google busy times are not checked.
+  - WhatsApp viewing confirmation to the client with the approved template: not wired yet (template parameters not confirmed; outbound currently blocked by the Meta billing restriction).
+  - Working hours are the UAE default for every agency (not yet configurable). The calendar UI is type-checked but not covered by a browser test.

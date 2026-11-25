@@ -3,6 +3,7 @@
 import {
   Building2,
   Calculator,
+  CalendarDays,
   Contact,
   FileUp,
   Globe,
@@ -73,6 +74,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/listings`, label: 'Listings', icon: Home },
     { href: `${base}/inbox`, label: 'Inbox', icon: Inbox },
     { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
+    { href: `${base}/calendar`, label: 'Calendar', icon: CalendarDays },
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/import`, label: 'Bulk import', icon: FileUp },
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },

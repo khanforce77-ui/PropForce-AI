@@ -311,8 +311,8 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
       {
         label: 'Calendar & viewings',
         icon: CalendarDays,
-        status: 'soon',
-        note: 'Building blocks done; needs Google sign-in setup',
+        status: 'live',
+        note: 'Viewings calendar with free slots; Google Calendar sync needs a Google sign-in client',
       },
     ],
   },

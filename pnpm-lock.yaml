@@ -50,6 +50,9 @@ importers:
       '@propforce/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@propforce/calendar':
+        specifier: workspace:*
+        version: link:../../packages/calendar
       '@propforce/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
