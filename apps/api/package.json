@@ -17,6 +17,7 @@
     "@nestjs/throttler": "^6.8.0",
     "@node-rs/argon2": "^2.0.2",
     "@propforce/ai": "workspace:*",
+    "@propforce/calendar": "workspace:*",
     "@propforce/contracts": "workspace:*",
     "@propforce/db": "workspace:*",
     "@propforce/media": "workspace:*",

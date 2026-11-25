@@ -199,6 +199,7 @@ model Agency {
   listingReports   PortalListingReport[]
   feeRules         FeeRule[]
   propertyPhotos   PropertyPhoto[]
+  viewings         Viewing[]
   logo             AgencyLogo?
 
   @@map("agency")
@@ -271,6 +272,7 @@ model Membership {
   assignedProperties    Property[]
   ownedContacts         Contact[]
   assignedLeads         Lead[]
+  viewings              Viewing[]
   assignedConversations Conversation[]
   portalEnquiries       PortalEnquiry[]
   portalContacts        PortalContactEvent[]
@@ -449,6 +451,7 @@ model Property {
   reports         PortalListingReport[]
   leads           Lead[]
   photos          PropertyPhoto[]
+  viewings        Viewing[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -820,6 +823,7 @@ model Lead {
   assigned   Membership?    @relation(fields: [assignedMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
   property   Property?      @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: NoAction)
   activities LeadActivity[]
+  viewings   Viewing[]
 
   @@unique([id, tenantId])
   @@index([tenantId, stage])
@@ -1045,4 +1049,53 @@ model FeeRule {
 
   @@index([tenantId, emirate])
   @@map("fee_rule")
+}
+
+// ───── Viewings (Phase 2) ─────
+
+enum ViewingStatus {
+  requested
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum ViewingSource {
+  agent
+  ai
+  portal
+}
+
+/// A property viewing with a client, on an agent's calendar.
+model Viewing {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  leadId            String        @map("lead_id") @db.Uuid
+  propertyId        String        @map("property_id") @db.Uuid
+  agentMembershipId String        @map("agent_membership_id") @db.Uuid
+  startsAt          DateTime      @map("starts_at") @db.Timestamptz(3)
+  endsAt            DateTime      @map("ends_at") @db.Timestamptz(3)
+  status            ViewingStatus @default(confirmed)
+  source            ViewingSource @default(agent)
+  notes             String?
+  /// What happened (after completed / no-show) or why it was cancelled.
+  outcome           String?
+  /// Set once the external calendar (Google) has the event; null until connected.
+  externalEventId   String?       @map("external_event_id")
+  confirmedAt       DateTime?     @map("confirmed_at") @db.Timestamptz(3)
+  createdBy         String        @map("created_by") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead       @relation(fields: [leadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  property Property   @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  agent    Membership @relation(fields: [agentMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, agentMembershipId, startsAt])
+  @@index([tenantId, startsAt])
+  @@index([tenantId, leadId])
+  @@map("viewing")
 }

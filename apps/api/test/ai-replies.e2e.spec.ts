@@ -320,6 +320,10 @@ describe('AI replies on WhatsApp', () => {
     expect(lead.propertyId).toBe(own.id);
     expect(lead.stage).toBe('new');
     expect(lead.activities.some((x) => x.body?.includes('Please confirm'))).toBe(true);
+    // The time is held on the agent's calendar as a request, not a confirmed viewing.
+    const held = await db().viewing.findMany();
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ status: 'requested', source: 'ai', leadId: lead.id });
   });
 
   it('does not quote fees the agency has not verified', async () => {

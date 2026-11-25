@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { LeadMatches } from '@/components/crm/matches';
 import { StageBadge } from '@/components/crm/stage-badge';
+import { LeadViewings } from '@/components/viewings/lead-viewings';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Label, Select } from '@/components/ui/input';
@@ -305,6 +306,18 @@ export default function LeadPage() {
           </p>
         )}
       </Card>
+
+      <LeadViewings
+        agencyId={agencyId}
+        leadId={lead.id}
+        propertyId={lead.property?.id ?? null}
+        canAssign={manage}
+        open={lead.stage !== 'won' && lead.stage !== 'lost'}
+        onChanged={async (message) => {
+          setNotice(message);
+          await load();
+        }}
+      />
 
       <Card>
         <h2 className="font-medium">Timeline</h2>

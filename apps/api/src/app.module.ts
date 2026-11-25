@@ -18,6 +18,7 @@ import { MediaModule } from './media/media.module';
 import { CalculatorModule } from './calculator/calculator.module';
 import { MatchingModule } from './matching/matching.module';
 import { ImportModule } from './import/import.module';
+import { ViewingsModule } from './viewings/viewings.module';
 
 @Module({})
 export class AppModule {
@@ -58,6 +59,7 @@ export class AppModule {
         CrmModule,
         MatchingModule,
         ImportModule,
+        ViewingsModule,
         CalculatorModule,
         PlatformModule,
         WhatsAppModule,
