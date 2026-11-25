@@ -394,3 +394,14 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
   - Live sends depend on WhatsApp outbound working (currently blocked by the Meta billing restriction) and on the agency having its own approved marketing template in Meta.
   - AI segmentation/scoring and AI reply classification (needs OpenAI in the loop; replies are only marked "replied").
   - Quality-rating guard (reading Meta's number quality tier) is not automated; agencies set the daily limit.
+
+## Phase 3 · Deals and commissions (2026-11-25)
+
+- Migration `20261126030000_deals`: `deal` (reference DL-00001…, type sale/rental, stage, lead, client, listing, agent, price, commission % or fixed amount, VAT %, invoice status/number/dates, expected close, closed/lost), `deal_commission_split` (team member or outside party, percent), `deal_task` (checklist). Tenant RLS; checks on price, percentages and split party.
+- Pipelines (Dubai): sale — offer made, offer accepted, MOU (Form F) signed, deposit paid, mortgage approval, NOC issued, transfer booked, completed, fell through; rental — offer made, offer accepted, contract signed, deposit paid, Ejari registered, keys handed over, completed, fell through. Default checklists per type.
+- API `/v1/deals`: list (type/open/search), summary per stage, create (from a lead; listing type must match), update, stage change (fell through needs a reason; only managers reopen closed deals), splits (managers; ≤ 100%, rest is the agency's share), commission status (managers: pending → invoiced → paid with invoice number), checklist CRUD. Agents see deals they run or share commission on, and change only their own.
+- Completing a deal marks the lead **won** and the listing **sold/rented** (if still active/under offer). Stage changes are written on the lead timeline; everything audited (history shown on the deal).
+- Commission maths in `deal-rules.ts`: gross (fixed amount wins over %), VAT on top, each split's amount, agency remainder.
+- Web: **Deals** board (Sales / Rentals, columns per stage, pipeline value and expected commission), new-deal form (also from a lead's "Create deal"), deal page with stage progress, commission breakdown, split editor, invoice status, checklist and history.
+- Tested: 2 API e2e tests (full sale with splits and payouts, permissions, checklist, completion side effects, summary; rental stages, fell-through reason, listing untouched, wrong listing type, cross-agency isolation).
+- Not done: document templates / e-signature (Phase 4, licensed provider), deadline reminders by email/WhatsApp. PropForce records commissions; it does not issue tax invoices or move money.

@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Contact,
   FileUp,
+  Handshake,
   Globe,
   Home,
   Inbox,
@@ -76,6 +77,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/inbox`, label: 'Inbox', icon: Inbox },
     { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
     { href: `${base}/calendar`, label: 'Calendar', icon: CalendarDays },
+    { href: `${base}/deals`, label: 'Deals', icon: Handshake },
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/import`, label: 'Bulk import', icon: FileUp },
     ...(['owner', 'admin', 'manager'].includes(membership.role)

@@ -154,7 +154,17 @@ export default function LeadPage() {
             {[lead.contact.phoneE164, lead.contact.email].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <StageBadge stage={lead.stage} />
+        <div className="flex items-center gap-2">
+          {lead.stage !== 'lost' && (lead.intent === 'buy' || lead.intent === 'rent') ? (
+            <Link
+              href={`/app/${agencyId}/deals?type=${lead.intent === 'rent' ? 'rental' : 'sale'}&leadId=${lead.id}`}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
+            >
+              Create deal
+            </Link>
+          ) : null}
+          <StageBadge stage={lead.stage} />
+        </div>
       </div>
 
       {error ? <Alert>{error}</Alert> : null}

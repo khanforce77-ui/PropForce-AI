@@ -208,7 +208,6 @@ export default function BoosterPage() {
                 >
                   <option value="">Any</option>
                   <option>Dubai</option>
-                  <option>Abu Dhabi</option>
                 </Select>
               </Field>
             </div>
