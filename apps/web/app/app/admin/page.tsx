@@ -269,6 +269,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: "Watermarked with the agency's logo; originals stay private",
       },
+      {
+        label: 'AI assistant',
+        icon: Bot,
+        status: 'live',
+        note: 'Writes replies to WhatsApp clients (OpenAI connected)',
+      },
     ],
   },
   {
@@ -278,13 +284,7 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         label: 'WhatsApp',
         icon: MessageCircle,
         status: 'setup',
-        note: 'Built; each agency connects its own number once Meta approves PropForce',
-      },
-      {
-        label: 'AI assistant',
-        icon: Bot,
-        status: 'setup',
-        note: 'Built; needs an OpenAI key before it can answer',
+        note: 'Numbers connect and client messages arrive; replies wait on Meta lifting the account hold. Other agencies wait on Meta App Review',
       },
     ],
   },
