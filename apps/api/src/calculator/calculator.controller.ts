@@ -19,7 +19,13 @@ import {
   TenantGuard,
   type TenantRequestContext,
 } from '../tenancy/tenant.guard';
-import { estimateSchema, ruleOverrideSchema, rulesQuery } from './calculator.schemas';
+import {
+  affordabilitySchema,
+  estimateSchema,
+  roiSchema,
+  ruleOverrideSchema,
+  rulesQuery,
+} from './calculator.schemas';
 import { CalculatorService } from './calculator.service';
 
 /** UAE cost calculator for agents: fees, mortgage and commission. Outputs are estimates. */
@@ -39,6 +45,20 @@ export class CalculatorController {
   @RequirePermission('property:read')
   estimate(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
     return this.calc.estimate(ctx, parseBody(estimateSchema, body));
+  }
+
+  @Post('roi')
+  @HttpCode(200)
+  @RequirePermission('property:read')
+  roi(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.calc.roi(ctx, parseBody(roiSchema, body));
+  }
+
+  @Post('affordability')
+  @HttpCode(200)
+  @RequirePermission('property:read')
+  affordability(@Body() body: unknown) {
+    return this.calc.affordability(parseBody(affordabilitySchema, body));
   }
 
   @Put('rules')

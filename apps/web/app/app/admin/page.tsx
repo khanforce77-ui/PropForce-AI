@@ -331,7 +331,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Sale and rental pipelines, checklists, commission splits and invoice status',
       },
-      { label: 'Mortgage & ROI calculator', icon: Calculator, status: 'soon', note: 'Phase 3' },
+      {
+        label: 'Mortgage & ROI calculator',
+        icon: Calculator,
+        status: 'live',
+        note: 'Fees, instalments, buy-to-let yield and projection, borrowing limit',
+      },
       { label: 'Billing & plans', icon: CreditCard, status: 'soon', note: 'Phase 3' },
     ],
   },
