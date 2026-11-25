@@ -139,12 +139,15 @@ export const permitVerificationUrl = z
 export const permitSchema = z
   .strictObject({
     authority: text(32),
+    /** Sale or rent, as printed on the permit. Defaults to the listing's own type. */
+    purpose: z.enum(listingTypes).optional(),
     permitNumber: optionalText(64),
     validUntil: isoDate,
     verificationUrl: permitVerificationUrl.nullable().optional(),
   })
   .transform((v) => ({
     ...v,
+    purpose: v.purpose ?? null,
     permitNumber: v.permitNumber ?? null,
     verificationUrl: v.verificationUrl ?? null,
     validUntil: new Date(v.validUntil),
@@ -155,12 +158,14 @@ export type PermitInput = z.output<typeof permitSchema>;
 export const permitUpdateSchema = z
   .strictObject({
     permitNumber: optionalText(64),
+    purpose: z.enum(listingTypes).optional(),
     validUntil: isoDate.optional(),
     verificationUrl: permitVerificationUrl.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' })
   .transform((v) => ({
     ...(v.permitNumber !== undefined ? { permitNumber: v.permitNumber } : {}),
+    ...(v.purpose !== undefined ? { purpose: v.purpose } : {}),
     ...(v.verificationUrl !== undefined ? { verificationUrl: v.verificationUrl } : {}),
     ...(v.validUntil ? { validUntil: new Date(v.validUntil) } : {}),
   }));

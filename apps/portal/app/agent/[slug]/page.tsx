@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { AgentAvatar } from '@/components/agent-avatar';
+import { VerifiedAgentBadge } from '@/components/verified-agent-badge';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Results } from '@/components/results';
 import { getAgent, searchListings } from '@/lib/api';
@@ -65,7 +66,10 @@ export default async function AgentPage({ params, searchParams }: Props) {
       <div className="flex flex-col gap-5 rounded-2xl border border-border p-6 sm:flex-row sm:items-center">
         <AgentAvatar agent={agent} size={96} />
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{agent.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold">{agent.name}</h1>
+            {agent.verified ? <VerifiedAgentBadge /> : null}
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Real estate agent at{' '}
             <Link href={`/agency/${agent.agency.slug}`} className="font-medium text-primary">

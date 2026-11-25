@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  BadgeCheck,
   BadgeDollarSign,
   Bot,
   Building2,
@@ -31,7 +32,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { DailyBarChart } from '@/components/admin/bar-chart';
+import { AdminBrokerVerifications } from '@/components/admin/broker-verifications';
 import { AdminListingReports } from '@/components/admin/listing-reports';
+import { AdminListingReview } from '@/components/admin/listing-review';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -222,7 +225,9 @@ const TABS = [
   ['overview', 'Overview'],
   ['agencies', 'Agencies'],
   ['listings', 'All listings'],
+  ['review', 'Listing review'],
   ['reports', 'Listing reports'],
+  ['brokers', 'Agent verification'],
   ['users', 'Users'],
   ['settings', 'Settings'],
   ['activity', 'Activity'],
@@ -233,7 +238,9 @@ const TAB_ICONS: Record<Tab, LucideIcon> = {
   overview: LayoutDashboard,
   agencies: Building2,
   listings: Home,
+  review: ShieldCheck,
   reports: Flag,
+  brokers: BadgeCheck,
   users: Users,
   settings: Settings,
   activity: Activity,
@@ -992,7 +999,11 @@ export default function PlatformAdminPage() {
           </Card>
         ) : null}
 
+        {tab === 'review' ? <AdminListingReview /> : null}
+
         {tab === 'reports' ? <AdminListingReports /> : null}
+
+        {tab === 'brokers' ? <AdminBrokerVerifications /> : null}
 
         {tab === 'users' ? (
           <Card>

@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingPhotos } from '@/components/listings/listing-photos';
+import { QualityChecklist, ReviewNotice } from '@/components/listings/listing-review';
 import { ListingMatches } from '@/components/crm/matches';
 import { PermitsCard, permitCounts } from '@/components/listings/permits-card';
 import { StatusBadge } from '@/components/listings/status-badge';
@@ -54,13 +55,13 @@ function ListingDetail() {
     void load();
   }, [load]);
 
-  async function act(fn: () => Promise<unknown>, success: string) {
+  async function act(fn: () => Promise<unknown>, success: string | ((result: unknown) => string)) {
     setError(null);
     setProblems([]);
     setNotice(null);
     try {
-      await fn();
-      setNotice(success);
+      const result = await fn();
+      setNotice(typeof success === 'string' ? success : success(result));
       await load();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -110,7 +111,7 @@ function ListingDetail() {
           <h1 className="text-2xl font-semibold tracking-tight">
             {p.title || [p.building, p.community].filter(Boolean).join(', ') || p.reference}
           </h1>
-          <StatusBadge status={p.status} />
+          <StatusBadge status={p.status} reviewStatus={p.reviewStatus} />
         </div>
         <p className="text-sm text-muted-foreground">
           {p.reference} · {formatPrice(p)} · Agent: {p.assigned?.user.fullName ?? 'Unassigned'}
@@ -123,6 +124,7 @@ function ListingDetail() {
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {hiddenBecause ? <Alert>Not showing on the portal: {hiddenBecause}</Alert> : null}
+      <ReviewNotice property={p} />
       {error ? (
         <Alert>
           {error}
@@ -154,7 +156,10 @@ function ListingDetail() {
                   s === 'draft' && ['active', 'under_offer'].includes(p.status)
                     ? 'Unpublished. The listing is no longer on the portal.'
                     : s === 'active'
-                      ? 'Listing is now live.'
+                      ? (r) =>
+                          (r as PropertyDetail | undefined)?.reviewStatus === 'pending'
+                            ? 'Sent to PropForce for review. It shows on the portal once approved.'
+                            : 'Listing is now live.'
                       : `Listing is now ${STATUS_LABEL[s].toLowerCase()}.`,
                 )
               }
@@ -214,6 +219,8 @@ function ListingDetail() {
       ) : null}
 
       {p.status === 'active' ? <ListingMatches agencyId={agencyId} propertyId={p.id} /> : null}
+
+      <QualityChecklist property={p} />
 
       <ListingPhotos agencyId={agencyId} propertyId={p.id} canEdit={Boolean(canEdit)} />
 

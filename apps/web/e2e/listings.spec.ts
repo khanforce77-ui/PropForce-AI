@@ -1,7 +1,23 @@
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
+import pg from 'pg';
 import { linkFromEmail } from './mailpit';
+
+const OWNER_DB_URL =
+  process.env.MIGRATION_DATABASE_URL ??
+  'postgresql://propforce:propforce_dev_only@localhost:5432/propforce';
+
+/** This journey checks the portal straight after publishing, so PropForce's review is off here. */
+async function setFlag(key: string, enabled: boolean) {
+  const client = new pg.Client({ connectionString: OWNER_DB_URL });
+  await client.connect();
+  try {
+    await client.query('UPDATE feature_flag SET enabled = $2 WHERE key = $1', [key, enabled]);
+  } finally {
+    await client.end();
+  }
+}
 
 const run = Date.now().toString(36);
 const fixture = (name: string) => join(__dirname, 'fixtures', name);
@@ -14,6 +30,7 @@ const owner = {
 test('owner adds a listing, publishes it with a permit and sees it on the dashboard', async ({
   page,
 }) => {
+  await setFlag('platform.require_listing_review', false);
   // A fresh, onboarded agency.
   await page.goto('/register');
   await page.getByLabel('Your full name').fill(owner.name);

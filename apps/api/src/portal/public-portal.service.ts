@@ -37,6 +37,7 @@ const agentSelect = {
   brn: true,
   publicPhoneE164: true,
   whatsappE164: true,
+  brokerVerifiedUntil: true,
   user: { select: { fullName: true } },
   photo: { select: { sha256: true } },
 } as const;
@@ -121,6 +122,10 @@ function toAgent(row: Pick<CardRow, 'assigned'>) {
     id: a.id,
     name: a.user.fullName,
     brn: a.brn,
+    /** PropForce checked the agent's DLD broker card, and it has not expired. */
+    verified:
+      !!a.brokerVerifiedUntil &&
+      a.brokerVerifiedUntil >= new Date(new Date().toISOString().slice(0, 10)),
     // The numbers themselves are only handed out through the contact endpoint, which records it.
     canCall: Boolean(a.publicPhoneE164 ?? a.whatsappE164),
     canWhatsapp: Boolean(a.whatsappE164 ?? a.publicPhoneE164),

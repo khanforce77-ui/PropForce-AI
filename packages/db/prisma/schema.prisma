@@ -201,6 +201,7 @@ model Agency {
   propertyPhotos   PropertyPhoto[]
   viewings         Viewing[]
   logo             AgencyLogo?
+  brokerChecks     BrokerVerification[]
 
   @@map("agency")
 }
@@ -250,20 +251,24 @@ enum MembershipStatus {
 }
 
 model Membership {
-  id              String           @id @default(uuid(7)) @db.Uuid
-  tenantId        String           @map("tenant_id") @db.Uuid
-  userId          String           @map("user_id") @db.Uuid
-  teamId          String?          @map("team_id") @db.Uuid
-  role            Role
-  status          MembershipStatus @default(active)
+  id                  String           @id @default(uuid(7)) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  userId              String           @map("user_id") @db.Uuid
+  teamId              String?          @map("team_id") @db.Uuid
+  role                Role
+  status              MembershipStatus @default(active)
   /// Broker Registration Number; optional, entered by the agency.
-  brn             String?
+  brn                 String?
   /// Number shown to the public for calls about this agent's listings (E.164, e.g. +971501234567).
-  publicPhoneE164 String?          @map("public_phone_e164")
+  publicPhoneE164     String?          @map("public_phone_e164")
   /// WhatsApp number for click-to-chat from the public portal (E.164).
-  whatsappE164    String?          @map("whatsapp_e164")
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  whatsappE164        String?          @map("whatsapp_e164")
+  /// Set when PropForce checked the agent's broker card (BRN). The "Verified agent" badge shows
+  /// while brokerVerifiedUntil (the card's expiry) has not passed.
+  brokerVerifiedAt    DateTime?        @map("broker_verified_at") @db.Timestamptz(3)
+  brokerVerifiedUntil DateTime?        @map("broker_verified_until") @db.Date
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -277,6 +282,7 @@ model Membership {
   portalEnquiries       PortalEnquiry[]
   portalContacts        PortalContactEvent[]
   photo                 MemberPhoto?
+  brokerVerification    BrokerVerification?
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -364,6 +370,13 @@ enum PropertyStatus {
   archived
 }
 
+enum ListingReviewStatus {
+  not_required
+  pending
+  approved
+  rejected
+}
+
 enum Furnishing {
   unfurnished
   semi_furnished
@@ -398,48 +411,56 @@ model Project {
 }
 
 model Property {
-  id                   String         @id @default(uuid(7)) @db.Uuid
-  tenantId             String         @map("tenant_id") @db.Uuid
+  id                   String              @id @default(uuid(7)) @db.Uuid
+  tenantId             String              @map("tenant_id") @db.Uuid
   /// Agency-facing reference, unique within the agency.
   reference            String
-  listingType          ListingType    @map("listing_type")
-  propertyType         PropertyType   @map("property_type")
-  completion           Completion     @default(ready)
-  status               PropertyStatus @default(draft)
-  projectId            String?        @map("project_id") @db.Uuid
-  assignedMembershipId String?        @map("assigned_membership_id") @db.Uuid
+  listingType          ListingType         @map("listing_type")
+  propertyType         PropertyType        @map("property_type")
+  completion           Completion          @default(ready)
+  status               PropertyStatus      @default(draft)
+  projectId            String?             @map("project_id") @db.Uuid
+  assignedMembershipId String?             @map("assigned_membership_id") @db.Uuid
   title                String?
   emirate              String
   community            String?
-  subCommunity         String?        @map("sub_community")
+  subCommunity         String?             @map("sub_community")
   building             String?
-  unitNo               String?        @map("unit_no")
+  unitNo               String?             @map("unit_no")
   /// 0 = studio
   bedrooms             Int?
   bathrooms            Int?
-  areaSqft             Decimal?       @map("area_sqft") @db.Decimal(10, 2)
-  price                Decimal?       @db.Decimal(14, 2)
+  areaSqft             Decimal?            @map("area_sqft") @db.Decimal(10, 2)
+  price                Decimal?            @db.Decimal(14, 2)
   /// Only for rentals.
-  rentPeriod           RentPeriod?    @map("rent_period")
+  rentPeriod           RentPeriod?         @map("rent_period")
   furnishing           Furnishing?
-  amenities            String[]       @default([])
+  amenities            String[]            @default([])
   parking              Int?
   floor                Int?
   view                 String?
   developer            String?
-  handoverDate         DateTime?      @map("handover_date") @db.Date
-  paymentPlan          Json?          @map("payment_plan")
-  serviceChargePerSqft Decimal?       @map("service_charge_per_sqft") @db.Decimal(8, 2)
-  latitude             Decimal?       @db.Decimal(9, 6)
-  longitude            Decimal?       @db.Decimal(9, 6)
+  handoverDate         DateTime?           @map("handover_date") @db.Date
+  paymentPlan          Json?               @map("payment_plan")
+  serviceChargePerSqft Decimal?            @map("service_charge_per_sqft") @db.Decimal(8, 2)
+  latitude             Decimal?            @db.Decimal(9, 6)
+  longitude            Decimal?            @db.Decimal(9, 6)
   description          String?
-  listingExpiresAt     DateTime?      @map("listing_expires_at") @db.Timestamptz(3)
-  verifiedAt           DateTime?      @map("verified_at") @db.Timestamptz(3)
-  verifiedBy           String?        @map("verified_by") @db.Uuid
-  createdBy            String         @map("created_by") @db.Uuid
-  deletedAt            DateTime?      @map("deleted_at") @db.Timestamptz(3)
-  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  listingExpiresAt     DateTime?           @map("listing_expires_at") @db.Timestamptz(3)
+  verifiedAt           DateTime?           @map("verified_at") @db.Timestamptz(3)
+  verifiedBy           String?             @map("verified_by") @db.Uuid
+  /// PropForce's own check before a listing shows on the public portal. A live listing stays off
+  /// the portal while pending or rejected.
+  reviewStatus         ListingReviewStatus @default(not_required) @map("review_status")
+  /// Why PropForce rejected the listing or sent it back to review. Shown to the agency.
+  reviewReason         String?             @map("review_reason")
+  submittedForReviewAt DateTime?           @map("submitted_for_review_at") @db.Timestamptz(3)
+  reviewedAt           DateTime?           @map("reviewed_at") @db.Timestamptz(3)
+  reviewedBy           String?             @map("reviewed_by") @db.Uuid
+  createdBy            String              @map("created_by") @db.Uuid
+  deletedAt            DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency          Agency                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // Composite keys: the database refuses a project or agent from another agency.
@@ -459,23 +480,26 @@ model Property {
   @@index([tenantId, emirate, community])
   @@index([tenantId, assignedMembershipId])
   @@index([tenantId, createdAt(sort: Desc)])
+  @@index([reviewStatus, submittedForReviewAt])
   @@map("property")
 }
 
 /// Advertising permit for a listing (e.g. a Dubai Trakheesi permit). Entered by the agency; the
 /// platform does not verify it against the regulator.
 model PropertyPermit {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  propertyId      String   @map("property_id") @db.Uuid
+  id              String       @id @default(uuid(7)) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  propertyId      String       @map("property_id") @db.Uuid
   authority       String
+  /// What the permit allows: advertising for sale or for rent. Must match the listing's type.
+  purpose         ListingType?
   /// Optional when the agency uploads the permit document instead.
-  permitNumber    String?  @map("permit_number")
-  validUntil      DateTime @map("valid_until") @db.Date
+  permitNumber    String?      @map("permit_number")
+  validUntil      DateTime     @map("valid_until") @db.Date
   /// The link inside the regulator's QR code (DLD Trakheesi, ADREC). Must be https on a .gov.ae
   /// host; the portal draws the QR from it.
-  verificationUrl String?  @map("verification_url")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  verificationUrl String?      @map("verification_url")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
 
   agency   Agency                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property                @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
@@ -1098,4 +1122,41 @@ model Viewing {
   @@index([tenantId, startsAt])
   @@index([tenantId, leadId])
   @@map("viewing")
+}
+
+enum BrokerVerificationStatus {
+  pending
+  approved
+  rejected
+}
+
+/// An agent's request for the "Verified agent" badge: their DLD broker card (BRN) and Emirates ID,
+/// checked by a PropForce admin. Private to the agency and platform admins. The Emirates ID copy is
+/// deleted as soon as the request is decided.
+model BrokerVerification {
+  id                    String                   @id @default(uuid(7)) @db.Uuid
+  tenantId              String                   @map("tenant_id") @db.Uuid
+  membershipId          String                   @map("membership_id") @db.Uuid
+  brn                   String
+  brnExpiresAt          DateTime                 @map("brn_expires_at") @db.Date
+  status                BrokerVerificationStatus @default(pending)
+  /// Why it was rejected. Shown to the agent.
+  reason                String?
+  /// application/pdf or image/jpeg.
+  cardContentType       String                   @map("card_content_type")
+  cardBytes             Bytes                    @map("card_bytes")
+  emiratesIdContentType String?                  @map("emirates_id_content_type")
+  emiratesIdBytes       Bytes?                   @map("emirates_id_bytes")
+  submittedBy           String                   @map("submitted_by") @db.Uuid
+  submittedAt           DateTime                 @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  reviewedAt            DateTime?                @map("reviewed_at") @db.Timestamptz(3)
+  reviewedBy            String?                  @map("reviewed_by") @db.Uuid
+
+  agency     Agency     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([membershipId, tenantId])
+  @@index([status, submittedAt])
+  @@index([tenantId])
+  @@map("broker_verification")
 }

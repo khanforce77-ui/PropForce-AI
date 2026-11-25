@@ -156,7 +156,7 @@ export default function ListingsPage() {
                   <td className="px-4 py-3">{bedroomsLabel(p.bedrooms)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatPrice(p)}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={p.status} />
+                    <StatusBadge status={p.status} reviewStatus={p.reviewStatus} />
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {p.assigned?.user.fullName ?? '—'}
