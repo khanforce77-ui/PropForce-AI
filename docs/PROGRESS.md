@@ -381,3 +381,16 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
   - Google Calendar sync: adapter exists in `packages/calendar` but is **pending** — needs a Google OAuth client (client id/secret, consent screen) before agents can connect; until then Google busy times are not checked.
   - WhatsApp viewing confirmation to the client with the approved template: not wired yet (template parameters not confirmed; outbound currently blocked by the Meta billing restriction).
   - Working hours are the UAE default for every agency (not yet configurable). The calendar UI is type-checked but not covered by a browser test.
+
+## Phase 3 · Lead Booster (2026-11-25)
+
+- Migration `20261126020000_campaigns`: `campaign` (template name/language, body parameters, audience filter, status, daily limit, approval fields) and `campaign_recipient` (frozen list with status `queued | skipped | sent | failed | replied` and skip reason). Tenant RLS, platform-admin read, no DELETE grant on campaigns.
+- New permissions: `campaign:write` (owner, admin, manager) and `campaign:approve` (owner, admin). Agents have no access.
+- Flow: draft → preview (matched / will receive / skipped by reason, rendered variables) → submit (recipient list frozen) → **owner/admin approval** → send in batches of 25 from the browser → completed. Back to draft or cancel at any point before completion.
+- Safety: only contacts with recorded WhatsApp **marketing** consent and not "do not contact" are queued; consent is checked again for every message at send time (fail closed via `mayContact` + `checkOutboundSend`); per-agency 24-hour limit (default 250, Meta's first tier); one sender per campaign (advisory lock); a template or token rejection stops the campaign instead of failing every recipient. Sent templates appear in the inbox (conversation in human mode, so replies go to a person). Inbound messages within 7 days mark the recipient as **replied**. Every step is audited.
+- Web: **Lead Booster** (side menu for owners, admins, managers): campaign list, new-campaign form (sender number, template, variables with {first_name}/{full_name}/{agency_name}, audience by tags, lead intent, stage, emirate, communities, daily limit), detail page with preview, approval, progress bar, pause/continue, recipient table.
+- Tested: 3 API e2e tests (consent-only audience and preview, approval required and role checks, consent withdrawn after approval is skipped, template payload, inbox message, reply tracking, daily limit, empty audience, cross-agency 404, agent 403, template rejection stops sending). Full API suite: 191 tests pass.
+- Pending / not done:
+  - Live sends depend on WhatsApp outbound working (currently blocked by the Meta billing restriction) and on the agency having its own approved marketing template in Meta.
+  - AI segmentation/scoring and AI reply classification (needs OpenAI in the loop; replies are only marked "replied").
+  - Quality-rating guard (reading Meta's number quality tier) is not automated; agencies set the daily limit.

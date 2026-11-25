@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Rocket,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -77,6 +78,9 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/calendar`, label: 'Calendar', icon: CalendarDays },
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/import`, label: 'Bulk import', icon: FileUp },
+    ...(['owner', 'admin', 'manager'].includes(membership.role)
+      ? [{ href: `${base}/booster`, label: 'Lead Booster', icon: Rocket }]
+      : []),
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },
     { href: `${base}/calculator`, label: 'Cost calculator', icon: Calculator },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },

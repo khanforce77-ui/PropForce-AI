@@ -9,7 +9,7 @@ import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
 import { InboundService } from './inbound.service';
 import { WhatsAppWebhookController } from './webhook.controller';
-import { whatsappProviders } from './whatsapp.providers';
+import { WHATSAPP_CLIENT, whatsappProviders } from './whatsapp.providers';
 
 @Module({
   imports: [AuthModule, TenancyModule],
@@ -24,6 +24,6 @@ import { whatsappProviders } from './whatsapp.providers';
     AiDispatcher,
     PlatformAdminGuard,
   ],
-  exports: [InboundService, ConversationsService],
+  exports: [InboundService, ConversationsService, WHATSAPP_CLIENT],
 })
 export class WhatsAppModule {}
