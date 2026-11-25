@@ -17,6 +17,7 @@ import { PortalModule } from './portal/portal.module';
 import { MediaModule } from './media/media.module';
 import { CalculatorModule } from './calculator/calculator.module';
 import { MatchingModule } from './matching/matching.module';
+import { ImportModule } from './import/import.module';
 
 @Module({})
 export class AppModule {
@@ -56,6 +57,7 @@ export class AppModule {
         InventoryModule,
         CrmModule,
         MatchingModule,
+        ImportModule,
         CalculatorModule,
         PlatformModule,
         WhatsAppModule,

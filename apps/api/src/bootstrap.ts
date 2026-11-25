@@ -23,6 +23,8 @@ export async function createApp(config: AppConfig): Promise<INestApplication> {
     type: ['image/*', 'application/pdf', 'application/octet-stream'],
     limit: '15mb',
   });
+  // Spreadsheet imports send up to 500 rows per request.
+  app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({ origin: config.corsOrigins, credentials: true });
