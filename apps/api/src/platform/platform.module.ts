@@ -12,7 +12,12 @@ import { SiteContentService } from './site-content.service';
 
 @Module({
   imports: [AuthModule],
-  controllers: [PlatformController, PlatformSiteController, PublicSiteController, AppNoticeController],
+  controllers: [
+    PlatformController,
+    PlatformSiteController,
+    PublicSiteController,
+    AppNoticeController,
+  ],
   providers: [PlatformService, PlatformAdminGuard, SiteContentService],
   exports: [SiteContentService],
 })

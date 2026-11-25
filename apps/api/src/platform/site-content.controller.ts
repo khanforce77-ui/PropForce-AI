@@ -87,7 +87,11 @@ export class PlatformSiteController {
   }
 
   @Put('banners/:id/image')
-  setImage(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string, @Body() body: unknown) {
+  setImage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', uuid()) id: string,
+    @Body() body: unknown,
+  ) {
     return this.site.setBannerImage(req.auth.userId, id, imageBody(body));
   }
 

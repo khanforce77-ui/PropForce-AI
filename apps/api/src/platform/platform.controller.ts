@@ -16,7 +16,11 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { parseBody } from '../common/zod';
 import { PlatformAdminGuard } from './platform.guard';
 import { PlatformService } from './platform.service';
-import { agencyCreateSchema, agencyDetailsSchema, agencyInviteSchema } from './site-content.schemas';
+import {
+  agencyCreateSchema,
+  agencyDetailsSchema,
+  agencyInviteSchema,
+} from './site-content.schemas';
 
 const reasonSchema = z.strictObject({ reason: z.string().trim().min(3).max(500) });
 const planSchema = z
@@ -74,7 +78,11 @@ export class PlatformController {
     @Param('id', uuid()) id: string,
     @Body() body: unknown,
   ) {
-    return this.platform.updateAgencyDetails(req.auth.userId, id, parseBody(agencyDetailsSchema, body));
+    return this.platform.updateAgencyDetails(
+      req.auth.userId,
+      id,
+      parseBody(agencyDetailsSchema, body),
+    );
   }
 
   @Post('agencies/:id/approve')

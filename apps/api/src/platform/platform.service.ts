@@ -90,6 +90,7 @@ export class PlatformService {
           emirate: true,
           status: true,
           orn: true,
+          tradeLicenseNo: true,
           createdAt: true,
           onboardedAt: true,
           approvalStatus: true,
@@ -351,7 +352,9 @@ export class PlatformService {
   // ───── agencies created by the platform ─────
 
   private assertEmirate(emirate: string) {
-    if (!this.config.supportedEmirates.includes(emirate as AppConfig['supportedEmirates'][number])) {
+    if (
+      !this.config.supportedEmirates.includes(emirate as AppConfig['supportedEmirates'][number])
+    ) {
       throw new AppError(400, 'VALIDATION_FAILED', 'This emirate is not supported yet.', [
         { path: 'emirate', message: `Supported: ${this.config.supportedEmirates.join(', ')}` },
       ]);

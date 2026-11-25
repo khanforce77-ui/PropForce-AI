@@ -210,6 +210,7 @@ export interface PlatformAgency {
   name: string;
   emirate: string;
   status: string;
+  tradeLicenseNo?: string | null;
   orn: string | null;
   createdAt: string;
   onboardedAt: string | null;
@@ -290,4 +291,65 @@ export interface PlatformDashboard {
     leads: number;
     members: number;
   }[];
+}
+
+// ───── Website content and platform settings (platform admins) ─────
+
+export type BannerPlacement = 'home_hero' | 'home_strip' | 'search_top' | 'listing_sidebar';
+
+export interface PortalContent {
+  siteName?: string;
+  hero: { title: string; subtitle: string };
+  announcement: { enabled: boolean; text: string; linkUrl?: string; linkLabel?: string };
+  sections: { popularCommunities: boolean; latestListings: boolean };
+  about: string;
+  contact: { email?: string; phone?: string; whatsapp?: string; address?: string };
+  social: {
+    instagram?: string;
+    facebook?: string;
+    linkedin?: string;
+    x?: string;
+    youtube?: string;
+    tiktok?: string;
+  };
+  seo: { title?: string; description?: string };
+}
+
+export interface PlatformSettingsDoc {
+  supportEmail?: string;
+  supportPhone?: string;
+  newAgencyDefaults: { plan: string; seatLimit: number | null; listingLimit: number | null };
+  appNotice: { enabled: boolean; text: string; tone: 'info' | 'warning' | 'success' };
+}
+
+export interface SiteBanner {
+  id: string;
+  placement: BannerPlacement;
+  kind: 'banner' | 'ad';
+  title: string;
+  subtitle: string | null;
+  ctaLabel: string | null;
+  linkUrl: string | null;
+  advertiser: string | null;
+  active: boolean;
+  sortOrder: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  imageSha256: string | null;
+  clicks: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlatformSite {
+  portal: PortalContent;
+  platform: PlatformSettingsDoc;
+  banners: SiteBanner[];
+}
+
+export interface AppNotice {
+  text: string;
+  tone: 'info' | 'warning' | 'success';
 }
