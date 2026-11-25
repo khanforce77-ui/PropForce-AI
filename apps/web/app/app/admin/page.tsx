@@ -291,7 +291,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
   {
     title: 'Phase 1 · coming soon',
     items: [
-      { label: 'Lead matching', icon: Shuffle, status: 'soon', note: 'Next up' },
+      {
+        label: 'Lead matching',
+        icon: Shuffle,
+        status: 'live',
+        note: 'Scored listing suggestions on every lead, matching leads on every listing',
+      },
       { label: 'Bulk import', icon: FileUp, status: 'soon', note: 'Planned' },
     ],
   },

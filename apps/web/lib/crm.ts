@@ -161,7 +161,10 @@ export const PURPOSE_LABEL: Record<ConsentPurpose, string> = {
 };
 
 const aed = new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 });
-export function budgetLabel(l: Pick<LeadSummary, 'budgetMin' | 'budgetMax'>): string {
+export function budgetLabel(l: {
+  budgetMin: string | number | null;
+  budgetMax: string | number | null;
+}): string {
   const min = l.budgetMin != null ? Number(l.budgetMin) : null;
   const max = l.budgetMax != null ? Number(l.budgetMax) : null;
   if (min == null && max == null) return 'Budget not set';
