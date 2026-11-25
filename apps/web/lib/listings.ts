@@ -46,7 +46,10 @@ export function nextStatuses(p: Pick<PropertySummary, 'status' | 'listingType'>)
 
 const aed = new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 });
 
-export function formatPrice(p: Pick<PropertySummary, 'price' | 'rentPeriod'>): string {
+export function formatPrice(p: {
+  price: string | number | null;
+  rentPeriod: PropertySummary['rentPeriod'];
+}): string {
   if (!p.price) return '—';
   const amount = `AED ${aed.format(Number(p.price))}`;
   return p.rentPeriod ? `${amount} / ${p.rentPeriod === 'yearly' ? 'year' : 'month'}` : amount;

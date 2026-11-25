@@ -346,3 +346,13 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 
 - Web: new **Inbox** page (`/app/:agencyId/inbox`, in the side menu for every role). Conversation list with filters (All, Needs agent, AI handling, Unread, Mine), unread counts and AI/Agent badges; message thread with sender labels, delivery ticks and failed sends marked; reply box (Enter sends, Shift+Enter new line); "Take over from AI" and "Hand back to AI"; older messages on demand. The list and the open chat refresh every 10 seconds (no live push yet). Outside the 24-hour window the reply box explains why free text is not allowed. Agents see only their own chats, as the API already enforces.
 - Tests: Playwright flow (signed client message via webhook → appears in inbox → agent reply takes over → new client message shows up → hand back to AI). The e2e API now runs with a test-only Meta secret and `AI_PROVIDER=none`.
+
+## Phase 1 · Lead-to-listing matching (2026-11-25)
+
+- `apps/api/src/matching/match-score.ts`: explainable rules, no AI. Hard rules: buy↔sale and rent↔rent (sell/let leads are owners and get no suggestions), same emirate, a requested property type, price at most 10% over the maximum budget, bedrooms at most one off the range. Score out of 100 from location (35), type (10), bedrooms (25) and budget (30), with "reasons" and "gaps" shown to the agent. Monthly rents are compared at 12× (UAE rents are yearly).
+- `GET /v1/leads/:id/matches`: live listings (active, not past listing expiry) that fit the lead, best first. Same lead visibility as the CRM (agents only their own leads).
+- `GET /v1/properties/:id/matches`: open leads that a listing fits; agents see only their own leads.
+- `POST /v1/leads/:id/matches/:propertyId/suggested`: records "Suggested listing …" on the lead timeline once (audited `lead.listing_suggested`). It does not message the client.
+- Web: "Matching listings" card on each open lead (score, reasons, gaps, Copy portal link, Mark as suggested) and "Matching leads" card on each active listing.
+- Tested: 4 API e2e tests (ranking and hard rules, monthly rents and owner leads, agent scoping, suggestion recorded once, cross-agency 404s).
+- Not yet: semantic (pgvector) re-ranking; automatic alerts to clients when a new listing matches (needs WhatsApp templates and marketing consent).

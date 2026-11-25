@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingPhotos } from '@/components/listings/listing-photos';
+import { ListingMatches } from '@/components/crm/matches';
 import { PermitsCard, permitCounts } from '@/components/listings/permits-card';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { Button } from '@/components/ui/button';
@@ -211,6 +212,8 @@ function ListingDetail() {
           ) : null}
         </div>
       ) : null}
+
+      {p.status === 'active' ? <ListingMatches agencyId={agencyId} propertyId={p.id} /> : null}
 
       <ListingPhotos agencyId={agencyId} propertyId={p.id} canEdit={Boolean(canEdit)} />
 

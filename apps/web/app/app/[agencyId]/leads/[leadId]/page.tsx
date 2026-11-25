@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { LeadMatches } from '@/components/crm/matches';
 import { StageBadge } from '@/components/crm/stage-badge';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -203,6 +204,10 @@ export default function LeadPage() {
           ) : null}
         </dl>
       </Card>
+
+      {lead.stage !== 'won' && lead.stage !== 'lost' ? (
+        <LeadMatches agencyId={agencyId} leadId={lead.id} />
+      ) : null}
 
       <Card>
         <h2 className="font-medium">Next step</h2>
