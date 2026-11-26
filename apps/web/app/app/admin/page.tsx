@@ -393,7 +393,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
   {
     title: 'Phase 4 · coming soon',
     items: [
-      { label: 'AI voice calls', icon: Phone, status: 'soon', note: 'Phase 4; off by default' },
+      {
+        label: 'AI voice calls',
+        icon: Phone,
+        status: 'setup',
+        note: 'Inbound via Vapi; needs VAPI_WEBHOOK_SECRET and the Vapi server URL. Outbound off',
+      },
       { label: 'Marketing studio', icon: Megaphone, status: 'soon', note: 'Phase 4' },
       { label: 'Revenue reports', icon: BadgeDollarSign, status: 'soon', note: 'Phase 4' },
     ],
