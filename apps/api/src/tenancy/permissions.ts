@@ -37,6 +37,10 @@ export const PERMISSIONS = [
   'campaign:write',
   /** Approve a campaign for sending, send it or cancel it. */
   'campaign:approve',
+  /** See the agency's plan, usage and spending caps. */
+  'billing:read',
+  /** Change plan, payment and spending caps (owner only). */
+  'billing:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -44,7 +48,7 @@ const ALL: readonly Permission[] = PERMISSIONS;
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ALL,
-  admin: ALL,
+  admin: ALL.filter((p) => p !== 'billing:manage'),
   manager: [
     'agency:read',
     'member:read',

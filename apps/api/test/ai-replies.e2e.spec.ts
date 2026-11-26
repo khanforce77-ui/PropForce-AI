@@ -345,6 +345,29 @@ describe('AI replies on WhatsApp', () => {
     expect(output).not.toContain('74');
   });
 
+  it('hands the chat to a person once the owner’s blocking AI-replies cap is reached', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    await connect(a, '111');
+    await http()
+      .put('/v1/billing/spending-caps')
+      .set(a.h)
+      .send({ caps: [{ meter: 'ai_replies', monthlyLimit: 1, action: 'block' }] })
+      .expect(200);
+    llm().script(reply('Hello! How can I help?'));
+    await clientSays('hi', '111');
+    expect(wa().sent).toHaveLength(1);
+    expect(await db().aiRun.count()).toBe(1);
+
+    await clientSays('any 2 beds?', '111');
+    expect(wa().sent).toHaveLength(1);
+    expect(llm().requests).toHaveLength(1);
+    expect((await conversation()).mode).toBe('human');
+    const usage = await http().get('/v1/billing').set(a.h).expect(200);
+    expect(usage.body.caps).toEqual([
+      expect.objectContaining({ meter: 'ai_replies', used: 1, reached: true, action: 'block' }),
+    ]);
+  });
+
   it('stays silent in human mode and after STOP', async () => {
     const a = await createOwner('owner@a.test', 'Alpha Realty');
     await connect(a, '111');
