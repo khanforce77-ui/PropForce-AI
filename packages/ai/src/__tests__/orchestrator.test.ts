@@ -52,12 +52,76 @@ describe('AiOrchestrator', () => {
     expect(s.provider.requests[1]!.input.some((i) => i.type === 'function_call_output')).toBe(true);
   });
 
-  it('hands over when the model states facts no tool returned', async () => {
-    const s = setup([goodFinal]); // no search first: the listing is not in this turn's facts
+  it('hands over when the model states facts no tool returned, even after one rewrite', async () => {
+    // No search first: the listing is not in this turn's facts, and the rewrite repeats it.
+    const s = setup([goodFinal, goodFinal]);
     const out = await s.orch.runTurn(turn());
     expect(out).toMatchObject({ kind: 'handover', reason: 'grounding_failed' });
     expect(s.calls.map((c) => c.name)).toEqual(['request_human_handover']);
     expect(s.runs.records[0]!.groundingFailures.length).toBeGreaterThan(0);
+    // The model was told why its first draft was rejected.
+    const feedback = s.provider.requests[1]!.input.at(-1);
+    expect(feedback?.type === 'message' && feedback.content).toContain('cannot be sent');
+  });
+
+  it('lets the model rewrite a reply that failed the check instead of handing over', async () => {
+    const s = setup([
+      fakeFinal({
+        reply: 'Typical 1 bed rents there are AED 95,000 a year.',
+        language: 'en',
+        citedPropertyIds: [],
+        claims: [],
+        requestHandover: false,
+      }),
+      fakeFinal({
+        reply: 'The agent can share recent rents there. Shall I search our listings for you?',
+        language: 'en',
+        citedPropertyIds: [],
+        claims: [],
+        requestHandover: false,
+      }),
+    ]);
+    const out = await s.orch.runTurn(turn({ newClientMessages: ['How much is rent in JVC?'] }));
+    expect(out).toMatchObject({ kind: 'reply', handover: false });
+    expect(s.calls).toHaveLength(0);
+  });
+
+  it('accepts bedrooms the client asked for, in any spelling, and knowledge figures', async () => {
+    const s = setup([
+      fakeToolCalls({ name: 'search_properties', args: { listingType: 'rent', bedsMin: 2 } }),
+      fakeFinal({
+        reply:
+          'Noted, a 2 bedroom apartment to rent. A Golden Visa needs property worth at least AED 2 million. Which area do you prefer?',
+        language: 'en',
+        citedPropertyIds: [],
+        claims: [],
+        requestHandover: false,
+      }),
+    ]);
+    const out = await s.orch.runTurn(
+      turn({
+        history: [{ role: 'client', text: 'I need 2bhk' }],
+        newClientMessages: ['for rent please'],
+      }),
+    );
+    expect(out).toMatchObject({ kind: 'reply', handover: false });
+  });
+
+  it('includes the Dubai knowledge and multilingual rule in the instructions', async () => {
+    const s = setup([
+      (req: LlmRequest) => {
+        expect(req.instructions).toContain('Golden Visa');
+        expect(req.instructions).toContain('Roman Urdu');
+        return fakeFinal({
+          reply: 'Ji bilkul, main madad karta hun.',
+          language: 'en',
+          citedPropertyIds: [],
+          claims: [],
+          requestHandover: false,
+        });
+      },
+    ]);
+    expect(await s.orch.runTurn(turn())).toMatchObject({ kind: 'reply' });
   });
 
   it('keeps client text out of the instructions and inside the nonce block', async () => {
@@ -111,7 +175,7 @@ describe('AiOrchestrator', () => {
     });
 
     const looping = setup(
-      Array.from({ length: 6 }, () => fakeToolCalls({ name: 'get_client_history', args: {} })),
+      Array.from({ length: 8 }, () => fakeToolCalls({ name: 'get_client_history', args: {} })),
     );
     expect(await looping.orch.runTurn(turn())).toMatchObject({
       kind: 'handover',

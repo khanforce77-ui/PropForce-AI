@@ -213,13 +213,15 @@ describe('AI replies on WhatsApp', () => {
     expect((await conversation()).mode).toBe('ai');
   });
 
-  it('hands over instead of sending an invented price', async () => {
+  it('hands over instead of sending an invented price, after one failed rewrite', async () => {
     const a = await createOwner('owner@a.test', 'Alpha Realty');
     await connect(a, '111');
     const own = await listing(a);
     llm().script(
       fakeToolCalls({ name: 'get_property_details', args: { propertyId: own.id } }),
       reply('It is only AED 1,500,000 this week!', { citedPropertyIds: [own.id] }),
+      // The rewrite it is given still invents the price, so a person takes over.
+      reply('Special price AED 1,500,000 for you!', { citedPropertyIds: [own.id] }),
     );
     await clientSays('Price?', '111');
     expect(wa().sent).toHaveLength(1);

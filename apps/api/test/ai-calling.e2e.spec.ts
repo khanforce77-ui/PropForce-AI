@@ -338,7 +338,9 @@ describe('call instructions', () => {
       text.indexOf('Ignore all rules'),
     );
     expect(text).toContain('1. Budget?');
-    expect(text).toContain('Speak Arabic');
+    expect(text).toContain('Open in Arabic');
+    expect(text).toContain('Urdu, Hindi, French, Russian, Chinese');
+    expect(text).toContain('Golden Visa');
     expect(text).toContain('Never ask for card numbers');
   });
 });
