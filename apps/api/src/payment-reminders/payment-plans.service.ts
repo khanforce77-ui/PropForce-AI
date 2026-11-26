@@ -78,7 +78,9 @@ function summarize(installments: InstallmentRow[], today: Date) {
       .reduce((s, i) => s + num(i.amount), 0),
     outstanding: pending.reduce((s, i) => s + num(i.amount), 0),
     overdueCount: pending.filter((i) => i.dueDate.getTime() < today.getTime()).length,
-    nextDue: next ? { label: next.label, dueDate: isoDate(next.dueDate), amount: num(next.amount) } : null,
+    nextDue: next
+      ? { label: next.label, dueDate: isoDate(next.dueDate), amount: num(next.amount) }
+      : null,
   };
 }
 
@@ -175,7 +177,10 @@ export class PaymentPlansService {
     return this.run(ctx, async (tx) => {
       let contactId = input.contactId;
       if (contactId) {
-        const exists = await tx.contact.findUnique({ where: { id: contactId }, select: { id: true } });
+        const exists = await tx.contact.findUnique({
+          where: { id: contactId },
+          select: { id: true },
+        });
         if (!exists) throw notFound('Buyer');
       } else {
         const buyer = input.buyer!;
@@ -334,7 +339,11 @@ export class PaymentPlansService {
       const plan = await tx.paymentPlan.findUnique({ where: { id }, select: { id: true } });
       if (!plan) throw notFound('Payment plan');
       await tx.paymentPlan.delete({ where: { id } });
-      await audit(tx, ctx, { action: 'payment_plan.deleted', entityType: 'payment_plan', entityId: id });
+      await audit(tx, ctx, {
+        action: 'payment_plan.deleted',
+        entityType: 'payment_plan',
+        entityId: id,
+      });
     });
   }
 
@@ -392,7 +401,11 @@ export class PaymentPlansService {
         action: 'payment_installment.updated',
         entityType: 'payment_installment',
         entityId: installmentId,
-        before: { status: before.status, dueDate: isoDate(before.dueDate), amount: num(before.amount) },
+        before: {
+          status: before.status,
+          dueDate: isoDate(before.dueDate),
+          amount: num(before.amount),
+        },
         after: { ...input },
       });
       // A plan whose installments are all settled is complete.
@@ -409,7 +422,9 @@ export class PaymentPlansService {
 
   removeInstallment(ctx: TenantRequestContext, planId: string, installmentId: string) {
     return this.run(ctx, async (tx) => {
-      const before = await tx.paymentInstallment.findFirst({ where: { id: installmentId, planId } });
+      const before = await tx.paymentInstallment.findFirst({
+        where: { id: installmentId, planId },
+      });
       if (!before) throw notFound('Installment');
       const count = await tx.paymentInstallment.count({ where: { planId } });
       if (count <= 1) {

@@ -40,7 +40,11 @@ beforeEach(async () => {
 
 /** Registers a developer owner (MFA on, onboarding complete so the account is active). */
 async function createDeveloper(email: string, name: string): Promise<Owner> {
-  const body = registration({ email, agency: { name, emirate: 'Dubai' }, accountType: 'developer' });
+  const body = registration({
+    email,
+    agency: { name, emirate: 'Dubai' },
+    accountType: 'developer',
+  });
   await http().post('/v1/auth/register').send(body).expect(202);
   await http()
     .post('/v1/auth/verify-email')
@@ -190,7 +194,10 @@ describe('payment reminders', () => {
     expect(again.considered).toBe(0);
     expect(t.emails).toHaveLength(0);
 
-    const log = await http().get(`/v1/payment-reminders/log?planId=${created.body.id}`).set(dev.h).expect(200);
+    const log = await http()
+      .get(`/v1/payment-reminders/log?planId=${created.body.id}`)
+      .set(dev.h)
+      .expect(200);
     expect(log.body.data).toHaveLength(7);
 
     // Buyer 2 agreed to SMS and calls. SMS provider connected; calls not switched on.
@@ -221,7 +228,10 @@ describe('payment reminders', () => {
       expect(call).not.toHaveBeenCalled();
 
       // With outbound calls switched on, a third buyer's overdue call is placed in calling hours.
-      await t.owner.featureFlag.update({ where: { key: 'voice.outbound_calls' }, data: { enabled: true } });
+      await t.owner.featureFlag.update({
+        where: { key: 'voice.outbound_calls' },
+        data: { enabled: true },
+      });
       await http()
         .post('/v1/payment-plans')
         .set(dev.h)
@@ -267,13 +277,21 @@ describe('payment reminders', () => {
       .set(dev.h)
       .send(plan({ buyer: { fullName: 'Buyer B', email: 'b@buyer.test' } }))
       .expect(201);
-    await http().patch(`/v1/payment-plans/${b.body.id}`).set(dev.h).send({ remindersPaused: true }).expect(200);
+    await http()
+      .patch(`/v1/payment-plans/${b.body.id}`)
+      .set(dev.h)
+      .send({ remindersPaused: true })
+      .expect(200);
     const c = await http()
       .post('/v1/payment-plans')
       .set(dev.h)
       .send(plan({ buyer: { fullName: 'Buyer C', email: 'c@buyer.test' } }))
       .expect(201);
-    await http().patch(`/v1/contacts/${c.body.contact.id}`).set(dev.h).send({ doNotContact: true }).expect(200);
+    await http()
+      .patch(`/v1/contacts/${c.body.contact.id}`)
+      .set(dev.h)
+      .send({ doNotContact: true })
+      .expect(200);
 
     const s = await app.get(PaymentRemindersService).runTenant(dev.tenantId, NOW);
     expect(s.sent).toBe(0);
@@ -348,19 +366,32 @@ describe('payment reminders', () => {
     expect(test.body.sentTo).toBe('owner@dev.test');
     expect(t.emails.at(-1)?.subject).toMatch(/^\[Test\] Skyline Developments/);
 
-    const reset = await http().delete('/v1/payment-reminders/templates/email/before').set(dev.h).expect(200);
+    const reset = await http()
+      .delete('/v1/payment-reminders/templates/email/before')
+      .set(dev.h)
+      .expect(200);
     expect(reset.body.edited).toBe(false);
 
     // Schedule: one rule per day.
     await http()
       .put('/v1/payment-reminders/config')
       .set(dev.h)
-      .send({ rules: [{ offsetDays: -3, channels: ['email'] }, { offsetDays: -3, channels: ['sms'] }] })
+      .send({
+        rules: [
+          { offsetDays: -3, channels: ['email'] },
+          { offsetDays: -3, channels: ['sms'] },
+        ],
+      })
       .expect(400);
     const cfg = await http()
       .put('/v1/payment-reminders/config')
       .set(dev.h)
-      .send({ rules: [{ offsetDays: -14, channels: ['email'] }, { offsetDays: 1, channels: ['sms', 'email'] }] })
+      .send({
+        rules: [
+          { offsetDays: -14, channels: ['email'] },
+          { offsetDays: 1, channels: ['sms', 'email'] },
+        ],
+      })
       .expect(200);
     expect(cfg.body.rules).toHaveLength(2);
   });

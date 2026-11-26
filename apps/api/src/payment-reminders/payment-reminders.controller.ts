@@ -117,7 +117,12 @@ export class PaymentPlansController {
     @Param('installmentId', uuid()) installmentId: string,
     @Body() body: unknown,
   ) {
-    return this.plans.updateInstallment(ctx, id, installmentId, parseBody(installmentUpdateSchema, body));
+    return this.plans.updateInstallment(
+      ctx,
+      id,
+      installmentId,
+      parseBody(installmentUpdateSchema, body),
+    );
   }
 
   @Delete(':id/installments/:installmentId')
@@ -162,7 +167,12 @@ export class PaymentRemindersController {
     @Body() body: unknown,
   ) {
     const p = parseBody(templateParamsSchema, params);
-    return this.reminders.saveTemplate(ctx, p.channel, p.stage, parseBody(templateUpdateSchema, body));
+    return this.reminders.saveTemplate(
+      ctx,
+      p.channel,
+      p.stage,
+      parseBody(templateUpdateSchema, body),
+    );
   }
 
   @Delete('templates/:channel/:stage')
@@ -183,7 +193,10 @@ export class PaymentRemindersController {
   @HttpCode(200)
   @RequirePermission('payment:settings')
   testEmail(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
-    return this.reminders.sendTestEmail(ctx, parseBody(z.strictObject({ stage: stageSchema }), body).stage);
+    return this.reminders.sendTestEmail(
+      ctx,
+      parseBody(z.strictObject({ stage: stageSchema }), body).stage,
+    );
   }
 
   @Get('log')

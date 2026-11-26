@@ -4,6 +4,8 @@ import {
   BadgeDollarSign,
   Megaphone,
   Building2,
+  BellRing,
+  Wallet,
   Calculator,
   CreditCard,
   CalendarDays,
@@ -77,7 +79,28 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   const base = `/app/${agencyId}`;
   const isActive = (href: string) =>
     href === base ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
-  const nav = [
+  const developer = membership.agency.kind === 'developer';
+  const manages = ['owner', 'admin'].includes(membership.role);
+  const developerNav = [
+    { href: base, label: 'Dashboard', icon: LayoutDashboard },
+    ...(['owner', 'admin', 'manager'].includes(membership.role)
+      ? [{ href: `${base}/payment-plans`, label: 'Payment plans', icon: Wallet }]
+      : []),
+    ...(manages
+      ? [{ href: `${base}/payment-reminders`, label: 'Payment reminders', icon: BellRing }]
+      : []),
+    { href: `${base}/contacts`, label: 'Buyers', icon: Contact },
+    { href: `${base}/listings`, label: 'Listings', icon: Home },
+    { href: `${base}/calls`, label: 'Calls', icon: Phone },
+    { href: `${base}/settings/members`, label: 'Team members', icon: Users },
+    ...(manages
+      ? [
+          { href: `${base}/billing`, label: 'Plan & billing', icon: CreditCard },
+          { href: `${base}/settings/voice`, label: 'AI voice', icon: PhoneCall },
+        ]
+      : []),
+  ];
+  const agencyNav = [
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/listings`, label: 'Listings', icon: Home },
     { href: `${base}/inbox`, label: 'Inbox', icon: Inbox },
@@ -107,6 +130,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
         ]
       : []),
   ];
+  const nav = developer ? developerNav : agencyNav;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

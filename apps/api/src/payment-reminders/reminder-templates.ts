@@ -41,7 +41,11 @@ export const SMS_MAX_LENGTH = 480;
 export const stageForOffset = (offsetDays: number): ReminderStage =>
   offsetDays < 0 ? 'before' : offsetDays === 0 ? 'due' : 'overdue';
 
-const emailLayout = (heading: string, intro: string, closing: string) => `<p>Dear {{buyer_name}},</p>
+const emailLayout = (
+  heading: string,
+  intro: string,
+  closing: string,
+) => `<p>Dear {{buyer_name}},</p>
 <p>${intro}</p>
 <table role="presentation" cellpadding="6" style="border-collapse:collapse;margin:16px 0">
   <tr><td style="color:#555">Project</td><td><strong>{{project}}</strong></td></tr>
@@ -176,8 +180,14 @@ export function fill(text: string, values: TemplateValues, mode: 'text' | 'html'
 export function sanitizeEmailHtml(html: string): string {
   return html
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<\s*(script|style|iframe|object|form|button|textarea|select)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
-    .replace(/<\s*\/?\s*(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta|base)\b[^>]*>/gi, '')
+    .replace(
+      /<\s*(script|style|iframe|object|form|button|textarea|select)\b[\s\S]*?<\s*\/\s*\1\s*>/gi,
+      '',
+    )
+    .replace(
+      /<\s*\/?\s*(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta|base)\b[^>]*>/gi,
+      '',
+    )
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(href|src)\s*=\s*("|')?\s*(javascript|vbscript|data):[^"'\s>]*("|')?/gi, '$1="#"');
 }
@@ -207,7 +217,9 @@ export interface RenderedEmail {
 
 /** Email wrapped in a plain layout with a footer saying who sent it and why. */
 export function renderEmail(t: ReminderTemplate, values: TemplateValues): RenderedEmail {
-  const subject = fill(t.subject, values, 'text').replace(/[\r\n]+/g, ' ').slice(0, 200);
+  const subject = fill(t.subject, values, 'text')
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 200);
   const inner = fill(sanitizeEmailHtml(t.body), values, 'html');
   const footer = `You are receiving this because you have a payment plan with ${escapeHtml(
     values.developer_name,

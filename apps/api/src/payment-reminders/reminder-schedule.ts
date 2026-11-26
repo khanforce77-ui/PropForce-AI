@@ -81,5 +81,7 @@ export function describeOffset(offsetDays: number): string {
   if (offsetDays === 0) return 'On the due date';
   const n = Math.abs(offsetDays);
   const d = n === 1 ? 'day' : 'days';
-  return offsetDays < 0 ? `${n} ${d} before the due date` : `${n} ${d} after the due date (overdue)`;
+  return offsetDays < 0
+    ? `${n} ${d} before the due date`
+    : `${n} ${d} after the due date (overdue)`;
 }
