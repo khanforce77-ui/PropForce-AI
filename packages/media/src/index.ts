@@ -197,6 +197,29 @@ export async function normaliseLogo(logo: Buffer): Promise<Variant & { sha256: s
 }
 
 /**
+ * Normalises a website banner or advert image: upright, metadata removed, WebP, at most 2400 px
+ * wide and 1600 px tall. Refuses anything narrower than 600 px, which would look blurry.
+ */
+export async function normaliseBanner(input: Buffer): Promise<Variant & { sha256: string }> {
+  assertAcceptable(input);
+  let v: Variant;
+  try {
+    v = await encode(
+      open(input)
+        .resize({ width: 2400, height: 1600, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82 }),
+      'image/webp',
+    );
+  } catch {
+    throw new MediaError('IMAGE_UNREADABLE', 'This image could not be read.');
+  }
+  if (v.width < 600) {
+    throw new MediaError('IMAGE_TOO_SMALL', 'Banner images must be at least 600 pixels wide.');
+  }
+  return { ...v, sha256: createHash('sha256').update(v.bytes).digest('hex') };
+}
+
+/**
  * The PropForce mark (a house and "PF"), drawn with shapes only so no fonts are needed on the
  * server. Used for agencies without a logo and for the platform's own listings.
  */

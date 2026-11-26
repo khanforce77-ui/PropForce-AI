@@ -19,12 +19,13 @@ import { areaCrumbs } from '@/components/search-page';
 import { SaveButton } from '@/components/save-button';
 import { ShareButtons } from '@/components/share-buttons';
 import { notFound, permanentRedirect } from 'next/navigation';
+import { BannerCard } from '@/components/banners';
 import { ContactActions } from '@/components/contact-actions';
 import { EnquiryForm } from '@/components/enquiry-form';
 import { PhotoPlaceholder } from '@/components/listing-card';
 import { PhotoGallery } from '@/components/photo-gallery';
 import { photoUrl } from '@/lib/photos';
-import { getListing, getSimilar, type ListingDetail } from '@/lib/api';
+import { getListing, getSimilar, getSite, type ListingDetail } from '@/lib/api';
 import { siteUrl, SITE_NAME } from '@/lib/config';
 import {
   agentPath,
@@ -81,7 +82,8 @@ export default async function PropertyPage({ params }: Props) {
   if (`/property/${slug}` !== canonical) permanentRedirect(canonical);
 
   const title = listingTitle(l);
-  const similar = await getSimilar(l.id);
+  const [similar, site] = await Promise.all([getSimilar(l.id), getSite()]);
+  const sidebarAd = site.banners.listing_sidebar[0];
   const facts: [string, string | null][] = [
     ['Type', TYPE_LABEL[l.type] ?? 'Property'],
     ['Purpose', l.purpose === 'rent' ? 'For rent' : 'For sale'],
@@ -354,6 +356,7 @@ export default async function PropertyPage({ params }: Props) {
             />
           </div>
           <ReportListing listingId={l.id} />
+          {sidebarAd ? <BannerCard banner={sidebarAd} tall /> : null}
         </aside>
       </div>
 

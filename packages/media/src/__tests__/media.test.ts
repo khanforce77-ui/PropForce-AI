@@ -4,6 +4,7 @@ import {
   defaultWatermark,
   MediaError,
   normaliseDocument,
+  normaliseBanner,
   normaliseLogo,
   prepareWatermark,
   processListingPhoto,
@@ -131,6 +132,29 @@ describe('logos', () => {
     expect(alphaAt(5, 5)).toBe(0); // the white background became transparent
     expect(alphaAt(200, 100)).toBeGreaterThan(40); // the logo shows, faintly
     expect(alphaAt(200, 100)).toBeLessThan(120);
+  });
+});
+
+describe('normaliseBanner', () => {
+  it('stores a WebP of at most 2400 px wide without metadata', async () => {
+    const big = await photo(3000, 1200, 6);
+    const v = await normaliseBanner(big);
+    expect(v.contentType).toBe('image/webp');
+    expect(sniffImage(v.bytes)).toBe('webp');
+    // Orientation 6 turns the 3000x1200 photo upright (1200x3000), then fits 2400x1600.
+    expect(v.height).toBeLessThanOrEqual(1600);
+    expect(v.width).toBeLessThanOrEqual(2400);
+    expect((await sharp(v.bytes).metadata()).exif).toBeUndefined();
+    expect(v.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('refuses narrow images and non-images', async () => {
+    await expect(normaliseBanner(await photo(500, 300))).rejects.toMatchObject({
+      code: 'IMAGE_TOO_SMALL',
+    });
+    await expect(normaliseBanner(Buffer.from('not an image at all'))).rejects.toMatchObject({
+      code: 'UNSUPPORTED_IMAGE',
+    });
   });
 });
 
