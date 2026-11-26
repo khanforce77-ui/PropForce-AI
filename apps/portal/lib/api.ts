@@ -7,6 +7,8 @@ export interface PublicAgent {
   id: string;
   name: string;
   brn: string | null;
+  /** PropForce checked the agent's DLD broker card and it has not expired. */
+  verified?: boolean;
   canCall: boolean;
   canWhatsapp: boolean;
   /** Changes whenever the agent's photo changes; null when the agent has no photo. */

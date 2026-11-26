@@ -9,6 +9,8 @@ import {
   PublicSiteController,
 } from './site-content.controller';
 import { SiteContentService } from './site-content.service';
+import { TrustController } from './trust.controller';
+import { TrustService } from './trust.service';
 
 @Module({
   imports: [AuthModule],
@@ -17,8 +19,9 @@ import { SiteContentService } from './site-content.service';
     PlatformSiteController,
     PublicSiteController,
     AppNoticeController,
+    TrustController,
   ],
-  providers: [PlatformService, PlatformAdminGuard, SiteContentService],
+  providers: [PlatformService, PlatformAdminGuard, SiteContentService, TrustService],
   exports: [SiteContentService],
 })
 export class PlatformModule {}

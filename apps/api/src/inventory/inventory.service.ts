@@ -14,6 +14,12 @@ import { PRISMA } from '../database/database.module';
 import { hasPermission } from '../tenancy/permissions';
 import { assertAgencyCanGrow, audit } from '../tenancy/tenancy.service';
 import type { TenantRequestContext } from '../tenancy/tenant.guard';
+import {
+  assertPermitNotUsedElsewhere,
+  listingChecks,
+  reviewRequired,
+  validPermits,
+} from './listing-trust';
 import type {
   ListPropertiesQuery,
   PermitInput,
@@ -55,6 +61,7 @@ const listSelect = {
   rentPeriod: true,
   listingExpiresAt: true,
   verifiedAt: true,
+  reviewStatus: true,
   createdAt: true,
   updatedAt: true,
   assigned: { select: { id: true, user: { select: { fullName: true } } } },
@@ -139,7 +146,22 @@ export class InventoryService {
         include: detailInclude,
       });
       if (!property) throw notFound('Listing');
-      return property;
+      const [photoCount, agent] = await Promise.all([
+        tx.propertyPhoto.count({ where: { propertyId: property.id } }),
+        property.assignedMembershipId
+          ? tx.membership.findUnique({
+              where: { id: property.assignedMembershipId },
+              select: { brokerVerifiedUntil: true },
+            })
+          : null,
+      ]);
+      const qualityChecks = listingChecks({
+        ...property,
+        photoCount,
+        permits: property.permits.map((p) => ({ ...p, hasDocument: !!p.document })),
+        agentVerifiedUntil: agent?.brokerVerifiedUntil ?? null,
+      });
+      return { ...property, qualityChecks };
     });
   }
 
@@ -261,6 +283,12 @@ export class InventoryService {
         data.listingExpiresAt = await this.freshUntil(tx, ctx);
         data.verifiedAt = new Date();
         data.verifiedBy = ctx.userId;
+        // New agencies' listings wait for PropForce's review before reaching the public portal.
+        if (await reviewRequired(tx, ctx.tenantId, current)) {
+          data.reviewStatus = 'pending';
+          data.submittedForReviewAt = new Date();
+          data.reviewReason = null;
+        }
       }
       const updated = await tx.property.update({
         where: { id: current.id },
@@ -328,8 +356,16 @@ export class InventoryService {
   addPermit(ctx: TenantRequestContext, propertyId: string, input: PermitInput) {
     return this.run(ctx, async (tx) => {
       const property = await this.loadEditable(tx, ctx, propertyId);
+      await assertPermitNotUsedElsewhere(tx, ctx.tenantId, input.permitNumber);
       const permit = await tx.propertyPermit
-        .create({ data: { ...input, tenantId: ctx.tenantId, propertyId: property.id } })
+        .create({
+          data: {
+            ...input,
+            purpose: input.purpose ?? property.listingType,
+            tenantId: ctx.tenantId,
+            propertyId: property.id,
+          },
+        })
         .catch((err: unknown) => {
           if (isUniqueViolation(err)) {
             throw new AppError(
@@ -378,6 +414,9 @@ export class InventoryService {
         where: { id: permitId, propertyId: property.id },
       });
       if (!before) throw notFound('Permit');
+      if (input.permitNumber && input.permitNumber !== before.permitNumber) {
+        await assertPermitNotUsedElsewhere(tx, ctx.tenantId, input.permitNumber);
+      }
       const permit = await tx.propertyPermit
         .update({ where: { id: before.id }, data: input })
         .catch((err: unknown) => {
@@ -600,7 +639,13 @@ export class InventoryService {
   private async assertPublishable(
     tx: TransactionClient,
     ctx: TenantRequestContext,
-    p: { id: string; price: unknown; areaSqft: unknown; community: string | null },
+    p: {
+      id: string;
+      listingType: 'sale' | 'rent';
+      price: unknown;
+      areaSqft: unknown;
+      community: string | null;
+    },
   ) {
     const missing: { path: string; message: string }[] = [];
     if (p.price == null) missing.push({ path: 'price', message: 'Required to publish' });
@@ -611,20 +656,26 @@ export class InventoryService {
       where: { tenantId: ctx.tenantId },
     });
     if (settings.requirePermitToPublish) {
-      const today = new Date(new Date().toISOString().slice(0, 10));
       // A permit counts once it has its number or its document on file.
-      const valid = await tx.propertyPermit.count({
-        where: {
-          propertyId: p.id,
-          validUntil: { gte: today },
-          OR: [{ permitNumber: { not: null } }, { document: { isNot: null } }],
-        },
+      const permits = await tx.propertyPermit.findMany({
+        where: { propertyId: p.id },
+        include: { document: { select: { permitId: true } } },
       });
-      if (valid === 0) {
+      const valid = validPermits(permits.map((x) => ({ ...x, hasDocument: !!x.document })));
+      const matching = valid.filter((x) => !x.purpose || x.purpose === p.listingType);
+      if (valid.length === 0) {
         missing.push({
           path: 'permits',
           message: 'Add an unexpired advertising permit (its number or the permit document)',
         });
+      } else if (matching.length === 0) {
+        missing.push({
+          path: 'permits',
+          message: `The permit is for ${p.listingType === 'sale' ? 'rent' : 'sale'}, but this listing is for ${p.listingType}. Add the matching permit.`,
+        });
+      }
+      for (const permit of matching) {
+        await assertPermitNotUsedElsewhere(tx, ctx.tenantId, permit.permitNumber);
       }
     }
     if (missing.length > 0) {

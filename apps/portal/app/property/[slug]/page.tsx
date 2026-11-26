@@ -10,6 +10,7 @@ import {
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AgentAvatar } from '@/components/agent-avatar';
+import { VerifiedAgentBadge } from '@/components/verified-agent-badge';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { ListingCard } from '@/components/listing-card';
 import { LocationMap } from '@/components/location-map';
@@ -343,6 +344,11 @@ export default async function PropertyPage({ params, searchParams }: Props) {
                 ) : null}
                 {l.agent?.brn ? (
                   <p className="text-xs text-muted-foreground">BRN {l.agent.brn}</p>
+                ) : null}
+                {l.agent?.verified ? (
+                  <div className="mt-1">
+                    <VerifiedAgentBadge />
+                  </div>
                 ) : null}
               </div>
             </div>

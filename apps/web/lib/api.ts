@@ -144,13 +144,27 @@ export interface PropertySummary {
   rentPeriod: 'yearly' | 'monthly' | null;
   listingExpiresAt: string | null;
   verifiedAt: string | null;
+  /** PropForce's review before the listing reaches the public portal. */
+  reviewStatus: ListingReviewStatus;
   createdAt: string;
   assigned: { id: string; user: { fullName: string } } | null;
+}
+
+export type ListingReviewStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
+
+export interface ListingCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  /** Required checks block publishing; the others are what PropForce's reviewers look for. */
+  required: boolean;
 }
 
 export interface Permit {
   id: string;
   authority: string;
+  /** Sale or rent, as printed on the permit. */
+  purpose: ListingType | null;
   permitNumber: string | null;
   /** The uploaded permit document (private to the agency), if any. */
   document: { contentType: string; fileName: string; updatedAt: string } | null;
@@ -169,6 +183,9 @@ export interface PropertyDetail extends PropertySummary {
   view: string | null;
   description: string | null;
   permits: Permit[];
+  reviewReason: string | null;
+  submittedForReviewAt: string | null;
+  qualityChecks: ListingCheck[];
 }
 
 export interface PropertyList {

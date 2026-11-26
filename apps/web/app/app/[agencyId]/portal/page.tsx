@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { AgencyLogo } from '@/components/agency-logo';
 import { AgentPhoto } from '@/components/agent-photo';
+import { BrokerVerification } from '@/components/portal/broker-verification';
 import { ListingReportsCard } from '@/components/portal/listing-reports-card';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -196,6 +197,9 @@ export default function PortalPage() {
           </div>
           <div className="mt-4">
             <ProfileForm key={formKey(mine)} agent={mine} onSave={saveProfile} />
+          </div>
+          <div className="mt-4">
+            <BrokerVerification agencyId={agencyId} membershipId={mine.id} />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Last 30 days: {mine.last30Days.enquiries} enquiries, {mine.last30Days.whatsappClicks}{' '}

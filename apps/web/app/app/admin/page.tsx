@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  BadgeCheck,
   BadgeDollarSign,
   Crown,
   Bot,
@@ -32,12 +33,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { DailyBarChart } from '@/components/admin/bar-chart';
+import { AdminBrokerVerifications } from '@/components/admin/broker-verifications';
 import {
   AgencyDetailsForm,
   CreateAgencyCard,
   InviteToAgencyForm,
 } from '@/components/admin/create-agency';
 import { AdminListingReports } from '@/components/admin/listing-reports';
+import { AdminListingReview } from '@/components/admin/listing-review';
 import { PlatformSettingsCard } from '@/components/admin/platform-settings';
 import { WebsiteContent } from '@/components/admin/website-content';
 import { StatusBadge } from '@/components/listings/status-badge';
@@ -253,7 +256,9 @@ const TABS = [
   ['overview', 'Overview'],
   ['agencies', 'Agencies'],
   ['listings', 'All listings'],
+  ['review', 'Listing review'],
   ['reports', 'Listing reports'],
+  ['brokers', 'Agent verification'],
   ['users', 'Users'],
   ['website', 'Website'],
   ['settings', 'Settings'],
@@ -265,6 +270,8 @@ const TAB_SUBTITLES: Record<Tab, string> = {
   overview: 'Everything happening on PropForce, at a glance.',
   agencies: 'Add agencies, approve, suspend, and set plans and limits.',
   listings: 'Every listing from every agency.',
+  review: 'New agencies’ listings waiting for PropForce’s check before going on the portal.',
+  brokers: 'Agents’ broker cards (BRN) waiting for the Verified agent badge.',
   reports: 'What visitors reported about public listings.',
   users: 'Find anyone and suspend or reactivate them.',
   website: 'Banners, adverts and text on the public website.',
@@ -276,7 +283,9 @@ const TAB_ICONS: Record<Tab, LucideIcon> = {
   overview: LayoutDashboard,
   agencies: Building2,
   listings: Home,
+  review: ShieldCheck,
   reports: Flag,
+  brokers: BadgeCheck,
   users: Users,
   website: Globe,
   settings: Settings,
@@ -1157,7 +1166,11 @@ export default function PlatformAdminPage() {
           </Card>
         ) : null}
 
+        {tab === 'review' ? <AdminListingReview /> : null}
+
         {tab === 'reports' ? <AdminListingReports /> : null}
+
+        {tab === 'brokers' ? <AdminBrokerVerifications /> : null}
 
         {tab === 'users' ? (
           <Card>

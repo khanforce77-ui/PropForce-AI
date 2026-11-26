@@ -5,6 +5,8 @@ import { AgencyPortalController } from './agency-portal.controller';
 import { AgentPhotoController, PublicAgentPhotoController } from './agent-photo.controller';
 import { AgentPhotoService } from './agent-photo.service';
 import { AgencyPortalService } from './agency-portal.service';
+import { BrokerVerificationController } from './broker-verification.controller';
+import { BrokerVerificationService } from './broker-verification.service';
 import { PublicPortalController } from './public-portal.controller';
 import { PublicPortalService } from './public-portal.service';
 
@@ -15,7 +17,13 @@ import { PublicPortalService } from './public-portal.service';
     AgencyPortalController,
     AgentPhotoController,
     PublicAgentPhotoController,
+    BrokerVerificationController,
   ],
-  providers: [PublicPortalService, AgencyPortalService, AgentPhotoService],
+  providers: [
+    PublicPortalService,
+    AgencyPortalService,
+    AgentPhotoService,
+    BrokerVerificationService,
+  ],
 })
 export class PortalModule {}

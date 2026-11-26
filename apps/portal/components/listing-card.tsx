@@ -1,6 +1,7 @@
 import { Bath, BedDouble, Building2, Camera, Home, MapPin, Ruler, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { AgentAvatar } from '@/components/agent-avatar';
+import { VerifiedAgentBadge } from '@/components/verified-agent-badge';
 import { SaveButton } from '@/components/save-button';
 import type { ListingCard as Card } from '@/lib/api';
 import { photoUrl } from '@/lib/photos';
@@ -102,6 +103,7 @@ export function ListingCard({ listing }: { listing: Card }) {
           >
             <AgentAvatar agent={listing.agent} size={28} />
             <span className="line-clamp-1 font-medium text-foreground">{listing.agent.name}</span>
+            {listing.agent.verified ? <VerifiedAgentBadge compact /> : null}
           </Link>
         ) : (
           <span />

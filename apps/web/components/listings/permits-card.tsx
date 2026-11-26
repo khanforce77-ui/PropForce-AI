@@ -4,7 +4,7 @@ import { FileText, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Field, Input } from '@/components/ui/input';
+import { Field, Input, Select } from '@/components/ui/input';
 import { ApiError, type Permit, type PropertyDetail } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { prepareForUpload } from '@/lib/images';
@@ -107,6 +107,7 @@ export function PermitsCard({
         tenantId: agencyId,
         body: {
           authority: f.get('authority'),
+          purpose: f.get('purpose'),
           permitNumber: number || null,
           validUntil: f.get('validUntil'),
           verificationUrl: String(f.get('verificationUrl') ?? '').trim() || null,
@@ -170,6 +171,20 @@ export function PermitsCard({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
                     {permit.authority} · {permit.permitNumber ?? 'No number'} ·{' '}
+                    {permit.purpose ? (
+                      <span
+                        className={
+                          permit.purpose !== property.listingType ? 'font-medium text-red-600' : ''
+                        }
+                        title={
+                          permit.purpose !== property.listingType
+                            ? 'This permit is for a different purpose than the listing'
+                            : undefined
+                        }
+                      >
+                        for {permit.purpose} ·{' '}
+                      </span>
+                    ) : null}
                     <span
                       className={expired ? 'font-medium text-red-600' : 'text-muted-foreground'}
                     >
@@ -269,15 +284,16 @@ export function PermitsCard({
       {canEdit ? (
         <form
           onSubmit={onAdd}
-          className="mt-4 grid gap-3 sm:grid-cols-[7rem_1fr_10rem] sm:items-end"
+          className="mt-4 grid gap-3 sm:grid-cols-[7rem_7rem_1fr_10rem] sm:items-end"
         >
           <Field id="authority" label="Authority">
-            <Input
-              id="authority"
-              name="authority"
-              defaultValue={property.emirate === 'Abu Dhabi' ? 'ADREC' : 'DLD'}
-              required
-            />
+            <Input id="authority" name="authority" defaultValue="DLD" required />
+          </Field>
+          <Field id="purpose" label="Permit for">
+            <Select id="purpose" name="purpose" defaultValue={property.listingType} required>
+              <option value="sale">Sale</option>
+              <option value="rent">Rent</option>
+            </Select>
           </Field>
           <Field id="permitNumber" label="Permit number (optional)">
             <Input id="permitNumber" name="permitNumber" />
@@ -285,7 +301,7 @@ export function PermitsCard({
           <Field id="validUntil" label="Expiry date">
             <Input id="validUntil" name="validUntil" type="date" required />
           </Field>
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-4">
             <Field id="verificationUrl" label="QR code link (optional)">
               <Input
                 id="verificationUrl"
@@ -295,7 +311,7 @@ export function PermitsCard({
               />
             </Field>
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-3">
             <Field id="permitDocument" label="Permit document (PDF or photo)">
               <Input id="permitDocument" name="document" type="file" accept={ACCEPT} />
             </Field>
