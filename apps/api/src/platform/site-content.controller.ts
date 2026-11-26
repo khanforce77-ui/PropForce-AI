@@ -139,7 +139,7 @@ export class AppNoticeController {
   constructor(private readonly site: SiteContentService) {}
 
   @Get()
-  @Header('Cache-Control', 'private, max-age=60')
+  @Header('Cache-Control', 'no-store')
   async get() {
     return { notice: await this.site.appNotice() };
   }

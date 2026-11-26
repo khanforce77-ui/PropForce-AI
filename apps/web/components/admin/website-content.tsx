@@ -137,7 +137,11 @@ function ContentForm({
     const body: PortalContent = {
       ...clean({ siteName: c.siteName }),
       hero: c.hero,
-      announcement: clean(c.announcement),
+      announcement: {
+        enabled: c.announcement.enabled,
+        text: c.announcement.text,
+        ...clean({ linkUrl: c.announcement.linkUrl, linkLabel: c.announcement.linkLabel }),
+      },
       sections: c.sections,
       about: c.about,
       contact: clean(c.contact),
@@ -378,7 +382,7 @@ function BannerThumb({ banner }: { banner: SiteBanner }) {
   return (
     <div className="relative aspect-[16/7] w-full overflow-hidden rounded-lg bg-gradient-to-br from-muted to-border sm:w-56 sm:shrink-0">
       {url ? (
-        <img src={url} alt="" className="h-full w-full object-cover" />
+        <img src={url} alt={`Image for ${banner.title}`} className="h-full w-full object-cover" />
       ) : (
         <div className="grid h-full place-items-center text-xs text-muted-foreground">
           <span className="flex items-center gap-1">

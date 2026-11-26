@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
 import pg from 'pg';
+import { join } from 'node:path';
 import { linkFromEmail } from './mailpit';
 
 const OWNER_DB_URL =
@@ -61,7 +62,7 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
   await page.getByRole('button', { name: 'I saved them, continue' }).click();
 
   await expect(page).toHaveURL(/\/app\/admin$/);
-  await expect(page.getByRole('heading', { name: 'Platform admin' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'PropForce Control' })).toBeVisible();
   await page.getByRole('button', { name: 'Agencies', exact: true }).click();
   await expect(page.getByText(`Admin Realty ${run}`)).toBeVisible();
   await page.getByRole('button', { name: 'Users', exact: true }).click();
@@ -178,4 +179,53 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
   await expect(page.getByRole('img', { name: 'New listings' })).toBeVisible();
   await expect(page.getByText('Lead booster')).toBeVisible();
   await expect(page.getByRole('link', { name: 'My agency dashboard' })).toHaveCount(0);
+
+  // The admin adds an agency by hand and invites its owner.
+  await page.getByRole('button', { name: 'Agencies', exact: true }).click();
+  await page.getByRole('button', { name: 'Add agency' }).click();
+  await page.getByLabel('Agency name').fill(`Manual Realty ${run}`);
+  await page.getByLabel('ORN (RERA office number)').fill('98765');
+  await page.getByLabel("Owner's email (optional)").fill(`manual-${run}@e2e.test`);
+  await page.getByRole('button', { name: 'Create agency' }).click();
+  await expect(
+    page.getByText(`Manual Realty ${run} created. Invitation emailed to manual-${run}@e2e.test.`),
+  ).toBeVisible();
+  const manualRow = page.getByRole('listitem').filter({ hasText: `Manual Realty ${run}` });
+  await expect(manualRow).toContainText('ORN 98765');
+  expect(await linkFromEmail(`manual-${run}@e2e.test`, /invited to own/)).toContain(
+    '/accept-invite?token=',
+  );
+
+  // Website: change the home page heading, then add a banner with an image and switch it on.
+  await page.getByRole('button', { name: 'Website', exact: true }).click();
+  await page.getByRole('tab', { name: 'Text, contact & SEO' }).click();
+  await page.getByLabel('Heading', { exact: true }).fill(`Dubai homes ${run}`);
+  await page.getByRole('button', { name: 'Save website content' }).click();
+  await expect(page.getByText(/Website content saved/)).toBeVisible();
+  await page.getByRole('tab', { name: 'Banners & ads' }).click();
+  await page.getByRole('button', { name: 'Add banner or ad' }).click();
+  await page.getByRole('radio', { name: /Paid advert/ }).click();
+  await page.getByLabel('Title', { exact: true }).fill(`Launch ${run}`);
+  await page.getByLabel('Advertiser').fill('Partner Developer');
+  await page.getByLabel('Link (optional)').fill('/new-projects');
+  await page
+    .getByLabel('Image', { exact: true })
+    .setInputFiles(join(__dirname, 'fixtures', 'living-room.jpg'));
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.getByText(`“Launch ${run}” added.`, { exact: false })).toBeVisible();
+  const bannerRow = page.getByRole('listitem').filter({ hasText: `Launch ${run}` });
+  await expect(bannerRow.getByText('Off', { exact: true })).toBeVisible();
+  await bannerRow.getByRole('button', { name: 'Switch on' }).click();
+  await expect(bannerRow.getByText('Live', { exact: true })).toBeVisible();
+  await expect(bannerRow.getByRole('img')).toBeVisible();
+
+  // Settings: a notice to every agency shows inside the agency app.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Show the notice' }).check();
+  await page.getByLabel('Message').fill(`Maintenance ${run}`);
+  await page.getByRole('button', { name: 'Save platform settings' }).click();
+  await expect(page.getByText('Platform settings saved.')).toBeVisible();
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('button', { name: 'Open PropForce Direct' }).click();
+  await expect(page.getByText(`Maintenance ${run}`)).toBeVisible();
 });
