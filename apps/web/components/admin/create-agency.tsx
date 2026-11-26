@@ -1,7 +1,7 @@
 'use client';
 
-import { Building2, Mail, X } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { Archive, Building2, Copy, Mail, Trash2, X } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { getSupportedEmirates } from '@/lib/env';
 
 const EMIRATES = getSupportedEmirates();
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const limit = (v: string) => (v.trim() === '' ? null : Number(v));
 
 type FieldErrors = Record<string, string>;
@@ -21,7 +22,7 @@ export function CreateAgencyCard({
   onCreated,
   onCancel,
 }: {
-  onCreated: (message: string) => void;
+  onCreated: (message: string, inviteUrl?: string) => void;
   onCancel: () => void;
 }) {
   const { request } = useAuth();
@@ -49,14 +50,15 @@ export function CreateAgencyCard({
     try {
       const res = await request<{
         agencyId: string;
-        invitation: { email: string; emailed: boolean } | null;
+        invitation: { email: string; emailed: boolean; inviteUrl: string } | null;
       }>('/platform/agencies', { method: 'POST', body });
       onCreated(
         res.invitation
           ? res.invitation.emailed
             ? `${body.name} created. Invitation emailed to ${res.invitation.email}.`
-            : `${body.name} created, but the invitation email could not be sent. Resend it from the agency.`
+            : `${body.name} created, but the invitation email could not be sent. Copy the link below and send it on WhatsApp.`
           : `${body.name} created. Open it to add listings and team members.`,
+        res.invitation?.inviteUrl,
       );
     } catch (err) {
       setErrors(fieldErrors(err));
@@ -232,7 +234,7 @@ export function InviteToAgencyForm({
   onCancel,
 }: {
   agency: PlatformAgency;
-  onSent: (message: string) => void;
+  onSent: (message: string, inviteUrl?: string) => void;
   onCancel: () => void;
 }) {
   const { request } = useAuth();
@@ -246,14 +248,15 @@ export function InviteToAgencyForm({
     setBusy(true);
     setError(null);
     try {
-      const res = await request<{ emailed: boolean }>(
+      const res = await request<{ emailed: boolean; inviteUrl: string }>(
         `/platform/agencies/${agency.id}/invitations`,
         { method: 'POST', body: { email, role } },
       );
       onSent(
         res.emailed
           ? `Invitation emailed to ${email} (${role} of ${agency.name}).`
-          : `Invitation created for ${email}, but the email could not be sent.`,
+          : `Invitation created for ${email}, but the email could not be sent. Copy the link below and send it on WhatsApp.`,
+        res.inviteUrl,
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send the invitation.');
@@ -285,6 +288,157 @@ export function InviteToAgencyForm({
       <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
+    </form>
+  );
+}
+
+/** Shows an invitation link with a copy button, for sharing on WhatsApp when email fails. */
+export function InviteLinkBox({ url, onClose }: { url: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-background p-4 shadow-sm">
+      <p className="text-sm font-medium">Invitation link (valid 7 days, works once)</p>
+      <p className="text-xs text-muted-foreground">
+        Send it only to the person invited, for example on WhatsApp. They sign up with the invited
+        email address.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Input
+          readOnly
+          value={url}
+          aria-label="Invitation link"
+          className="min-w-60 flex-1 font-mono text-xs"
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <Button type="button" onClick={() => void copy()}>
+          <Copy className="h-4 w-4" aria-hidden /> {copied ? 'Copied' : 'Copy link'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onClose} aria-label="Hide link">
+          <X className="h-4 w-4" aria-hidden />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Confirms "Delete agency". Agencies without business data are deleted for good; others are
+ * archived (closed, hidden from the website, restorable), and the form says which will happen.
+ */
+export function DeleteAgencyForm({
+  agency,
+  onDone,
+  onCancel,
+}: {
+  agency: PlatformAgency;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const { request } = useAuth();
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    mode: 'delete' | 'archive';
+    listings: number;
+    contacts: number;
+    leads: number;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    request<NonNullable<typeof preview>>(`/platform/agencies/${agency.id}/delete-preview`)
+      .then((p) => live && setPreview(p))
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : 'Could not check this agency.'),
+      );
+    return () => {
+      live = false;
+    };
+  }, [request, agency.id]);
+  const archive = preview?.mode !== 'delete';
+  const matches = typed.trim().toLowerCase() === agency.name.trim().toLowerCase();
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!matches) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await request<{ result: 'deleted' | 'archived' }>(
+        `/platform/agencies/${agency.id}`,
+        { method: 'DELETE' },
+      );
+      onDone(
+        res.result === 'deleted'
+          ? `${agency.name} was deleted.`
+          : `${agency.name} was archived. Its team can no longer sign in to it and its listings are off the website. You can restore it from the Archived filter.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete the agency.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const id = `del-${agency.id}`;
+  return (
+    <form
+      onSubmit={(e) => void submit(e)}
+      className="mt-2 flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50/60 p-3 dark:border-red-900 dark:bg-red-950/30"
+    >
+      <div className="flex items-start gap-2">
+        {archive ? (
+          <Archive className="mt-0.5 h-4 w-4 shrink-0 text-red-700" aria-hidden />
+        ) : (
+          <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-red-700" aria-hidden />
+        )}
+        <div className="text-sm">
+          <p className="font-medium text-red-900 dark:text-red-200">
+            {!preview
+              ? `Delete ${agency.name}?`
+              : archive
+                ? `Archive ${agency.name}?`
+                : `Delete ${agency.name} for good?`}
+          </p>
+          <p className="text-red-900/80 dark:text-red-200/80">
+            {!preview
+              ? 'Checking what this agency holds…'
+              : archive
+                ? `It has ${plural(preview.listings, 'listing')}, ${plural(preview.contacts, 'contact')} and ${plural(preview.leads, 'lead')}, so it is archived instead of erased: its team loses access, its listings leave the website and pending invitations stop working. Nothing is deleted, and you can restore it later.`
+                : 'It has no listings, contacts or leads. The agency, its team links and invitations are removed. This cannot be undone.'}
+          </p>
+        </div>
+      </div>
+      {error ? <Alert>{error}</Alert> : null}
+      <Field id={id} label={`Type the agency name to confirm: ${agency.name}`}>
+        <Input
+          id={id}
+          value={typed}
+          autoComplete="off"
+          onChange={(e) => setTyped(e.target.value)}
+        />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!preview || !matches || busy}
+          className="bg-red-600 text-white hover:bg-red-700"
+        >
+          {busy ? 'Working…' : archive ? 'Archive agency' : 'Delete agency'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 }

@@ -25,6 +25,8 @@ const envSchema = z.object({
 
   /** SMTP connection URL, e.g. smtp://localhost:1025 for Mailpit. Empty = log emails instead. */
   SMTP_URL: z.string().optional(),
+  /** Resend API key. When set, email goes through Resend instead of SMTP. */
+  RESEND_API_KEY: z.string().trim().optional(),
   EMAIL_FROM: z.string().default('PropForce AI <no-reply@propforce.local>'),
 
   /**
@@ -67,6 +69,8 @@ const envSchema = z.object({
     .default('9-18'),
   /** Public base URL of this API (where the voice webhook lives). Defaults to APP_WEB_URL. */
   API_PUBLIC_URL: z.url().optional(),
+  /** Bearer secret Vercel Cron sends to scheduled jobs (daily payment reminders). Unset = jobs refuse. */
+  CRON_SECRET: z.string().min(16).optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   /**
    * Optional never-expiring system user token of the business that owns the Meta app. Lets a
@@ -118,7 +122,7 @@ export interface AppConfig {
     accessTtlSeconds: number;
   };
   refreshTokenTtlDays: number;
-  email: { smtpUrl?: string; from: string };
+  email: { smtpUrl?: string; resendApiKey?: string; from: string };
   authRateLimitPerMinute: number;
   portal: { publicUrl: string; apiKey?: string; turnstileSecret?: string };
   /** Undefined only in development/test, where a fixed, clearly non-secret key is used. */
@@ -146,6 +150,8 @@ export interface AppConfig {
     /** Dubai-time hour window [from, to) for outbound AI calls. */
     callingHours: { from: number; to: number };
   };
+  /** Bearer secret for scheduled jobs (Vercel Cron). */
+  cronSecret?: string;
   ai: {
     /** `none`: AI replies are off; conversations wait for an agent. */
     provider: 'openai' | 'fake' | 'none';
@@ -182,9 +188,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       'Invalid environment configuration: DATA_ENCRYPTION_KEY is required in staging/production',
     );
   }
-  if (deployed && !e.SMTP_URL) {
+  if (deployed && !e.SMTP_URL && !e.RESEND_API_KEY) {
     throw new Error(
-      'Invalid environment configuration: SMTP_URL is required in staging/production',
+      'Invalid environment configuration: SMTP_URL or RESEND_API_KEY is required in staging/production',
     );
   }
   if (deployed && e.WHATSAPP_PROVIDER === 'fake') {
@@ -226,7 +232,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       accessTtlSeconds: e.ACCESS_TOKEN_TTL_SECONDS,
     },
     refreshTokenTtlDays: e.REFRESH_TOKEN_TTL_DAYS,
-    email: { ...(e.SMTP_URL ? { smtpUrl: e.SMTP_URL } : {}), from: e.EMAIL_FROM },
+    email: {
+      ...(e.SMTP_URL ? { smtpUrl: e.SMTP_URL } : {}),
+      ...(e.RESEND_API_KEY ? { resendApiKey: e.RESEND_API_KEY } : {}),
+      from: e.EMAIL_FROM,
+    },
     authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
     portal: {
       publicUrl: e.PORTAL_PUBLIC_URL.replace(/\/$/, ''),
@@ -257,6 +267,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       },
       webhookUrl: `${(e.API_PUBLIC_URL ?? e.APP_WEB_URL).replace(/\/$/, '')}/v1/webhooks/voice/vapi`,
     },
+    ...(e.CRON_SECRET ? { cronSecret: e.CRON_SECRET } : {}),
     ai: {
       provider: aiProvider,
       ...(e.OPENAI_API_KEY ? { openaiApiKey: e.OPENAI_API_KEY } : {}),

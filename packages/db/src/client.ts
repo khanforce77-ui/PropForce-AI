@@ -140,3 +140,19 @@ export async function withPublicPortal<T>(
     return fn(tx);
   });
 }
+
+/**
+ * Lists the active developer agencies for the daily payment-reminder run, before any tenant
+ * context exists. Only agency ids are returned; each agency is then run in its own tenant context.
+ */
+export async function listPaymentReminderTenants(prisma: PrismaClient): Promise<string[]> {
+  return prisma.$transaction(async (tx) => {
+    await setLocal(tx, 'app.reminder_cron', 'on');
+    const rows = await tx.agency.findMany({
+      where: { kind: 'developer', status: 'active' },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    return rows.map((r) => r.id);
+  });
+}

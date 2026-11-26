@@ -83,6 +83,8 @@ export interface Membership {
     slug: string;
     emirate: string;
     status: string;
+    /** `developer` = property developer account (payment plans and reminders). */
+    kind?: 'agency' | 'developer';
     approvalStatus?: 'not_required' | 'pending' | 'approved' | 'rejected';
     statusReason?: string | null;
   };
@@ -318,6 +320,7 @@ export interface PlatformAgency {
   seatLimit: number | null;
   listingLimit: number | null;
   isPlatformOwned?: boolean;
+  leads?: number;
 }
 
 export interface PlatformUser {

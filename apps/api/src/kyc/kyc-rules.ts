@@ -291,9 +291,13 @@ export async function loadKyc(tx: TransactionClient, tenantId: string) {
 export async function kycRequired(tx: TransactionClient, tenantId: string) {
   const [flag, agency] = await Promise.all([
     tx.featureFlag.findUnique({ where: { key: KYC_FLAG }, select: { enabled: true } }),
-    tx.agency.findUnique({ where: { id: tenantId }, select: { isPlatformOwned: true } }),
+    tx.agency.findUnique({
+      where: { id: tenantId },
+      select: { isPlatformOwned: true, kind: true },
+    }),
   ]);
-  return flag?.enabled === true && !!agency && !agency.isPlatformOwned;
+  // Brokerage KYC (ORN, BRN cards) does not fit developer accounts; they keep their own flow.
+  return flag?.enabled === true && !!agency && !agency.isPlatformOwned && agency.kind === 'agency';
 }
 
 const listOf = (missing: string[]) =>

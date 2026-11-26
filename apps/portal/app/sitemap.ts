@@ -13,10 +13,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${base}${p}`,
       changeFrequency: 'hourly' as const,
     })),
-    ...['/guides', ...GUIDES.map((g) => `/guides/${g.slug}`), '/for-agencies'].map((p) => ({
-      url: `${base}${p}`,
-      changeFrequency: 'monthly' as const,
-    })),
+    ...['/guides', ...GUIDES.map((g) => `/guides/${g.slug}`), '/for-agencies', '/developers'].map(
+      (p) => ({
+        url: `${base}${p}`,
+        changeFrequency: 'monthly' as const,
+      }),
+    ),
   ];
   const [listings, facets] = await Promise.all([
     getSitemap().catch(() => ({ data: [] })),

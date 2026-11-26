@@ -15,6 +15,8 @@ export const registerSchema = z.strictObject({
     emirate: z.enum(EMIRATES),
   }),
   acceptTerms: z.literal(true, { message: 'Terms must be accepted' }),
+  /** `developer` = property developer (payment plans and payment reminders). Dubai only. */
+  accountType: z.enum(['agency', 'developer']).default('agency'),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 

@@ -1,6 +1,7 @@
 import { withTenant, type PrismaClient } from '@propforce/db';
 import type { AppConfig } from '../config/env';
 import type { EmailSender } from '../email/email.sender';
+import { renderEmail } from '../email/templates';
 
 /** Keeps visitor text on one line in a subject and strips anything that could fold headers. */
 const oneLine = (s: string, max: number) =>
@@ -43,26 +44,32 @@ export async function notifyAgentOfEnquiry(
   const link = leadId
     ? `${config.webUrl}/app/${tenantId}/leads/${leadId}`
     : `${config.webUrl}/app/${tenantId}/portal`;
-  const text = [
-    `Hi ${data.agent.user.fullName},`,
-    '',
-    `You have a new enquiry from the PropForce website about ${listing}.`,
-    '',
-    `Name: ${oneLine(data.fullName, 120)}`,
-    `Phone: ${data.phoneE164}`,
-    ...(data.email ? [`Email: ${data.email}`] : []),
-    '',
-    'Message:',
-    data.message,
-    '',
-    `It has been added to your CRM as a lead: ${link}`,
-    ...(data.email ? ['', 'Reply to this email to answer the client directly.'] : []),
-  ].join('\n');
+  const rendered = renderEmail(
+    {
+      preheader: `${oneLine(data.fullName, 60)} asked about ${listing}.`,
+      heading: 'New enquiry from the website',
+      paragraphs: [
+        `Hi ${data.agent.user.fullName},`,
+        `You have a new enquiry from the PropForce website about ${listing}.`,
+      ],
+      details: [
+        ['Name', oneLine(data.fullName, 120)],
+        ['Phone', data.phoneE164],
+        ...(data.email ? ([['Email', data.email]] as [string, string][]) : []),
+      ],
+      quote: data.message,
+      button: { label: 'Open the lead', url: link },
+      footnote: `It has been added to your CRM as a lead.${
+        data.email ? ' Reply to this email to answer the client directly.' : ''
+      }`,
+    },
+    config.webUrl,
+  );
 
   await email.send({
     to: data.agent.user.email,
     subject: `New enquiry: ${oneLine(data.fullName, 60)} about ${listing}`,
-    text,
+    ...rendered,
     ...(data.email ? { replyTo: data.email } : {}),
   });
 }
