@@ -405,7 +405,13 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Printable branded brochures, AI captions reviewed before use, tagged campaign links and lead attribution',
       },
-      { label: 'Revenue reports', icon: BadgeDollarSign, status: 'soon', note: 'Phase 4' },
+      {
+        label: 'Revenue reports',
+        icon: BadgeDollarSign,
+        status: 'live',
+        href: '/app/admin/billing',
+        note: 'Platform revenue and per-agency AI, WhatsApp and voice usage; agencies see commission revenue',
+      },
     ],
   },
 ];

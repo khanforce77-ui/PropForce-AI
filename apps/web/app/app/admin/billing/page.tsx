@@ -18,6 +18,7 @@ import {
   type PlatformBilling,
   type SubscriptionStatus,
 } from '@/lib/billing';
+import { aed, type PlatformUsage } from '@/lib/revenue';
 
 const num = (s: string) => (s.trim() === '' ? null : Number(s));
 
@@ -183,6 +184,7 @@ export default function PlatformBillingPage() {
   const { me, request } = useAuth();
   const router = useRouter();
   const [data, setData] = useState<PlatformBilling | null>(null);
+  const [usage, setUsage] = useState<PlatformUsage | null>(null);
   const [agencies, setAgencies] = useState<PlatformAgency[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -213,6 +215,12 @@ export default function PlatformBillingPage() {
       setAgencies(a.data);
     } catch (err) {
       fail(err, 'Could not load billing.');
+    }
+    // Usage reads every agency, so it loads after the rest.
+    try {
+      setUsage(await request<PlatformUsage>('/platform/billing/usage'));
+    } catch (err) {
+      fail(err, 'Could not load usage.');
     }
   }, [request, fail]);
 
@@ -324,6 +332,82 @@ export default function PlatformBillingPage() {
           <Card className="flex flex-col gap-4">
             <h2 className="font-medium">Set an agency&apos;s subscription</h2>
             <SetSubscription agencies={agencies} plans={data.plans} onSave={setSubscription} />
+          </Card>
+
+          <Card className="overflow-x-auto">
+            <h2 className="mb-1 font-medium">Revenue and costs this month</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Since the 1st (Dubai time). Revenue counts active subscriptions with a price. Voice
+              cost is what Vapi reported, in USD; AI and WhatsApp are usage counts.
+            </p>
+            {!usage ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs text-muted-foreground">
+                  <tr>
+                    <th>Agency</th>
+                    <th>Plan</th>
+                    <th className="text-right">Revenue</th>
+                    <th className="text-right">AI replies</th>
+                    <th className="text-right">AI tokens</th>
+                    <th className="text-right">WhatsApp sent</th>
+                    <th className="text-right">Voice calls</th>
+                    <th className="text-right">Voice cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.agencies.map((u) => (
+                    <tr key={u.tenantId} className="border-b border-border">
+                      <td className="py-2">{u.name}</td>
+                      <td>
+                        {data.plans.find((p) => p.code === u.planCode)?.name ?? u.planCode}
+                        <span className="text-xs text-muted-foreground">
+                          {' '}
+                          ·{' '}
+                          {STATUS_LABEL[u.subscriptionStatus as SubscriptionStatus] ??
+                            u.subscriptionStatus}
+                        </span>
+                      </td>
+                      <td className="text-right tabular-nums">
+                        {u.mrrAed == null ? 'Unpriced' : aed(u.mrrAed)}
+                      </td>
+                      <td className="text-right tabular-nums">{u.aiReplies}</td>
+                      <td className="text-right tabular-nums">
+                        {u.aiTokens.toLocaleString('en-AE')}
+                      </td>
+                      <td className="text-right tabular-nums">{u.whatsappOutbound}</td>
+                      <td className="text-right tabular-nums">
+                        {u.voiceCalls}
+                        {u.voiceCalls ? (
+                          <span className="text-xs text-muted-foreground">
+                            {' '}
+                            · {u.voiceMinutes} min
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="text-right tabular-nums">${u.voiceCostUsd.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="font-medium">
+                  <tr>
+                    <td className="py-2">Total</td>
+                    <td />
+                    <td className="text-right tabular-nums">{aed(usage.totals.mrrAed)}</td>
+                    <td className="text-right tabular-nums">{usage.totals.aiReplies}</td>
+                    <td className="text-right tabular-nums">
+                      {usage.totals.aiTokens.toLocaleString('en-AE')}
+                    </td>
+                    <td className="text-right tabular-nums">{usage.totals.whatsappOutbound}</td>
+                    <td className="text-right tabular-nums">{usage.totals.voiceCalls}</td>
+                    <td className="text-right tabular-nums">
+                      ${usage.totals.voiceCostUsd.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
           </Card>
 
           <Card>

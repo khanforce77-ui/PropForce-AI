@@ -62,6 +62,11 @@ export class PlatformBillingController {
     return this.billing.platformOverview(req.auth.userId);
   }
 
+  @Get('usage')
+  usage(@Req() req: AuthenticatedRequest) {
+    return this.billing.platformUsage(req.auth.userId);
+  }
+
   @Put('plans/:code')
   updatePlan(@Req() req: AuthenticatedRequest, @Param('code') code: string, @Body() body: unknown) {
     return this.billing.updatePlan(req.auth.userId, code, parseBody(planUpdateSchema, body));

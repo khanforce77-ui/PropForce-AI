@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BadgeDollarSign,
   Megaphone,
   Building2,
   Calculator,
@@ -87,7 +88,10 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/import`, label: 'Bulk import', icon: FileUp },
     ...(['owner', 'admin', 'manager'].includes(membership.role)
-      ? [{ href: `${base}/booster`, label: 'Lead Booster', icon: Rocket }]
+      ? [
+          { href: `${base}/booster`, label: 'Lead Booster', icon: Rocket },
+          { href: `${base}/revenue`, label: 'Revenue', icon: BadgeDollarSign },
+        ]
       : []),
     { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone },
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },

@@ -443,3 +443,22 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - **Campaign links and attribution:** the Marketing page builds portal links with UTM tags. The portal keeps the tags for the browser session (and through the canonical-URL redirect), sends them with the enquiry, and the lead keeps them (shown on the lead). `GET /v1/marketing/attribution?days=` (owner/admin/manager) reports leads by campaign and by source, with how many reached qualified or later and how many were won.
 - Landing pages: each listing's portal page is its landing page, with the consent form built in; no separate landing-page builder.
 - Tested: 4 caption-check unit tests and 3 API e2e tests (grounding refusal, untrusted wrapping, review flow, cross-agency isolation, brochure data, UTM from portal enquiry to lead and report, agent refused the report). The AI caption quality with the real model, the printed brochure layout and the UI are not yet checked in a browser.
+
+## Phase 4 · Revenue reports (2026-11-26)
+
+- No migration.
+- **Agency** (owner, admin, manager): "Revenue" page, `GET /v1/deals/revenue?months=` covering the last 1–24 Dubai calendar months. It reports:
+  - Commission earned, from deals completed in the month.
+  - Commission invoiced and received, by the month each was recorded.
+  - What completed deals still owe (not invoiced, or invoiced and unpaid).
+  - The open pipeline's expected commission.
+  - Each team member's split, plus the agency's and co-brokers' shares.
+  - All amounts are AED before VAT, computed with the same commission rules as the deal page.
+- **Platform** (`/app/admin/billing`, `GET /v1/platform/billing/usage`): for each agency this month, it shows:
+  - Revenue (an active subscription's plan price).
+  - AI replies and tokens (replies plus captions).
+  - Outbound WhatsApp messages.
+  - Voice calls, with minutes and the USD cost Vapi reported.
+  - Only counts are read. Each agency is read in its own tenant transaction, because AI runs and messages have no platform-wide read policy.
+- Not built: MRR history and churn over time. There is no subscription history table yet; it comes with the payment provider's webhooks.
+- Tested: the revenue report is checked in the deals e2e test (month series, totals, splits, outstanding, pipeline, agent refused), and platform usage in the billing e2e test (admin only, per-agency row). The UI is type-checked and linted but not browser-tested.
