@@ -66,6 +66,14 @@ export class AuthService {
     if (signups && !signups.enabled) {
       throw new AppError(403, 'SIGNUPS_CLOSED', 'New agency sign-ups are closed right now.');
     }
+    if (input.accountType === 'developer' && input.agency.emirate !== 'Dubai') {
+      throw new AppError(
+        400,
+        'VALIDATION_FAILED',
+        'Developer accounts are available in Dubai only.',
+        [{ path: 'agency.emirate', message: 'Developer accounts are Dubai only' }],
+      );
+    }
     if (!this.config.supportedEmirates.includes(input.agency.emirate)) {
       throw new AppError(400, 'VALIDATION_FAILED', 'This emirate is not supported yet.', [
         {
@@ -116,6 +124,7 @@ export class AuthService {
           data: {
             id: agencyId,
             name: input.agency.name,
+            kind: input.accountType,
             slug: slugify(input.agency.name),
             emirate: input.agency.emirate,
             plan: defaults.plan,
@@ -135,7 +144,11 @@ export class AuthService {
             action: 'agency.registered',
             entityType: 'agency',
             entityId: agencyId,
-            after: { name: input.agency.name, emirate: input.agency.emirate },
+            after: {
+              name: input.agency.name,
+              emirate: input.agency.emirate,
+              kind: input.accountType,
+            },
           },
         });
       });
@@ -317,6 +330,7 @@ export class AuthService {
               slug: true,
               emirate: true,
               status: true,
+              kind: true,
               approvalStatus: true,
               statusReason: true,
             },

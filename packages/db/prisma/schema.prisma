@@ -149,10 +149,17 @@ enum ApprovalStatus {
   rejected
 }
 
+/// What kind of business the tenant is. Developers get payment plans and payment reminders.
+enum AgencyKind {
+  agency
+  developer
+}
+
 /// The tenant. Its own id is the tenant id.
 model Agency {
   id              String         @id @db.Uuid
   name            String
+  kind            AgencyKind     @default(agency)
   slug            String         @unique
   emirate         String
   tradeLicenseNo  String?        @map("trade_license_no")
@@ -213,6 +220,10 @@ model Agency {
   voiceLines         VoiceLine[]
   voiceScripts       VoiceScript[]
   marketingCaptions  MarketingCaption[]
+  paymentPlans       PaymentPlan[]
+  installments       PaymentInstallment[]
+  reminderConfig     PaymentReminderConfig?
+  reminderDispatches PaymentReminderDispatch[]
 
   @@map("agency")
 }
@@ -810,6 +821,7 @@ model Contact {
   campaignRecipients CampaignRecipient[]
   deals              Deal[]
   voiceCalls         VoiceCall[]
+  paymentPlans       PaymentPlan[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -1671,4 +1683,133 @@ model MarketingCaption {
   @@index([tenantId, propertyId, createdAt(sort: Desc)])
   @@index([tenantId, createdAt(sort: Desc)])
   @@map("marketing_caption")
+}
+
+// ───────────────────────────── Developer payment reminders ─────────────────────────────
+
+enum PaymentPlanStatus {
+  active
+  completed
+  cancelled
+}
+
+enum InstallmentStatus {
+  pending
+  paid
+  waived
+}
+
+enum ReminderChannel {
+  email
+  sms
+  ai_call
+}
+
+enum ReminderDispatchStatus {
+  /// Claimed by a run; the send is in progress (or the run died mid-send).
+  sending
+  sent
+  /// No recorded service consent for this channel, or the buyer is marked do-not-contact.
+  skipped_no_consent
+  /// The buyer has no email or phone for this channel.
+  skipped_no_address
+  /// The channel's provider is not connected yet (SMS, or AI calling not switched on).
+  provider_pending
+  failed
+}
+
+/// A buyer's installment plan with a developer (one unit).
+model PaymentPlan {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  contactId       String            @map("contact_id") @db.Uuid
+  projectName     String            @map("project_name")
+  unitRef         String?           @map("unit_ref")
+  /// Total price of the unit, AED.
+  totalPrice      Decimal           @map("total_price") @db.Decimal(14, 2)
+  status          PaymentPlanStatus @default(active)
+  /// Reminders pause for this plan while true (e.g. buyer is negotiating a reschedule).
+  remindersPaused Boolean           @default(false) @map("reminders_paused")
+  notes           String?
+  createdBy       String            @map("created_by") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency       Agency               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact      Contact              @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  installments PaymentInstallment[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, contactId])
+  @@map("payment_plan")
+}
+
+model PaymentInstallment {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  tenantId  String            @map("tenant_id") @db.Uuid
+  planId    String            @map("plan_id") @db.Uuid
+  seq       Int
+  /// e.g. "Down payment", "Installment 3", "On handover".
+  label     String
+  dueDate   DateTime          @map("due_date") @db.Date
+  /// AED.
+  amount    Decimal           @db.Decimal(14, 2)
+  status    InstallmentStatus @default(pending)
+  paidAt    DateTime?         @map("paid_at") @db.Timestamptz(3)
+  paidNote  String?           @map("paid_note")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency     Agency                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan       PaymentPlan               @relation(fields: [planId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  dispatches PaymentReminderDispatch[]
+
+  @@unique([planId, seq])
+  @@unique([id, tenantId])
+  @@index([tenantId, status, dueDate])
+  @@map("payment_installment")
+}
+
+/// Per-developer reminder schedule, edited templates and contact details shown in reminders.
+model PaymentReminderConfig {
+  tenantId            String   @id @map("tenant_id") @db.Uuid
+  /// [{ id, offsetDays, channels: ["email"|"sms"|"ai_call"], active }]; negative = before due date.
+  rules               Json     @default("[]")
+  /// Edited templates: { "<channel>.<stage>": { subject, body } }. Missing keys use the defaults.
+  templates           Json     @default("{}")
+  replyToEmail        String?  @map("reply_to_email") @db.Citext
+  contactPhone        String?  @map("contact_phone")
+  /// Bank / payment instructions shown in reminders.
+  paymentInstructions String?  @map("payment_instructions")
+  updatedBy           String?  @map("updated_by") @db.Uuid
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("payment_reminder_config")
+}
+
+/// One reminder for one installment, rule and channel. Unique, so a reminder is never sent twice.
+model PaymentReminderDispatch {
+  id            String                 @id @default(uuid(7)) @db.Uuid
+  tenantId      String                 @map("tenant_id") @db.Uuid
+  installmentId String                 @map("installment_id") @db.Uuid
+  ruleId        String                 @map("rule_id")
+  offsetDays    Int                    @map("offset_days")
+  channel       ReminderChannel
+  status        ReminderDispatchStatus
+  /// Email address or phone number it went to (null when skipped for no address).
+  recipient     String?
+  /// Why it was skipped or failed, or the provider's message/call id.
+  detail        String?
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency      Agency             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installment PaymentInstallment @relation(fields: [installmentId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([installmentId, ruleId, channel])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("payment_reminder_dispatch")
 }

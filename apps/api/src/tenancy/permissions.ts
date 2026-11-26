@@ -41,6 +41,12 @@ export const PERMISSIONS = [
   'billing:read',
   /** Change plan, payment and spending caps (owner only). */
   'billing:manage',
+  /** Developers: view buyers' payment plans, installments and the reminder log. */
+  'payment:read',
+  /** Developers: add and edit payment plans, mark installments paid. */
+  'payment:write',
+  /** Developers: reminder schedule, templates and "run now". */
+  'payment:settings',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -62,6 +68,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'conversation:read',
     'conversation:reply',
     'campaign:write',
+    'payment:read',
+    'payment:write',
   ],
   agent: [
     'agency:read',
