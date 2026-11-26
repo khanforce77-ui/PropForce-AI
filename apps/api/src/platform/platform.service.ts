@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   Prisma,
   withPlatformAdmin,
@@ -9,7 +9,12 @@ import {
 } from '@propforce/db';
 import { AppError } from '../common/app-error';
 import { randomUUID } from 'node:crypto';
+import { generateToken, hashToken } from '../auth/crypto';
+import { slugify } from '../auth/auth.service';
+import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
+import { EmailSender } from '../email/email.sender';
+import type { AgencyCreate } from './site-content.schemas';
 
 export interface AgencyPlanInput {
   plan?: string | undefined;
@@ -21,11 +26,25 @@ const notFound = (what: string) => new AppError(404, 'NOT_FOUND', `${what} not f
 const conflict = (message: string) => new AppError(409, 'INVALID_STATUS_CHANGE', message);
 
 const DAY_MS = 86_400_000;
+const INVITE_TTL_MS = 7 * DAY_MS;
+
+export interface AgencyDetailsInput {
+  name?: string | undefined;
+  emirate?: string | undefined;
+  orn?: string | null | undefined;
+  tradeLicenseNo?: string | null | undefined;
+}
 
 /** Read-only, cross-agency figures for platform administrators. */
 @Injectable()
 export class PlatformService {
-  constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
+  private readonly logger = new Logger(PlatformService.name);
+
+  constructor(
+    @Inject(PRISMA) private readonly prisma: PrismaClient,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly email: EmailSender,
+  ) {}
 
   summary(adminUserId: string) {
     return withPlatformAdmin(this.prisma, { userId: adminUserId }, async (tx) => {
@@ -71,6 +90,7 @@ export class PlatformService {
           emirate: true,
           status: true,
           orn: true,
+          tradeLicenseNo: true,
           createdAt: true,
           onboardedAt: true,
           approvalStatus: true,
@@ -329,6 +349,159 @@ export class PlatformService {
     return { agencyId };
   }
 
+  // ───── agencies created by the platform ─────
+
+  private assertEmirate(emirate: string) {
+    if (
+      !this.config.supportedEmirates.includes(emirate as AppConfig['supportedEmirates'][number])
+    ) {
+      throw new AppError(400, 'VALIDATION_FAILED', 'This emirate is not supported yet.', [
+        { path: 'emirate', message: `Supported: ${this.config.supportedEmirates.join(', ')}` },
+      ]);
+    }
+  }
+
+  /**
+   * Creates an agency on someone's behalf. It is live straight away (a platform admin made it,
+   * so no approval is needed). With an owner email, that person gets an invitation to own it.
+   */
+  async createAgency(adminUserId: string, input: AgencyCreate) {
+    this.assertEmirate(input.emirate);
+    const agencyId = randomUUID();
+    await withTenant(this.prisma, { tenantId: agencyId, userId: adminUserId }, async (tx) => {
+      await tx.agency.create({
+        data: {
+          id: agencyId,
+          name: input.name,
+          slug: slugify(input.name),
+          emirate: input.emirate,
+          orn: input.orn || null,
+          tradeLicenseNo: input.tradeLicenseNo || null,
+          status: 'active',
+          onboardedAt: new Date(),
+          approvalStatus: 'not_required',
+          plan: input.plan ?? 'trial',
+          seatLimit: input.seatLimit ?? null,
+          listingLimit: input.listingLimit ?? null,
+          settings: { create: {} },
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: agencyId,
+          actorType: 'platform',
+          actorUserId: adminUserId,
+          action: 'agency.created_by_platform',
+          entityType: 'agency',
+          entityId: agencyId,
+          after: { name: input.name, emirate: input.emirate },
+        },
+      });
+      await this.platformAudit(
+        tx,
+        adminUserId,
+        'platform.agency_created',
+        'agency',
+        agencyId,
+        { after: { emirate: input.emirate, plan: input.plan ?? 'trial' } },
+        input.name,
+      );
+    });
+    const invitation = input.ownerEmail
+      ? await this.inviteToAgency(adminUserId, agencyId, input.ownerEmail, 'owner')
+      : null;
+    return { agencyId, invitation };
+  }
+
+  /**
+   * Invites someone into any agency as owner or admin, by email. The invitation link works like
+   * one an agency sends itself (7 days, the invited email must accept).
+   */
+  async inviteToAgency(
+    adminUserId: string,
+    agencyId: string,
+    email: string,
+    role: 'owner' | 'admin',
+  ) {
+    const token = generateToken();
+    const { invitation, agencyName } = await withTenant(
+      this.prisma,
+      { tenantId: agencyId, userId: adminUserId },
+      async (tx) => {
+        const agency = await tx.agency.findUnique({ where: { id: agencyId } });
+        if (!agency) throw notFound('Agency');
+        const existingMember = await tx.membership.findFirst({
+          where: { tenantId: agencyId, status: { not: 'removed' }, user: { email } },
+        });
+        if (existingMember) {
+          throw new AppError(
+            409,
+            'CONFLICT_DUPLICATE',
+            'This person is already a member of the agency.',
+          );
+        }
+        await tx.invitation.updateMany({
+          where: { tenantId: agencyId, email, acceptedAt: null, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        const invitation = await tx.invitation.create({
+          data: {
+            tenantId: agencyId,
+            email,
+            role,
+            tokenHash: hashToken(token),
+            invitedBy: adminUserId,
+            expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          },
+          select: { id: true, email: true, role: true, expiresAt: true },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: agencyId,
+            actorType: 'platform',
+            actorUserId: adminUserId,
+            action: 'member.invited',
+            entityType: 'invitation',
+            entityId: invitation.id,
+            after: { email, role },
+          },
+        });
+        await this.platformAudit(
+          tx,
+          adminUserId,
+          'platform.agency_invitation_sent',
+          'agency',
+          agencyId,
+          { after: { email, role } },
+          agency.name,
+        );
+        return { invitation, agencyName: agency.name };
+      },
+    );
+    let emailed = true;
+    try {
+      await this.email.send({
+        to: email,
+        subject: `You're invited to ${role === 'owner' ? 'own' : 'manage'} ${agencyName} on PropForce AI`,
+        text: `PropForce has set up ${agencyName} for you as ${role}. Accept within 7 days: ${this.config.webUrl}/accept-invite?token=${token}`,
+      });
+    } catch (err) {
+      emailed = false;
+      this.logger.error(`Invitation email failed: ${(err as Error).message}`);
+    }
+    return { ...invitation, emailed };
+  }
+
+  updateAgencyDetails(adminUserId: string, agencyId: string, input: AgencyDetailsInput) {
+    if (input.emirate !== undefined) this.assertEmirate(input.emirate);
+    const data = Object.fromEntries(
+      Object.entries(input)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, v === '' ? null : v]),
+    ) as Prisma.AgencyUpdateInput;
+    return this.changeAgency(adminUserId, agencyId, 'platform.agency_details_changed', () => data);
+  }
+
   // ───── agency controls ─────
 
   approveAgency(adminUserId: string, agencyId: string) {
@@ -512,7 +685,8 @@ export class PlatformService {
     });
   }
 
-  private async platformAudit(
+  /** Writes the platform audit log. Also used by the website content service. */
+  async platformAudit(
     tx: TransactionClient,
     actorUserId: string,
     action: string,

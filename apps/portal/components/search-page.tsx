@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { Breadcrumbs, type Crumb } from '@/components/breadcrumbs';
+import { BannerStrip } from '@/components/banners';
 import { Results } from '@/components/results';
 import { SearchForm } from '@/components/search-form';
-import { getFacets, searchListings, type Facets } from '@/lib/api';
+import { getFacets, getSite, searchListings, type Facets } from '@/lib/api';
 import {
   areaHeading,
   areaPath,
@@ -70,10 +71,12 @@ export async function SearchPage({
   for (const k of ['type', 'emirate', 'community'] as const) {
     if (area[k]) query.set(k, area[k]!);
   }
-  const [facets, result] = await Promise.all([
+  const [facets, result, site] = await Promise.all([
     getFacets().catch(() => null),
     searchListings(query).catch(() => null),
+    getSite(),
   ]);
+  const topBanner = site.banners.search_top[0];
   const values = Object.fromEntries(query.entries());
   const linkParams = new URLSearchParams(query);
   for (const k of ['type', 'emirate', 'community'] as const) if (area[k]) linkParams.delete(k);
@@ -93,6 +96,11 @@ export async function SearchPage({
       <div className="rounded-2xl border border-border bg-muted p-4">
         <SearchForm facets={facets} values={values} purpose={purpose} />
       </div>
+      {topBanner ? (
+        <div className="mt-6">
+          <BannerStrip banner={topBanner} />
+        </div>
+      ) : null}
       <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold">
           {areaHeading(

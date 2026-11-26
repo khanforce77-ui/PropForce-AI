@@ -8,6 +8,7 @@ import { EmailSender } from '../email/email.sender';
 import type { RegisterInput } from './auth.schemas';
 import { generateToken, getDummyHash, hashPassword, hashToken, verifyPassword } from './crypto';
 import { JwtService } from './jwt.service';
+import { mergeWithDefaults, type PlatformSettings } from '../platform/site-content.schemas';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
@@ -85,6 +86,13 @@ export class AuthService {
 
     const passwordHash = await hashPassword(input.password);
     const agencyId = randomUUID();
+    // Plan and limits for new agencies, as set by platform admins.
+    const defaults = (
+      mergeWithDefaults(
+        'platform',
+        (await this.prisma.siteSetting.findUnique({ where: { key: 'platform' } }))?.value,
+      ) as PlatformSettings
+    ).newAgencyDefaults;
     const user = await this.prisma.user.create({
       data: { email: input.email, fullName: input.fullName, passwordHash },
     });
@@ -97,6 +105,9 @@ export class AuthService {
             name: input.agency.name,
             slug: slugify(input.agency.name),
             emirate: input.agency.emirate,
+            plan: defaults.plan,
+            seatLimit: defaults.seatLimit,
+            listingLimit: defaults.listingLimit,
             settings: { create: {} },
           },
         });

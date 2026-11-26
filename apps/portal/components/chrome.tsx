@@ -1,8 +1,41 @@
-import { Heart } from 'lucide-react';
+import { Heart, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
 import Link from 'next/link';
+import type { SiteContent } from '@/lib/api';
 import { SITE_NAME } from '@/lib/config';
 
-export function SiteHeader() {
+const SOCIAL_LABELS: Record<keyof SiteContent['social'], string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  linkedin: 'LinkedIn',
+  x: 'X',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+};
+
+/** Thin strip above the header, switched on in PropForce admin → Website. */
+export function AnnouncementBar({ announcement }: { announcement: SiteContent['announcement'] }) {
+  if (!announcement.enabled || !announcement.text) return null;
+  const external = announcement.linkUrl?.startsWith('https://');
+  return (
+    <div className="bg-primary px-4 py-2 text-center text-sm text-primary-foreground">
+      <span>{announcement.text}</span>
+      {announcement.linkUrl ? (
+        <>
+          {' '}
+          <a
+            href={announcement.linkUrl}
+            className="font-semibold underline underline-offset-2"
+            {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          >
+            {announcement.linkLabel || 'Learn more'} →
+          </a>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+export function SiteHeader({ siteName = SITE_NAME }: { siteName?: string }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
@@ -17,7 +50,7 @@ export function SiteHeader() {
             height={32}
             className="rounded-md"
           />
-          {SITE_NAME}
+          {siteName}
         </Link>
         <nav className="flex gap-4 text-sm font-medium">
           <Link href="/for-sale" className="hover:text-primary">
@@ -41,16 +74,80 @@ export function SiteHeader() {
   );
 }
 
-export function SiteFooter() {
+export function SiteFooter({
+  content,
+  siteName = SITE_NAME,
+}: {
+  content: SiteContent;
+  siteName?: string;
+}) {
+  const { contact, social } = content;
+  const socials = (Object.keys(SOCIAL_LABELS) as (keyof SiteContent['social'])[]).filter(
+    (k) => social[k],
+  );
+  const wa = contact.whatsapp ? `https://wa.me/${contact.whatsapp.replace(/\D/g, '')}` : null;
   return (
     <footer className="mt-16 border-t border-border bg-muted">
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-8 text-sm text-muted-foreground sm:grid-cols-2">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 text-sm text-muted-foreground sm:grid-cols-2">
         <div>
-          <p className="font-semibold text-foreground">{SITE_NAME}</p>
-          <p className="mt-1">
-            Listings are published by licensed agencies. Every listing shows its advertising permit,
-            the agent&apos;s BRN and the agency&apos;s ORN where provided.
-          </p>
+          <p className="font-semibold text-foreground">{siteName}</p>
+          <p className="mt-1">{content.about}</p>
+          {contact.email || contact.phone || wa || contact.address ? (
+            <ul className="mt-3 space-y-1">
+              {contact.phone ? (
+                <li>
+                  <a
+                    href={`tel:${contact.phone}`}
+                    className="inline-flex items-center gap-2 hover:text-foreground"
+                  >
+                    <Phone className="h-4 w-4" aria-hidden /> {contact.phone}
+                  </a>
+                </li>
+              ) : null}
+              {wa ? (
+                <li>
+                  <a
+                    href={wa}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    className="inline-flex items-center gap-2 hover:text-foreground"
+                  >
+                    <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp {contact.whatsapp}
+                  </a>
+                </li>
+              ) : null}
+              {contact.email ? (
+                <li>
+                  <a
+                    href={`mailto:${contact.email}`}
+                    className="inline-flex items-center gap-2 hover:text-foreground"
+                  >
+                    <Mail className="h-4 w-4" aria-hidden /> {contact.email}
+                  </a>
+                </li>
+              ) : null}
+              {contact.address ? (
+                <li className="inline-flex items-center gap-2">
+                  <MapPin className="h-4 w-4" aria-hidden /> {contact.address}
+                </li>
+              ) : null}
+            </ul>
+          ) : null}
+          {socials.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {socials.map((k) => (
+                <a
+                  key={k}
+                  href={social[k]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                >
+                  {SOCIAL_LABELS[k]}
+                </a>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="flex gap-4 sm:justify-end">
           <Link href="/new-projects" className="hover:text-foreground">
