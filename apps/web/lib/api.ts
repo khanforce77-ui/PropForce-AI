@@ -240,6 +240,7 @@ export interface PlatformAgency {
   seatLimit: number | null;
   listingLimit: number | null;
   isPlatformOwned?: boolean;
+  leads?: number;
 }
 
 export interface PlatformUser {

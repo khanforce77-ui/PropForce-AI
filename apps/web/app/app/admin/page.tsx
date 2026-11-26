@@ -25,6 +25,7 @@ import {
   Settings,
   ShieldCheck,
   Shuffle,
+  Trash2,
   Users,
   type LucideIcon,
   Flag,
@@ -37,6 +38,8 @@ import { AdminBrokerVerifications } from '@/components/admin/broker-verification
 import {
   AgencyDetailsForm,
   CreateAgencyCard,
+  DeleteAgencyForm,
+  InviteLinkBox,
   InviteToAgencyForm,
 } from '@/components/admin/create-agency';
 import { AdminListingReports } from '@/components/admin/listing-reports';
@@ -88,6 +91,73 @@ function Badge({ value, label }: { value: string; label?: string }) {
     </span>
   );
 }
+
+/**
+ * What an agency's status means in plain words. "pending" covers two different cases, so the
+ * label says which one it is.
+ */
+function agencyState(a: PlatformAgency): { tone: string; label: string; hint: string } {
+  if (a.status === 'cancelled') {
+    return a.approvalStatus === 'rejected'
+      ? {
+          tone: 'rejected',
+          label: 'Rejected',
+          hint: 'Sign-up was rejected. Restore to approve it.',
+        }
+      : {
+          tone: 'cancelled',
+          label: 'Archived',
+          hint: 'Closed. The team cannot sign in and listings are off the website.',
+        };
+  }
+  if (a.status === 'suspended') {
+    return {
+      tone: 'suspended',
+      label: 'Suspended',
+      hint: 'Paused. The team cannot sign in and listings are off the website.',
+    };
+  }
+  if (a.approvalStatus === 'pending') {
+    return {
+      tone: 'pending',
+      label: 'Waiting for approval',
+      hint: 'Approve it to let the agency go live.',
+    };
+  }
+  if (a.status === 'pending') {
+    return {
+      tone: 'pending',
+      label: 'Setup not finished',
+      hint: a.owner
+        ? 'The owner has not finished onboarding yet.'
+        : 'No owner yet. Invite one, or open the agency and set it up.',
+    };
+  }
+  return {
+    tone: 'active',
+    label: 'Live',
+    hint: a.owner
+      ? 'Working normally. Listings can show on the website.'
+      : 'Live, but nobody can sign in yet. Invite an owner.',
+  };
+}
+
+type AgencyFilter = 'all' | 'live' | 'setup' | 'suspended' | 'archived';
+const AGENCY_FILTERS: { value: AgencyFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'live', label: 'Live' },
+  { value: 'setup', label: 'Not live yet' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'archived', label: 'Archived' },
+];
+const agencyFilterOf = (a: PlatformAgency): Exclude<AgencyFilter, 'all'> =>
+  a.status === 'cancelled'
+    ? 'archived'
+    : a.status === 'suspended'
+      ? 'suspended'
+      : a.status === 'active' && a.approvalStatus !== 'pending'
+        ? 'live'
+        : 'setup';
 
 function Stat({
   label,
@@ -480,6 +550,9 @@ export default function PlatformAdminPage() {
   const [open, setOpen] = useState<string | null>(null); // "<action>:<id>"
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [agencyFilter, setAgencyFilter] = useState<AgencyFilter>('all');
+  const [agencySearch, setAgencySearch] = useState('');
   const isAdmin = me?.user.isPlatformAdmin === true;
 
   useEffect(() => {
@@ -582,16 +655,26 @@ export default function PlatformAdminPage() {
   };
 
   /** After a child form saved something: show its message and refresh. */
-  const done = async (message: string) => {
+  const done = async (message: string, link?: string) => {
     setOpen(null);
     setError(null);
     setNotice(message);
+    setInviteLink(link ?? null);
     await load();
   };
 
   if (!isAdmin) return null;
 
   const queue = agencies.filter((a) => a.approvalStatus === 'pending');
+  const search = agencySearch.trim().toLowerCase();
+  const shownAgencies = agencies.filter(
+    (a) =>
+      (agencyFilter === 'all' ? a.status !== 'cancelled' : agencyFilterOf(a) === agencyFilter) &&
+      (!search ||
+        [a.name, a.orn, a.owner?.fullName, a.owner?.email].some((v) =>
+          v?.toLowerCase().includes(search),
+        )),
+  );
   const approvalOn = settings.find((s) => s.key === 'platform.require_agency_approval')?.enabled;
 
   const agencyActions = (a: PlatformAgency) => {
@@ -639,13 +722,39 @@ export default function PlatformAdminPage() {
           <Button size="sm" variant="ghost" onClick={() => setOpen(key('invite'))}>
             Invite {a.owner ? 'admin' : 'owner'}
           </Button>
+          {a.status === 'cancelled' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void act(`/platform/agencies/${a.id}/restore`, `${a.name} restored.`)}
+            >
+              Restore
+            </Button>
+          ) : null}
           <Link
             href={`/app/${a.id}`}
             className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-primary hover:bg-muted"
           >
             Open agency (view &amp; edit) →
           </Link>
+          {!a.isPlatformOwned && a.status !== 'cancelled' ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-700 hover:bg-red-50 hover:text-red-800 sm:ml-auto dark:text-red-400 dark:hover:bg-red-950"
+              onClick={() => setOpen(key('delete'))}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden /> Delete
+            </Button>
+          ) : null}
         </div>
+        {open === key('delete') ? (
+          <DeleteAgencyForm
+            agency={a}
+            onCancel={() => setOpen(null)}
+            onDone={(m) => void done(m)}
+          />
+        ) : null}
         {open === key('reject') ? (
           <ReasonForm
             id={`reject-${a.id}`}
@@ -677,7 +786,7 @@ export default function PlatformAdminPage() {
           <InviteToAgencyForm
             agency={a}
             onCancel={() => setOpen(null)}
-            onSent={(m) => void done(m)}
+            onSent={(m, link) => void done(m, link)}
           />
         ) : null}
         {open === key('plan') ? (
@@ -729,7 +838,9 @@ export default function PlatformAdminPage() {
         <p className="text-xs text-muted-foreground">
           Owner: {a.owner.fullName} · {a.owner.email}
         </p>
-      ) : null}
+      ) : (
+        <p className="text-xs text-amber-700 dark:text-amber-300">No owner yet</p>
+      )}
     </div>
   );
 
@@ -848,6 +959,7 @@ export default function PlatformAdminPage() {
         </header>
         {error ? <Alert>{error}</Alert> : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
+        {inviteLink ? <InviteLinkBox url={inviteLink} onClose={() => setInviteLink(null)} /> : null}
 
         {tab === 'overview' ? (
           <>
@@ -1057,14 +1169,17 @@ export default function PlatformAdminPage() {
         ) : null}
 
         {tab === 'agencies' && open === 'create-agency' ? (
-          <CreateAgencyCard onCancel={() => setOpen(null)} onCreated={(m) => void done(m)} />
+          <CreateAgencyCard
+            onCancel={() => setOpen(null)}
+            onCreated={(m, link) => void done(m, link)}
+          />
         ) : null}
 
         {tab === 'agencies' ? (
           <Card className="p-0">
             <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-5">
               <h2 className="font-medium">
-                All agencies <span className="text-muted-foreground">({agencies.length})</span>
+                Agencies <span className="text-muted-foreground">({shownAgencies.length})</span>
               </h2>
               {open !== 'create-agency' ? (
                 <Button size="sm" onClick={() => setOpen('create-agency')}>
@@ -1072,19 +1187,58 @@ export default function PlatformAdminPage() {
                 </Button>
               ) : null}
             </div>
-            {agencies.length === 0 ? (
-              <p className="px-6 pt-2 pb-5 text-sm text-muted-foreground">No agencies yet.</p>
+            <div className="flex flex-col gap-3 px-6 pt-3 sm:flex-row sm:items-center">
+              <div
+                role="group"
+                aria-label="Filter agencies"
+                className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+              >
+                {AGENCY_FILTERS.map((f) => {
+                  const count =
+                    f.value === 'all'
+                      ? agencies.filter((a) => a.status !== 'cancelled').length
+                      : agencies.filter((a) => agencyFilterOf(a) === f.value).length;
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      aria-pressed={agencyFilter === f.value}
+                      onClick={() => setAgencyFilter(f.value)}
+                      className={cn(
+                        'shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap',
+                        agencyFilter === f.value
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border hover:bg-muted',
+                      )}
+                    >
+                      {f.label} <span className="opacity-70">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <Input
+                aria-label="Search agencies"
+                placeholder="Search name, owner or ORN"
+                value={agencySearch}
+                onChange={(e) => setAgencySearch(e.target.value)}
+                className="sm:ml-auto sm:max-w-64"
+              />
+            </div>
+            {shownAgencies.length === 0 ? (
+              <p className="px-6 pt-4 pb-5 text-sm text-muted-foreground">
+                {agencies.length === 0 ? 'No agencies yet.' : 'No agencies match.'}
+              </p>
             ) : (
               <ul className="mt-3 divide-y divide-border">
-                {agencies.map((a) => (
+                {shownAgencies.map((a) => (
                   <li key={a.id} className="flex flex-col gap-2 px-6 py-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       {agencyHeading(a)}
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <Badge value={a.status} />
-                        {a.approvalStatus !== 'not_required' ? (
-                          <Badge value={a.approvalStatus} label={`approval: ${a.approvalStatus}`} />
-                        ) : null}
+                      <div className="flex flex-col items-start gap-1 sm:items-end">
+                        <Badge value={agencyState(a).tone} label={agencyState(a).label} />
+                        <p className="max-w-64 text-xs text-muted-foreground sm:text-right">
+                          {agencyState(a).hint}
+                        </p>
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">

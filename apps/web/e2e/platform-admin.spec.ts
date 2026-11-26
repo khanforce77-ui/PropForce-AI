@@ -195,6 +195,19 @@ test('a platform admin sees all agencies, runs the approval queue and suspends a
   expect(await linkFromEmail(`manual-${run}@e2e.test`, /invited to own/)).toContain(
     '/accept-invite?token=',
   );
+  await expect(manualRow).toContainText('No owner yet');
+
+  // An empty agency can be deleted for good, after typing its name.
+  await manualRow.getByRole('button', { name: 'Delete' }).click();
+  await expect(manualRow.getByText(`Delete Manual Realty ${run} for good?`)).toBeVisible();
+  const confirmDelete = manualRow.getByRole('button', { name: 'Delete agency' });
+  await expect(confirmDelete).toBeDisabled();
+  await manualRow.getByLabel(/Type the agency name/).fill(`Manual Realty ${run}`);
+  await confirmDelete.click();
+  await expect(page.getByText(`Manual Realty ${run} was deleted.`)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: `Manual Realty ${run}` })).toHaveCount(
+    0,
+  );
 
   // Website: change the home page heading, then add a banner with an image and switch it on.
   await page.getByRole('button', { name: 'Website', exact: true }).click();

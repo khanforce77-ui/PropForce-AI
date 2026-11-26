@@ -9,6 +9,7 @@ import type { RegisterInput } from './auth.schemas';
 import { generateToken, getDummyHash, hashPassword, hashToken, verifyPassword } from './crypto';
 import { JwtService } from './jwt.service';
 import { mergeWithDefaults, type PlatformSettings } from '../platform/site-content.schemas';
+import { renderEmail } from '../email/templates';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
@@ -79,7 +80,19 @@ export class AuthService {
       await this.safeSend({
         to: input.email,
         subject: 'Someone tried to register with your email',
-        text: `An account already exists for this email. If this was you, sign in or reset your password at ${this.config.webUrl}/reset-password.`,
+        ...renderEmail(
+          {
+            preheader: 'An account already exists for this email.',
+            heading: 'You already have a PropForce account',
+            paragraphs: [
+              'Someone tried to register a new account with this email address, but an account already exists.',
+              'If this was you, sign in, or reset your password if you forgot it.',
+            ],
+            button: { label: 'Reset password', url: `${this.config.webUrl}/reset-password` },
+            footnote: 'If this was not you, you can ignore this email. Your account is unchanged.',
+          },
+          this.config.webUrl,
+        ),
       });
       return;
     }
@@ -229,7 +242,20 @@ export class AuthService {
     await this.safeSend({
       to: user.email,
       subject: 'Reset your PropForce password',
-      text: `Reset your password within 30 minutes: ${this.config.webUrl}/reset-password?token=${token}\n\nIf you did not ask for this, you can ignore this email.`,
+      ...renderEmail(
+        {
+          preheader: 'Reset your password within 30 minutes.',
+          heading: 'Reset your password',
+          paragraphs: ['We received a request to reset the password for your PropForce account.'],
+          button: {
+            label: 'Choose a new password',
+            url: `${this.config.webUrl}/reset-password?token=${token}`,
+          },
+          footnote:
+            'This link expires in 30 minutes. If you did not ask for this, you can ignore this email.',
+        },
+        this.config.webUrl,
+      ),
     });
   }
 
@@ -396,8 +422,22 @@ export class AuthService {
     const token = await this.issueToken(userId, 'email_verification', VERIFICATION_TTL_MS);
     await this.safeSend({
       to: email,
-      subject: 'Verify your email for PropForce AI',
-      text: `Confirm your email address: ${this.config.webUrl}/verify-email?token=${token}\n\nThis link expires in 24 hours.`,
+      subject: 'Verify your email for PropForce',
+      ...renderEmail(
+        {
+          preheader: 'Confirm your email to finish setting up PropForce.',
+          heading: 'Confirm your email address',
+          paragraphs: [
+            'Welcome to PropForce. Confirm your email address to finish setting up your account.',
+          ],
+          button: {
+            label: 'Verify email',
+            url: `${this.config.webUrl}/verify-email?token=${token}`,
+          },
+          footnote: 'This link expires in 24 hours.',
+        },
+        this.config.webUrl,
+      ),
     });
   }
 
