@@ -24,6 +24,7 @@ import { ImportModule } from './import/import.module';
 import { ViewingsModule } from './viewings/viewings.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { DealsModule } from './deals/deals.module';
+import { KycModule } from './kyc/kyc.module';
 
 @Module({})
 export class AppModule {
@@ -67,6 +68,7 @@ export class AppModule {
         ViewingsModule,
         CampaignsModule,
         DealsModule,
+        KycModule,
         CalculatorModule,
         BillingModule,
         VoiceModule,

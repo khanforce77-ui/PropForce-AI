@@ -106,7 +106,12 @@ interface ResponsesBody {
 export class OpenAiKycReader implements KycReader {
   readonly name = 'openai';
   constructor(
-    private readonly cfg: { apiKey: string; model: string; fetch?: typeof fetch; timeoutMs?: number },
+    private readonly cfg: {
+      apiKey: string;
+      model: string;
+      fetch?: typeof fetch;
+      timeoutMs?: number;
+    },
   ) {}
 
   buildBody(input: KycReadInput): Record<string, unknown> {

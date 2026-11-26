@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   withPlatformAdmin,
   withTenant,
@@ -10,9 +10,13 @@ import {
 import { MediaError, normaliseDocument } from '@propforce/media';
 import { AppError } from '../common/app-error';
 import { PRISMA } from '../database/database.module';
+import { EmailSender } from '../email/email.sender';
 import { audit } from '../tenancy/tenancy.service';
 import type { TenantRequestContext } from '../tenancy/tenant.guard';
+import { kycFindings, readingOf, suggestedInstructions } from './kyc-findings';
+import { KYC_READER, type KycReader } from './kyc-reader';
 import {
+  DOCUMENT_LABELS,
   DOCUMENT_SUBJECT,
   EXPIRY_REQUIRED,
   MULTIPLE_ALLOWED,
@@ -60,7 +64,16 @@ const clean = <T extends object>(o: T) =>
  */
 @Injectable()
 export class KycService {
-  constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
+  private readonly logger = new Logger(KycService.name);
+  constructor(
+    @Inject(PRISMA) private readonly prisma: PrismaClient,
+    @Optional() @Inject(KYC_READER) private readonly reader: KycReader | null,
+    private readonly email: EmailSender,
+  ) {}
+
+  private platformCtx(adminUserId: string, tenantId: string): TenantRequestContext {
+    return { tenantId, userId: adminUserId, membershipId: null, role: 'admin', platform: true };
+  }
 
   private run<T>(ctx: TenantRequestContext, fn: (tx: TransactionClient) => Promise<T>) {
     return withTenant(this.prisma, { tenantId: ctx.tenantId, userId: ctx.userId }, fn);
@@ -87,9 +100,13 @@ export class KycService {
           orn: kyc.agency.orn,
           website: kyc.agency.website,
         },
+        instructions: kyc.agency.kycInstructions,
+        instructionsAt: kyc.agency.kycInstructionsAt,
+        aiAvailable: !!this.reader,
         owners: kyc.owners,
         employees: kyc.employees,
-        documents: kyc.documents,
+        // The AI read-out is advice for PropForce reviewers; the agency only sees whether it ran.
+        documents: kyc.documents.map(({ aiResult: _ai, ...d }) => d),
         checklist: kyc.checklist,
       };
     });
@@ -199,7 +216,8 @@ export class KycService {
     if (subject === 'employee' && !input.employeeId) {
       throw invalid('employeeId', 'Choose the employee.');
     }
-    if (subject !== 'owner' && input.ownerId) throw invalid('ownerId', 'Not used for this document.');
+    if (subject !== 'owner' && input.ownerId)
+      throw invalid('ownerId', 'Not used for this document.');
     if (subject !== 'employee' && input.employeeId) {
       throw invalid('employeeId', 'Not used for this document.');
     }
@@ -250,7 +268,10 @@ export class KycService {
           },
         });
         replaced = r.count;
-      } else if ((await tx.agencyDocument.count({ where: { tenantId: ctx.tenantId, type: input.type } })) >= 30) {
+      } else if (
+        (await tx.agencyDocument.count({ where: { tenantId: ctx.tenantId, type: input.type } })) >=
+        30
+      ) {
         throw new AppError(409, 'LIMIT_REACHED', 'Remove an old file before adding another.');
       }
       const saved = await tx.agencyDocument.create({
@@ -407,12 +428,33 @@ export class KycService {
       if (!agency) throw notFound('Agency');
       const kyc = await loadKyc(tx, agencyId);
       const { memberships, ...rest } = agency;
-      return {
-        agency: { ...rest, owner: memberships[0]?.user ?? null },
+      const findings = kycFindings({
+        agency: kyc.agency,
         owners: kyc.owners,
         employees: kyc.employees,
         documents: kyc.documents,
+      });
+      const rejected = kyc.documents
+        .filter((d) => d.status === 'rejected')
+        .map((d) => ({ label: d.label ?? DOCUMENT_LABELS[d.type], reason: d.reason }));
+      return {
+        agency: {
+          ...rest,
+          kycInstructions: kyc.agency.kycInstructions,
+          kycInstructionsAt: kyc.agency.kycInstructionsAt,
+          owner: memberships[0]?.user ?? null,
+        },
+        aiAvailable: !!this.reader,
+        owners: kyc.owners,
+        employees: kyc.employees,
+        documents: kyc.documents.map((d) => ({
+          ...d,
+          aiReading: readingOf(d),
+          aiResult: undefined,
+        })),
         checklist: kyc.checklist,
+        findings,
+        suggestedInstructions: suggestedInstructions(findings, kyc.checklist, rejected),
       };
     });
   }
@@ -469,7 +511,8 @@ export class KycService {
         select: { id: true, type: true, status: true, reason: true, reviewedAt: true },
       });
       await audit(tx, ctx, {
-        action: decision === 'approve' ? 'agency.kyc_document_approved' : 'agency.kyc_document_rejected',
+        action:
+          decision === 'approve' ? 'agency.kyc_document_approved' : 'agency.kyc_document_rejected',
         entityType: 'agency_document',
         entityId: id,
         before: { status: d.status },
@@ -477,5 +520,188 @@ export class KycService {
       });
       return updated;
     });
+  }
+
+  // ───── AI reading ─────
+
+  /** The agency asks for its own file to be read (once; a platform admin can re-run it). */
+  async checkOwn(ctx: TenantRequestContext, id: string) {
+    const doc = await this.run(ctx, (tx) =>
+      tx.agencyDocument.findFirst({
+        where: { id, tenantId: ctx.tenantId },
+        select: { id: true, aiStatus: true },
+      }),
+    );
+    if (!doc) throw notFound('Document');
+    if (doc.aiStatus === 'checked' && !ctx.platform) return { id, aiStatus: doc.aiStatus };
+    return this.readDocument(ctx, id);
+  }
+
+  /** Reads every unread (or failed) file of an agency, a few per request. */
+  async adminCheckAll(adminUserId: string, agencyId: string, force = false) {
+    const ctx = this.platformCtx(adminUserId, agencyId);
+    const ids = await this.run(ctx, (tx) =>
+      tx.agencyDocument.findMany({
+        where: { tenantId: agencyId, ...(force ? {} : { aiStatus: { not: 'checked' } }) },
+        orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
+        take: 6,
+        select: { id: true },
+      }),
+    );
+    const results = [];
+    for (const { id } of ids) results.push(await this.readDocument(ctx, id));
+    const remaining = await this.run(ctx, (tx) =>
+      tx.agencyDocument.count({ where: { tenantId: agencyId, aiStatus: { not: 'checked' } } }),
+    );
+    return {
+      checked: results.filter((r) => r.aiStatus === 'checked').length,
+      failed: results.filter((r) => r.aiStatus === 'failed').length,
+      remaining,
+    };
+  }
+
+  async adminCheckOne(adminUserId: string, id: string) {
+    const tenantId = await this.tenantOfDocument(adminUserId, id);
+    return this.readDocument(this.platformCtx(adminUserId, tenantId), id);
+  }
+
+  private async readDocument(ctx: TenantRequestContext, id: string) {
+    const reader = this.reader;
+    if (!reader) {
+      throw new AppError(503, 'AI_NOT_CONFIGURED', 'AI document checks are not set up.');
+    }
+    const doc = await this.run(ctx, (tx) =>
+      tx.agencyDocument.findFirst({
+        where: { id, tenantId: ctx.tenantId },
+        select: {
+          id: true,
+          type: true,
+          label: true,
+          contentType: true,
+          fileName: true,
+          bytes: true,
+        },
+      }),
+    );
+    if (!doc) throw notFound('Document');
+    let data: { aiStatus: string; aiResult?: object; aiModel?: string };
+    try {
+      const { reading, model } = await reader.read({
+        expected: doc.label ?? DOCUMENT_LABELS[doc.type],
+        contentType: doc.contentType,
+        fileName: doc.fileName,
+        bytes: doc.bytes,
+      });
+      data = { aiStatus: 'checked', aiResult: reading, aiModel: model };
+    } catch (err) {
+      // Only the error class is logged: messages may carry document content.
+      this.logger.warn(`KYC read failed for a document (${(err as Error).name})`);
+      data = { aiStatus: 'failed' };
+    }
+    return this.run(ctx, async (tx) => {
+      const updated = await tx.agencyDocument.update({
+        where: { id },
+        data: { ...data, aiCheckedAt: new Date() },
+        select: { id: true, aiStatus: true, aiCheckedAt: true },
+      });
+      await audit(tx, ctx, {
+        action: 'agency.kyc_document_ai_checked',
+        entityType: 'agency_document',
+        entityId: id,
+        after: { aiStatus: updated.aiStatus, model: data.aiModel ?? null },
+      });
+      return updated;
+    });
+  }
+
+  private async tenantOfDocument(adminUserId: string, id: string) {
+    const found = await withPlatformAdmin(this.prisma, { userId: adminUserId }, (tx) =>
+      tx.agencyDocument.findUnique({ where: { id }, select: { tenantId: true } }),
+    );
+    if (!found) throw notFound('Document');
+    return found.tenantId;
+  }
+
+  // ───── reviewer actions ─────
+
+  /** Approves every waiting file that the AI read without any problem or warning. */
+  async approveClean(adminUserId: string, agencyId: string) {
+    const ctx = this.platformCtx(adminUserId, agencyId);
+    return this.run(ctx, async (tx) => {
+      const kyc = await loadKyc(tx, agencyId);
+      const findings = kycFindings({
+        agency: kyc.agency,
+        owners: kyc.owners,
+        employees: kyc.employees,
+        documents: kyc.documents,
+      });
+      const flagged = new Set(
+        findings.filter((f) => f.severity !== 'info' && f.documentId).map((f) => f.documentId!),
+      );
+      const day = today();
+      const clean = kyc.documents.filter(
+        (d) =>
+          d.status === 'pending' &&
+          d.aiStatus === 'checked' &&
+          !flagged.has(d.id) &&
+          !(d.expiresAt && d.expiresAt < day),
+      );
+      if (clean.length === 0) return { approved: 0 };
+      await tx.agencyDocument.updateMany({
+        where: { id: { in: clean.map((d) => d.id) }, status: 'pending' },
+        data: { status: 'approved', reason: null, reviewedAt: new Date(), reviewedBy: adminUserId },
+      });
+      await audit(tx, ctx, {
+        action: 'agency.kyc_documents_bulk_approved',
+        entityType: 'agency',
+        entityId: agencyId,
+        after: { documentIds: clean.map((d) => d.id) },
+      });
+      return { approved: clean.length };
+    });
+  }
+
+  /** Saves the fix list shown to the agency (empty clears it) and emails the agency's owners. */
+  async sendInstructions(adminUserId: string, agencyId: string, text: string) {
+    const ctx = this.platformCtx(adminUserId, agencyId);
+    const message = text.trim();
+    const result = await this.run(ctx, async (tx) => {
+      const agency = await tx.agency.findUnique({
+        where: { id: agencyId },
+        select: { name: true },
+      });
+      if (!agency) throw notFound('Agency');
+      await tx.agency.update({
+        where: { id: agencyId },
+        data: { kycInstructions: message || null, kycInstructionsAt: message ? new Date() : null },
+      });
+      await audit(tx, ctx, {
+        action: message ? 'agency.kyc_instructions_sent' : 'agency.kyc_instructions_cleared',
+        entityType: 'agency',
+        entityId: agencyId,
+        after: { length: message.length },
+      });
+      const owners = await tx.membership.findMany({
+        where: { tenantId: agencyId, role: { in: ['owner', 'admin'] }, status: 'active' },
+        select: { user: { select: { email: true } } },
+      });
+      return { name: agency.name, emails: owners.map((o) => o.user.email) };
+    });
+    let emailed = 0;
+    if (message) {
+      for (const to of result.emails.slice(0, 5)) {
+        try {
+          await this.email.send({
+            to,
+            subject: `PropForce: please update your registration documents`,
+            text: `Hello,\n\nPropForce reviewed the registration documents for ${result.name}.\n\n${message}\n\nSign in to PropForce and open Company documents to upload the fixes.\n\nPropForce`,
+          });
+          emailed++;
+        } catch (err) {
+          this.logger.error(`KYC instructions email failed: ${(err as Error).message}`);
+        }
+      }
+    }
+    return { saved: true, emailed };
   }
 }

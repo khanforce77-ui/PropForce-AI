@@ -1,8 +1,4 @@
-import type {
-  AgencyDocumentStatus,
-  AgencyDocumentType,
-  TransactionClient,
-} from '@propforce/db';
+import type { AgencyDocumentStatus, AgencyDocumentType, TransactionClient } from '@propforce/db';
 import { AppError } from '../common/app-error';
 
 /** Feature flag: new agencies upload KYC documents and PropForce approves them before going live. */
@@ -139,7 +135,13 @@ export function kycChecklist(
 ): KycChecklist {
   const items: KycItem[] = [];
   const field = (key: string, label: string, given: boolean) =>
-    items.push({ key, label, subject: 'Agency', kind: 'field', state: given ? 'approved' : 'missing' });
+    items.push({
+      key,
+      label,
+      subject: 'Agency',
+      kind: 'field',
+      state: given ? 'approved' : 'missing',
+    });
   field('trade_license_no', 'Trade licence number', !!agency.tradeLicenseNo);
   field('orn', 'Office registration number (ORN)', !!agency.orn);
   field('website', 'Website', !!agency.website);
@@ -209,7 +211,9 @@ export function kycChecklist(
 
   const describe = (i: KycItem) =>
     i.subject === 'Agency' || i.kind === 'list' ? i.label : `${i.label} (${i.subject})`;
-  const open = items.filter((i) => i.state === 'missing' || i.state === 'rejected' || i.state === 'expired');
+  const open = items.filter(
+    (i) => i.state === 'missing' || i.state === 'rejected' || i.state === 'expired',
+  );
   return {
     items,
     complete: open.length === 0,
@@ -223,7 +227,15 @@ export async function loadKyc(tx: TransactionClient, tenantId: string) {
   const [agency, logo, owners, employees, documents] = await Promise.all([
     tx.agency.findUniqueOrThrow({
       where: { id: tenantId },
-      select: { tradeLicenseNo: true, orn: true, website: true, isPlatformOwned: true },
+      select: {
+        name: true,
+        tradeLicenseNo: true,
+        orn: true,
+        website: true,
+        isPlatformOwned: true,
+        kycInstructions: true,
+        kycInstructionsAt: true,
+      },
     }),
     tx.agencyLogo.findUnique({ where: { tenantId }, select: { tenantId: true } }),
     tx.agencyOwner.findMany({
@@ -266,28 +278,28 @@ export async function loadKyc(tx: TransactionClient, tenantId: string) {
         fileName: true,
         uploadedAt: true,
         reviewedAt: true,
+        aiStatus: true,
+        aiResult: true,
+        aiCheckedAt: true,
       },
     }),
   ]);
-  const checklist = kycChecklist(
-    { ...agency, hasLogo: !!logo },
-    owners,
-    employees,
-    documents,
-  );
+  const checklist = kycChecklist({ ...agency, hasLogo: !!logo }, owners, employees, documents);
   return { agency, owners, employees, documents, checklist };
 }
 
 export async function kycRequired(tx: TransactionClient, tenantId: string) {
   const [flag, agency] = await Promise.all([
     tx.featureFlag.findUnique({ where: { key: KYC_FLAG }, select: { enabled: true } }),
-    tx.agency.findUniqueOrThrow({ where: { id: tenantId }, select: { isPlatformOwned: true } }),
+    tx.agency.findUnique({ where: { id: tenantId }, select: { isPlatformOwned: true } }),
   ]);
-  return flag?.enabled === true && !agency.isPlatformOwned;
+  return flag?.enabled === true && !!agency && !agency.isPlatformOwned;
 }
 
 const listOf = (missing: string[]) =>
-  missing.length > 6 ? `${missing.slice(0, 6).join(', ')} and ${missing.length - 6} more` : missing.join(', ');
+  missing.length > 6
+    ? `${missing.slice(0, 6).join(', ')} and ${missing.length - 6} more`
+    : missing.join(', ');
 
 /** Before submitting for approval: every required item must be on file. */
 export async function assertKycComplete(tx: TransactionClient, tenantId: string) {
@@ -310,7 +322,9 @@ export async function assertKycApproved(tx: TransactionClient, tenantId: string)
   if (!checklist.approved) {
     const waiting = checklist.items
       .filter((i) => i.state !== 'approved')
-      .map((i) => (i.subject === 'Agency' || i.kind === 'list' ? i.label : `${i.label} (${i.subject})`));
+      .map((i) =>
+        i.subject === 'Agency' || i.kind === 'list' ? i.label : `${i.label} (${i.subject})`,
+      );
     throw new AppError(
       409,
       'KYC_NOT_APPROVED',
