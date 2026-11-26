@@ -26,3 +26,8 @@ export function apiUrl(): string {
 
 /** Where people send privacy, data deletion and terms questions. The mailbox must exist. */
 export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'contact@propforce.io';
+
+/** The agency app (CRM), where agencies register and sign in. */
+export const AGENCY_APP_URL = (
+  process.env.NEXT_PUBLIC_AGENCY_APP_URL ?? 'https://app.propforce.io'
+).replace(/\/$/, '');

@@ -1,16 +1,23 @@
 import type { MetadataRoute } from 'next';
 import { getFacets, getSitemap } from '@/lib/api';
 import { siteUrl } from '@/lib/config';
+import { GUIDES } from '@/lib/guides';
 import { areaPath, listingPath, TYPE_SEGMENT, type Purpose } from '@/lib/format';
 
 export const revalidate = 600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const fixed: MetadataRoute.Sitemap = ['', '/for-sale', '/for-rent', '/new-projects'].map((p) => ({
-    url: `${base}${p}`,
-    changeFrequency: 'hourly',
-  }));
+  const fixed: MetadataRoute.Sitemap = [
+    ...['', '/for-sale', '/for-rent', '/new-projects'].map((p) => ({
+      url: `${base}${p}`,
+      changeFrequency: 'hourly' as const,
+    })),
+    ...['/guides', ...GUIDES.map((g) => `/guides/${g.slug}`), '/for-agencies'].map((p) => ({
+      url: `${base}${p}`,
+      changeFrequency: 'monthly' as const,
+    })),
+  ];
   const [listings, facets] = await Promise.all([
     getSitemap().catch(() => ({ data: [] })),
     getFacets().catch(() => null),

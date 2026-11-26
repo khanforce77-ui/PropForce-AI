@@ -154,7 +154,7 @@ describe('website content and platform settings', () => {
   it('saves portal content, validates it and serves it publicly with defaults', async () => {
     const boss = await admin();
     const fresh = await http().get('/v1/public/site').expect(200);
-    expect(fresh.body.content.hero.title).toBe('Find your next home in the UAE');
+    expect(fresh.body.content.hero.title).toBe('Find your next home in Dubai');
     expect(fresh.body.banners.home_hero).toEqual([]);
 
     const site = await http().get('/v1/platform/site').set(boss).expect(200);
