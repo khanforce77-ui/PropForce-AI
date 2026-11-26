@@ -62,15 +62,43 @@ export function SiteHeader({ siteName = SITE_NAME }: { siteName?: string }) {
           <Link href="/new-projects" className="hidden hover:text-primary sm:inline">
             New projects
           </Link>
+          <Link href="/guides" className="hidden hover:text-primary md:inline">
+            Guides
+          </Link>
         </nav>
-        <Link
-          href="/saved"
-          className="ml-auto inline-flex items-center gap-1 text-sm font-medium hover:text-primary"
-        >
-          <Heart className="h-4 w-4" aria-hidden /> Saved
-        </Link>
+        <div className="ml-auto flex items-center gap-4">
+          <Link
+            href="/for-agencies"
+            className="hidden text-xs text-muted-foreground hover:text-primary md:inline"
+          >
+            For agencies
+          </Link>
+          <Link
+            href="/saved"
+            className="inline-flex items-center gap-1 text-sm font-medium hover:text-primary"
+          >
+            <Heart className="h-4 w-4" aria-hidden /> Saved
+          </Link>
+        </div>
       </div>
     </header>
+  );
+}
+
+function FooterColumn({ title, links }: { title: string; links: [string, string][] }) {
+  return (
+    <div>
+      <p className="font-semibold text-foreground">{title}</p>
+      <ul className="mt-2 space-y-1.5">
+        {links.map(([label, href]) => (
+          <li key={href}>
+            <Link href={href} className="hover:text-foreground">
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -88,7 +116,7 @@ export function SiteFooter({
   const wa = contact.whatsapp ? `https://wa.me/${contact.whatsapp.replace(/\D/g, '')}` : null;
   return (
     <footer className="mt-16 border-t border-border bg-muted">
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 text-sm text-muted-foreground sm:grid-cols-2">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 text-sm text-muted-foreground lg:grid-cols-[1fr_1.4fr]">
         <div>
           <p className="font-semibold text-foreground">{siteName}</p>
           <p className="mt-1">{content.about}</p>
@@ -149,22 +177,33 @@ export function SiteFooter({
             </div>
           ) : null}
         </div>
-        <div className="flex gap-4 sm:justify-end">
-          <Link href="/new-projects" className="hover:text-foreground">
-            New projects
-          </Link>
-          <Link href="/privacy" className="hover:text-foreground">
-            Privacy
-          </Link>
-          <Link href="/terms" className="hover:text-foreground">
-            Terms
-          </Link>
-          <Link href="/for-sale" className="hover:text-foreground">
-            Buy
-          </Link>
-          <Link href="/for-rent" className="hover:text-foreground">
-            Rent
-          </Link>
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 sm:justify-items-end">
+          <FooterColumn
+            title="Find a home"
+            links={[
+              ['Buy', '/for-sale'],
+              ['Rent', '/for-rent'],
+              ['New projects', '/new-projects'],
+              ['Saved homes', '/saved'],
+            ]}
+          />
+          <FooterColumn
+            title="Guides"
+            links={[
+              ['Buying in Dubai', '/guides/buying-a-home-in-dubai'],
+              ['Renting in Dubai', '/guides/renting-in-dubai'],
+              ['Buying off-plan', '/guides/buying-off-plan'],
+              ['Spot a genuine listing', '/guides/spot-a-genuine-listing'],
+            ]}
+          />
+          <FooterColumn
+            title="PropForce"
+            links={[
+              ['For agencies', '/for-agencies'],
+              ['Privacy', '/privacy'],
+              ['Terms', '/terms'],
+            ]}
+          />
         </div>
       </div>
     </footer>

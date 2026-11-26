@@ -208,6 +208,48 @@ describe('public portal: listings', () => {
     expect(res.body.communities).toHaveLength(2);
     expect(res.body.types).toEqual([{ type: 'apartment', count: 2 }]);
   });
+
+  it('returns asking-price insights only for communities with enough live listings', async () => {
+    const a = await createAgency('a@example.test', 'Alpha Homes');
+    await publishedListing(a, { price: 1_000_000, areaSqft: 1000 });
+    await publishedListing(a, { price: 2_000_000, areaSqft: 1000 });
+    await publishedListing(a, { price: 3_000_000, areaSqft: 1000 });
+    // Not live: never counted.
+    await publishedListing(a, { price: 90_000_000, status: 'draft' });
+    // Too few listings to show.
+    await publishedListing(a, { community: 'JVC', price: 700_000 });
+    await publishedListing(a, { community: 'JVC', price: 800_000 });
+    // Rent is its own group; monthly rents are left out so yearly figures stay comparable.
+    for (const price of [100_000, 120_000, 140_000]) {
+      await publishedListing(a, { listingType: 'rent', rentPeriod: 'yearly', price });
+    }
+    await publishedListing(a, { listingType: 'rent', rentPeriod: 'monthly', price: 9_000 });
+
+    const res = await http().get('/v1/public/insights').expect(200);
+    expect(res.body.minListings).toBe(3);
+    expect(res.body.data).toEqual(
+      expect.arrayContaining([
+        {
+          community: 'Dubai Marina',
+          emirate: 'Dubai',
+          purpose: 'sale',
+          listings: 3,
+          medianPrice: 2_000_000,
+          medianPricePerSqft: 2000,
+        },
+        {
+          community: 'Dubai Marina',
+          emirate: 'Dubai',
+          purpose: 'rent',
+          listings: 3,
+          medianPrice: 120_000,
+          // The helper's listings are 1,200 sqft.
+          medianPricePerSqft: 100,
+        },
+      ]),
+    );
+    expect(res.body.data).toHaveLength(2);
+  });
 });
 
 describe('public portal: contacting the agent', () => {

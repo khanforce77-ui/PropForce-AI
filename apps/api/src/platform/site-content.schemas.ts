@@ -83,14 +83,14 @@ export type PortalContent = z.infer<typeof portalContentSchema>;
 
 export const PORTAL_DEFAULTS: PortalContent = {
   hero: {
-    title: 'Find your next home in the UAE',
+    title: 'Find your next home in Dubai',
     subtitle:
-      'Listings with advertising permits from licensed agencies. Talk to the agent directly on WhatsApp or phone.',
+      'Every listing carries a valid advertising permit. Talk to the agent directly on WhatsApp or phone.',
   },
   announcement: { enabled: false, text: '' },
   sections: { popularCommunities: true, latestListings: true },
   about:
-    "Listings are published by licensed agencies. Every listing shows its advertising permit, the agent's BRN and the agency's ORN where provided.",
+    'Homes for sale and rent in Dubai from licensed agencies. Every listing shows a valid advertising permit, and verified agents carry a badge.',
   contact: {},
   social: {},
   seo: {},

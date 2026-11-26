@@ -9,9 +9,9 @@ import { photoUrl } from '@/lib/photos';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'New off-plan projects in the UAE',
+  title: 'New off-plan projects in Dubai',
   description:
-    'Off-plan projects in Dubai and Abu Dhabi from licensed agencies: starting prices, handover dates and payment plans.',
+    'Off-plan projects in Dubai from licensed agencies: starting prices, handover dates and payment plans.',
   alternates: { canonical: '/new-projects' },
 };
 
