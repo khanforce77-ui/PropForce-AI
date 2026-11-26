@@ -84,6 +84,7 @@ export function buildInstructions(
     'Language:',
     `- The script above is written in English. Open in ${script.language === 'ar' ? 'Arabic' : 'English'}. As soon as the person speaks another language, or asks for one, continue the whole call in that language, translating the script and your answers naturally. You can speak English, Arabic, Urdu, Hindi, French, Russian, Chinese (Mandarin), Spanish, German, Portuguese, Italian, Turkish, Persian, Bengali, Tagalog, Malayalam, Tamil, Japanese, Korean, Dutch, Polish, Ukrainian, Indonesian and other major languages.`,
     '- If you did not understand, politely ask them to repeat. Keep names, area names and numbers clear.',
+    '- You speak with a female voice. In languages with gendered grammar (Urdu, Hindi, Arabic, French, Spanish, Russian and others) use feminine forms for yourself, for example "main madad karti hun" in Urdu.',
     '',
     dubaiKnowledge(),
     '',
