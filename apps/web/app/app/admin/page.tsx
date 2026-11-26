@@ -326,8 +326,18 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
   {
     title: 'Phase 3 · coming soon',
     items: [
-      { label: 'Lead booster', icon: Rocket, status: 'soon', note: 'Phase 3' },
-      { label: 'Deals & commissions', icon: Handshake, status: 'soon', note: 'Phase 3' },
+      {
+        label: 'Lead booster',
+        icon: Rocket,
+        status: 'live',
+        note: 'WhatsApp template campaigns to consented contacts, with owner approval',
+      },
+      {
+        label: 'Deals & commissions',
+        icon: Handshake,
+        status: 'live',
+        note: 'Sale and rental pipelines, checklists, commission splits and invoice status',
+      },
       { label: 'Mortgage & ROI calculator', icon: Calculator, status: 'soon', note: 'Phase 3' },
       { label: 'Billing & plans', icon: CreditCard, status: 'soon', note: 'Phase 3' },
     ],

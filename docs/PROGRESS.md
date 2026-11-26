@@ -381,3 +381,27 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
   - Google Calendar sync: adapter exists in `packages/calendar` but is **pending** — needs a Google OAuth client (client id/secret, consent screen) before agents can connect; until then Google busy times are not checked.
   - WhatsApp viewing confirmation to the client with the approved template: not wired yet (template parameters not confirmed; outbound currently blocked by the Meta billing restriction).
   - Working hours are the UAE default for every agency (not yet configurable). The calendar UI is type-checked but not covered by a browser test.
+
+## Phase 3 · Lead Booster (2026-11-25)
+
+- Migration `20261126020000_campaigns`: `campaign` (template name/language, body parameters, audience filter, status, daily limit, approval fields) and `campaign_recipient` (frozen list with status `queued | skipped | sent | failed | replied` and skip reason). Tenant RLS, platform-admin read, no DELETE grant on campaigns.
+- New permissions: `campaign:write` (owner, admin, manager) and `campaign:approve` (owner, admin). Agents have no access.
+- Flow: draft → preview (matched / will receive / skipped by reason, rendered variables) → submit (recipient list frozen) → **owner/admin approval** → send in batches of 25 from the browser → completed. Back to draft or cancel at any point before completion.
+- Safety: only contacts with recorded WhatsApp **marketing** consent and not "do not contact" are queued; consent is checked again for every message at send time (fail closed via `mayContact` + `checkOutboundSend`); per-agency 24-hour limit (default 250, Meta's first tier); one sender per campaign (advisory lock); a template or token rejection stops the campaign instead of failing every recipient. Sent templates appear in the inbox (conversation in human mode, so replies go to a person). Inbound messages within 7 days mark the recipient as **replied**. Every step is audited.
+- Web: **Lead Booster** (side menu for owners, admins, managers): campaign list, new-campaign form (sender number, template, variables with {first_name}/{full_name}/{agency_name}, audience by tags, lead intent, stage, emirate, communities, daily limit), detail page with preview, approval, progress bar, pause/continue, recipient table.
+- Tested: 3 API e2e tests (consent-only audience and preview, approval required and role checks, consent withdrawn after approval is skipped, template payload, inbox message, reply tracking, daily limit, empty audience, cross-agency 404, agent 403, template rejection stops sending). Full API suite: 191 tests pass.
+- Pending / not done:
+  - Live sends depend on WhatsApp outbound working (currently blocked by the Meta billing restriction) and on the agency having its own approved marketing template in Meta.
+  - AI segmentation/scoring and AI reply classification (needs OpenAI in the loop; replies are only marked "replied").
+  - Quality-rating guard (reading Meta's number quality tier) is not automated; agencies set the daily limit.
+
+## Phase 3 · Deals and commissions (2026-11-25)
+
+- Migration `20261126030000_deals`: `deal` (reference DL-00001…, type sale/rental, stage, lead, client, listing, agent, price, commission % or fixed amount, VAT %, invoice status/number/dates, expected close, closed/lost), `deal_commission_split` (team member or outside party, percent), `deal_task` (checklist). Tenant RLS; checks on price, percentages and split party.
+- Pipelines (Dubai): sale — offer made, offer accepted, MOU (Form F) signed, deposit paid, mortgage approval, NOC issued, transfer booked, completed, fell through; rental — offer made, offer accepted, contract signed, deposit paid, Ejari registered, keys handed over, completed, fell through. Default checklists per type.
+- API `/v1/deals`: list (type/open/search), summary per stage, create (from a lead; listing type must match), update, stage change (fell through needs a reason; only managers reopen closed deals), splits (managers; ≤ 100%, rest is the agency's share), commission status (managers: pending → invoiced → paid with invoice number), checklist CRUD. Agents see deals they run or share commission on, and change only their own.
+- Completing a deal marks the lead **won** and the listing **sold/rented** (if still active/under offer). Stage changes are written on the lead timeline; everything audited (history shown on the deal).
+- Commission maths in `deal-rules.ts`: gross (fixed amount wins over %), VAT on top, each split's amount, agency remainder.
+- Web: **Deals** board (Sales / Rentals, columns per stage, pipeline value and expected commission), new-deal form (also from a lead's "Create deal"), deal page with stage progress, commission breakdown, split editor, invoice status, checklist and history.
+- Tested: 2 API e2e tests (full sale with splits and payouts, permissions, checklist, completion side effects, summary; rental stages, fell-through reason, listing untouched, wrong listing type, cross-agency isolation).
+- Not done: document templates / e-signature (Phase 4, licensed provider), deadline reminders by email/WhatsApp. PropForce records commissions; it does not issue tax invoices or move money.
