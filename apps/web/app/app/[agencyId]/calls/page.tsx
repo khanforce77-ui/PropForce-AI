@@ -8,7 +8,14 @@ import { Alert, Card } from '@/components/ui/card';
 import { ApiError } from '@/lib/api';
 import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
-import { duration, when, type CallDetail, type CallRow } from '@/lib/voice';
+import {
+  duration,
+  OUTCOME_LABEL,
+  STATUS_LABEL,
+  when,
+  type CallDetail,
+  type CallRow,
+} from '@/lib/voice';
 
 export default function CallsPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
@@ -44,16 +51,19 @@ export default function CallsPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Phone className="h-6 w-6" aria-hidden /> Calls
+          <Phone className="h-6 w-6" aria-hidden /> Call log
         </h1>
         <p className="text-sm text-muted-foreground">
-          Calls answered by your AI voice assistant, with the AI summary. Recordings are not stored
-          in PropForce.
+          Calls your AI assistant answered or made, with the AI summary, answers and outcome.
+          Recordings are not stored.{' '}
+          <Link href={`/app/${agencyId}/ai-calling`} className="text-primary underline">
+            Call scripts
+          </Link>
           {canSetUp ? (
             <>
-              {' '}
+              {' · '}
               <Link href={`/app/${agencyId}/settings/voice`} className="text-primary underline">
-                Voice settings
+                Calling numbers
               </Link>
             </>
           ) : null}
@@ -65,7 +75,8 @@ export default function CallsPage() {
       ) : rows.length === 0 ? (
         <Card>
           <p className="text-sm text-muted-foreground">
-            No calls yet. Calls appear here after your voice line is connected and a call ends.
+            No calls yet. Open a contact and choose Call with AI, or connect a calling number for
+            incoming calls.
           </p>
         </Card>
       ) : (
@@ -81,16 +92,27 @@ export default function CallsPage() {
                 >
                   <div className="min-w-0">
                     <p className="font-medium">
+                      {c.direction === 'outbound' ? '↗ ' : '↘ '}
                       {c.contact?.fullName ?? c.callerE164 ?? 'Unknown caller'}
+                      {c.outcome ? (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
+                          {OUTCOME_LABEL[c.outcome]}
+                        </span>
+                      ) : c.status !== 'ended' ? (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
+                          {STATUS_LABEL[c.status]}
+                        </span>
+                      ) : null}
                     </p>
                     <p className="truncate text-sm text-muted-foreground">
-                      {c.summary ?? 'No summary'}
+                      {c.error ?? c.summary ?? 'No summary'}
                     </p>
                   </div>
                   <div className="text-right text-xs text-muted-foreground tabular-nums">
-                    <p>{when(c.startedAt)}</p>
+                    <p>{when(c.startedAt ?? c.createdAt)}</p>
                     <p>
-                      {duration(c.durationSec)} · {c.line.label ?? c.line.phoneE164 ?? 'Line'}
+                      {duration(c.durationSec)} ·{' '}
+                      {c.script?.name ?? c.line?.label ?? c.line?.phoneE164 ?? 'AI call'}
                     </p>
                   </div>
                 </button>
@@ -108,14 +130,37 @@ export default function CallsPage() {
                       <span className="text-muted-foreground">Ended: </span>
                       {open.endedReason ?? '–'}
                     </p>
+                    {open.summary ? <p>{open.summary}</p> : null}
+                    {open.callbackAt ? (
+                      <p>
+                        <span className="text-muted-foreground">Call back: </span>
+                        {open.callbackAt}
+                      </p>
+                    ) : null}
+                    {open.answers && open.script ? (
+                      <dl className="grid gap-1 sm:grid-cols-2">
+                        {open.script.questions.map((q, i) =>
+                          open.answers?.[`q${i + 1}`] ? (
+                            <div key={q}>
+                              <dt className="text-xs text-muted-foreground">{q}</dt>
+                              <dd>{open.answers[`q${i + 1}`]}</dd>
+                            </div>
+                          ) : null,
+                        )}
+                      </dl>
+                    ) : null}
                     {open.transcript ? (
                       <pre className="max-h-80 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
                         {open.transcript}
                       </pre>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        {open.line.transcriptPolicy === 'summary_only'
-                          ? 'Transcripts are not kept for this line (summary only).'
+                        {(
+                          open.direction === 'outbound'
+                            ? !open.keepTranscript
+                            : open.line?.transcriptPolicy !== 'full_transcript'
+                        )
+                          ? 'Transcripts are not kept for this call (summary only).'
                           : 'No transcript was sent for this call.'}
                       </p>
                     )}

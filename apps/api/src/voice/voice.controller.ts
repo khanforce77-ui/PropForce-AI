@@ -24,8 +24,16 @@ import {
   TenantGuard,
   type TenantRequestContext,
 } from '../tenancy/tenant.guard';
-import { parseVapiMessage } from './vapi-report';
-import { lineCreateSchema, lineUpdateSchema, listCallsSchema } from './voice.schemas';
+import { AiCallingService } from './ai-calling.service';
+import { parseVapiMessage, parseVapiStatus } from './vapi-report';
+import {
+  lineCreateSchema,
+  lineUpdateSchema,
+  listCallsSchema,
+  placeCallSchema,
+  scriptCreateSchema,
+  scriptUpdateSchema,
+} from './voice.schemas';
 import { VoiceService } from './voice.service';
 
 const uuid = () => new ParseUUIDPipe();
@@ -46,6 +54,7 @@ export class VoiceWebhookController {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly voice: VoiceService,
+    private readonly calling: AiCallingService,
   ) {}
 
   @Post('vapi')
@@ -60,8 +69,21 @@ export class VoiceWebhookController {
     if (!sameSecret(bearer, secret) && !sameSecret(req.header('x-vapi-secret'), secret)) {
       throw new AppError(401, 'INVALID_SIGNATURE', 'Invalid webhook credentials.');
     }
+    const status = parseVapiStatus(body);
+    if (status) {
+      return {
+        received: true,
+        type: 'status-update',
+        outcome: await this.calling.recordStatus(status),
+      };
+    }
     const { type, report } = parseVapiMessage(body);
     if (!report) return { received: true, type };
+    // Calls PropForce placed carry our ids; anything else outbound is not ours to store.
+    if (report.propforceCallId) {
+      return { received: true, type, outcome: await this.calling.recordReport(report) };
+    }
+    if (report.direction === 'outbound') return { received: true, type, outcome: 'ignored' };
     const outcome = await this.voice.recordCall(report);
     return { received: true, type, outcome };
   }
@@ -70,7 +92,44 @@ export class VoiceWebhookController {
 @Controller()
 @UseGuards(AuthGuard, TenantGuard)
 export class VoiceController {
-  constructor(private readonly voice: VoiceService) {}
+  constructor(
+    private readonly voice: VoiceService,
+    private readonly calling: AiCallingService,
+  ) {}
+
+  @Get('ai-calling/status')
+  @RequirePermission('crm:read')
+  status(@CurrentTenant() ctx: TenantRequestContext) {
+    return this.calling.status(ctx);
+  }
+
+  @Get('ai-calling/scripts')
+  @RequirePermission('crm:read')
+  scripts(@CurrentTenant() ctx: TenantRequestContext) {
+    return this.calling.listScripts(ctx);
+  }
+
+  @Post('ai-calling/scripts')
+  @RequirePermission('crm:manage')
+  addScript(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.calling.createScript(ctx, parseBody(scriptCreateSchema, body));
+  }
+
+  @Patch('ai-calling/scripts/:id')
+  @RequirePermission('crm:manage')
+  updateScript(
+    @CurrentTenant() ctx: TenantRequestContext,
+    @Param('id', uuid()) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.calling.updateScript(ctx, id, parseBody(scriptUpdateSchema, body));
+  }
+
+  @Post('ai-calling/calls')
+  @RequirePermission('crm:write')
+  placeCall(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.calling.placeCall(ctx, parseBody(placeCallSchema, body));
+  }
 
   @Get('calls')
   @RequirePermission('crm:read')

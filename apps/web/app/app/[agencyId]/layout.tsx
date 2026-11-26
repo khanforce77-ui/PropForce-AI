@@ -18,6 +18,7 @@ import {
   LogOut,
   MessageCircle,
   Phone,
+  PhoneOutgoing,
   PhoneCall,
   Rocket,
   Users,
@@ -81,7 +82,8 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: base, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/listings`, label: 'Listings', icon: Home },
     { href: `${base}/inbox`, label: 'Inbox', icon: Inbox },
-    { href: `${base}/calls`, label: 'Calls', icon: Phone },
+    { href: `${base}/ai-calling`, label: 'AI Calling', icon: PhoneOutgoing },
+    { href: `${base}/calls`, label: 'Call log', icon: Phone },
     { href: `${base}/leads`, label: 'Leads', icon: KanbanSquare },
     { href: `${base}/calendar`, label: 'Calendar', icon: CalendarDays },
     { href: `${base}/deals`, label: 'Deals', icon: Handshake },
@@ -103,7 +105,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     ...(membership.role === 'owner' || membership.role === 'admin'
       ? [
           { href: `${base}/settings/whatsapp`, label: 'WhatsApp', icon: MessageCircle },
-          { href: `${base}/settings/voice`, label: 'AI voice', icon: PhoneCall },
+          { href: `${base}/settings/voice`, label: 'Calling numbers', icon: PhoneCall },
         ]
       : []),
   ];
