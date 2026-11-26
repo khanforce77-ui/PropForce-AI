@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -111,6 +112,24 @@ export class PlatformController {
   @HttpCode(200)
   reactivateAgency(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
     return this.platform.reactivateAgency(req.auth.userId, id);
+  }
+
+  @Get('agencies/:id/delete-preview')
+  deletePreview(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
+    return this.platform.deletePreview(req.auth.userId, id);
+  }
+
+  /** Deletes an empty agency for good, or archives one that has data (see the service). */
+  @Delete('agencies/:id')
+  @HttpCode(200)
+  deleteAgency(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
+    return this.platform.deleteAgency(req.auth.userId, id);
+  }
+
+  @Post('agencies/:id/restore')
+  @HttpCode(200)
+  restoreAgency(@Req() req: AuthenticatedRequest, @Param('id', uuid()) id: string) {
+    return this.platform.restoreAgency(req.auth.userId, id);
   }
 
   @Patch('agencies/:id')

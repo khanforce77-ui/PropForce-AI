@@ -242,14 +242,14 @@ export interface Site {
 export const FALLBACK_SITE: Site = {
   content: {
     hero: {
-      title: 'Find your next home in the UAE',
+      title: 'Find your next home in Dubai',
       subtitle:
-        'Listings with advertising permits from licensed agencies. Talk to the agent directly on WhatsApp or phone.',
+        'Apartments, villas and new projects to buy or rent. Every listing has a valid permit, and you talk to the agent directly on WhatsApp or phone.',
     },
     announcement: { enabled: false, text: '' },
     sections: { popularCommunities: true, latestListings: true },
     about:
-      "Listings are published by licensed agencies. Every listing shows its advertising permit, the agent's BRN and the agency's ORN where provided.",
+      "Search homes to buy or rent in Dubai. Every listing shows its advertising permit and the agent's licence, and you can call or WhatsApp the agent directly. Free for buyers and tenants.",
     contact: {},
     social: {},
     seo: {},

@@ -1,10 +1,16 @@
 import Link from 'next/link';
 import { BannerCard } from '@/components/banners';
 import { HeroCarousel } from '@/components/hero-carousel';
+import {
+  BrowseTiles,
+  BuyingSteps,
+  CommunityCards,
+  SavedCta,
+  TrustPromises,
+} from '@/components/home-sections';
 import { ListingCard } from '@/components/listing-card';
 import { SearchForm } from '@/components/search-form';
 import { getFacets, getSite, searchListings, type Facets, type SearchResult } from '@/lib/api';
-import { areaPath } from '@/lib/format';
 
 // Rendered per request (API responses are still cached for a minute), so an API hiccup at
 // build time is never frozen into the page.
@@ -27,7 +33,7 @@ export default async function HomePage() {
   const { content, banners } = site;
   const hero = banners.home_hero;
   const strip = banners.home_strip;
-  const popular = [...(facets?.communities ?? [])].sort((a, b) => b.count - a.count).slice(0, 8);
+  const popular = [...(facets?.communities ?? [])].sort((a, b) => b.count - a.count).slice(0, 7);
 
   return (
     <>
@@ -59,6 +65,8 @@ export default async function HomePage() {
         </div>
       </HeroCarousel>
 
+      <BrowseTiles facets={facets} />
+
       {strip.length > 0 ? (
         <section aria-label="Offers" className="mx-auto max-w-6xl px-4 pt-10">
           <div
@@ -72,23 +80,6 @@ export default async function HomePage() {
           >
             {strip.slice(0, 6).map((b) => (
               <BannerCard key={b.id} banner={b} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {content.sections.popularCommunities && popular.length > 0 ? (
-        <section className="mx-auto max-w-6xl px-4 pt-10">
-          <h2 className="text-xl font-semibold">Popular communities</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {popular.map((c) => (
-              <Link
-                key={`${c.emirate}-${c.community}`}
-                href={areaPath('sale', { emirate: c.emirate, community: c.community })}
-                className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary hover:text-primary"
-              >
-                {c.community} <span className="text-muted-foreground">({c.count})</span>
-              </Link>
             ))}
           </div>
         </section>
@@ -117,6 +108,15 @@ export default async function HomePage() {
           )}
         </section>
       ) : null}
+
+      {content.sections.popularCommunities && popular.length > 0 ? (
+        <CommunityCards communities={popular} />
+      ) : null}
+
+      <TrustPromises />
+      <BuyingSteps />
+      <SavedCta />
+      <div className="pb-6" />
     </>
   );
 }

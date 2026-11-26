@@ -1,7 +1,7 @@
 'use client';
 
-import { Building2, Copy, Mail, X } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { Archive, Building2, Copy, Mail, Trash2, X } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -325,5 +325,119 @@ export function InviteLinkBox({ url, onClose }: { url: string; onClose: () => vo
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Confirms "Delete agency". Agencies without business data are deleted for good; others are
+ * archived (closed, hidden from the website, restorable), and the form says which will happen.
+ */
+export function DeleteAgencyForm({
+  agency,
+  onDone,
+  onCancel,
+}: {
+  agency: PlatformAgency;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const { request } = useAuth();
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    mode: 'delete' | 'archive';
+    listings: number;
+    contacts: number;
+    leads: number;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    request<NonNullable<typeof preview>>(`/platform/agencies/${agency.id}/delete-preview`)
+      .then((p) => live && setPreview(p))
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : 'Could not check this agency.'),
+      );
+    return () => {
+      live = false;
+    };
+  }, [request, agency.id]);
+  const archive = preview?.mode !== 'delete';
+  const matches = typed.trim().toLowerCase() === agency.name.trim().toLowerCase();
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!matches) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await request<{ result: 'deleted' | 'archived' }>(
+        `/platform/agencies/${agency.id}`,
+        { method: 'DELETE' },
+      );
+      onDone(
+        res.result === 'deleted'
+          ? `${agency.name} was deleted.`
+          : `${agency.name} was archived. Its team can no longer sign in to it and its listings are off the website. You can restore it from the Archived filter.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete the agency.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const id = `del-${agency.id}`;
+  return (
+    <form
+      onSubmit={(e) => void submit(e)}
+      className="mt-2 flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50/60 p-3 dark:border-red-900 dark:bg-red-950/30"
+    >
+      <div className="flex items-start gap-2">
+        {archive ? (
+          <Archive className="mt-0.5 h-4 w-4 shrink-0 text-red-700" aria-hidden />
+        ) : (
+          <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-red-700" aria-hidden />
+        )}
+        <div className="text-sm">
+          <p className="font-medium text-red-900 dark:text-red-200">
+            {!preview
+              ? `Delete ${agency.name}?`
+              : archive
+                ? `Archive ${agency.name}?`
+                : `Delete ${agency.name} for good?`}
+          </p>
+          <p className="text-red-900/80 dark:text-red-200/80">
+            {!preview
+              ? 'Checking what this agency holds…'
+              : archive
+                ? `It has ${preview.listings} listings, ${preview.contacts} contacts and ${preview.leads} leads, so it is archived instead of erased: its team loses access, its listings leave the website and pending invitations stop working. Nothing is deleted, and you can restore it later.`
+                : 'It has no listings, contacts or leads. The agency, its team links and invitations are removed. This cannot be undone.'}
+          </p>
+        </div>
+      </div>
+      {error ? <Alert>{error}</Alert> : null}
+      <Field id={id} label={`Type the agency name to confirm: ${agency.name}`}>
+        <Input
+          id={id}
+          value={typed}
+          autoComplete="off"
+          onChange={(e) => setTyped(e.target.value)}
+        />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!preview || !matches || busy}
+          className="bg-red-600 text-white hover:bg-red-700"
+        >
+          {busy ? 'Working…' : archive ? 'Archive agency' : 'Delete agency'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

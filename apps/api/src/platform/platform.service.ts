@@ -104,12 +104,23 @@ export class PlatformService {
             where: { status: 'active' },
             select: { role: true, user: { select: { fullName: true, email: true } } },
           },
-          _count: { select: { properties: { where: { deletedAt: null } } } },
+          _count: {
+            select: {
+              properties: { where: { deletedAt: null } },
+              leads: true,
+            },
+          },
         },
       });
       return rows.map(({ memberships, _count, ...a }) => {
         const owner = memberships.find((m) => m.role === 'owner')?.user ?? null;
-        return { ...a, owner, members: memberships.length, listings: _count.properties };
+        return {
+          ...a,
+          owner,
+          members: memberships.length,
+          listings: _count.properties,
+          leads: _count.leads,
+        };
       });
     });
   }
@@ -562,6 +573,112 @@ export class PlatformService {
       const status: AgencyStatus =
         a.onboardedAt && a.approvalStatus !== 'pending' ? 'active' : 'pending';
       return { status, statusReason: null };
+    });
+  }
+
+  /** Counts the current tenant's business data (call inside withTenant). */
+  private async businessData(tx: TransactionClient) {
+    const [listings, contacts, leads, deals, conversations, enquiries] = await Promise.all([
+      tx.property.count(),
+      tx.contact.count(),
+      tx.lead.count(),
+      tx.deal.count(),
+      tx.conversation.count(),
+      tx.portalEnquiry.count(),
+    ]);
+    const counts = { listings, contacts, leads, deals, conversations, enquiries };
+    return { ...counts, total: Object.values(counts).reduce((a, b) => a + b, 0) };
+  }
+
+  /** What "Delete agency" would do, so the confirmation can say so. */
+  deletePreview(adminUserId: string, agencyId: string) {
+    return withTenant(this.prisma, { tenantId: agencyId, userId: adminUserId }, async (tx) => {
+      const agency = await tx.agency.findUnique({ where: { id: agencyId }, select: { id: true } });
+      if (!agency) throw notFound('Agency');
+      const data = await this.businessData(tx);
+      return { mode: data.total > 0 ? ('archive' as const) : ('delete' as const), ...data };
+    });
+  }
+
+  /**
+   * "Delete agency". An agency with no business data (listings, contacts, leads, deals,
+   * conversations or enquiries) is removed for good, with its memberships and invitations. Any
+   * other agency is archived instead: it is closed, members lose access, its listings leave the
+   * website, pending invitations are revoked, and nothing is erased, so it can be restored.
+   */
+  async deleteAgency(
+    adminUserId: string,
+    agencyId: string,
+  ): Promise<{ result: 'deleted' | 'archived'; name: string }> {
+    return withTenant(this.prisma, { tenantId: agencyId, userId: adminUserId }, async (tx) => {
+      const agency = await tx.agency.findUnique({
+        where: { id: agencyId },
+        select: { id: true, name: true, status: true, isPlatformOwned: true },
+      });
+      if (!agency) throw notFound('Agency');
+      if (agency.isPlatformOwned) {
+        throw new AppError(403, 'PERMISSION_DENIED', "PropForce's own agency cannot be deleted.");
+      }
+      const hasData = (await this.businessData(tx)).total > 0;
+
+      if (!hasData) {
+        await tx.agency.delete({ where: { id: agencyId } });
+        await this.platformAudit(
+          tx,
+          adminUserId,
+          'platform.agency_deleted',
+          'agency',
+          agencyId,
+          { before: { name: agency.name, status: agency.status }, after: { deleted: true } },
+          agency.name,
+        );
+        return { result: 'deleted', name: agency.name };
+      }
+
+      if (agency.status === 'cancelled') throw conflict('This agency is already archived.');
+      const data = { status: 'cancelled' as const, statusReason: 'Archived by PropForce.' };
+      await tx.agency.update({ where: { id: agencyId }, data });
+      await tx.invitation.updateMany({
+        where: { acceptedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      const diff = { before: { status: agency.status }, after: { status: 'cancelled' } };
+      await tx.auditLog.create({
+        data: {
+          tenantId: agencyId,
+          actorType: 'platform',
+          actorUserId: adminUserId,
+          action: 'platform.agency_archived',
+          entityType: 'agency',
+          entityId: agencyId,
+          ...diff,
+        },
+      });
+      await this.platformAudit(
+        tx,
+        adminUserId,
+        'platform.agency_archived',
+        'agency',
+        agencyId,
+        diff,
+        agency.name,
+      );
+      return { result: 'archived', name: agency.name };
+    });
+  }
+
+  /** Brings an archived (or rejected) agency back. */
+  restoreAgency(adminUserId: string, agencyId: string) {
+    return this.changeAgency(adminUserId, agencyId, 'platform.agency_restored', (a) => {
+      if (a.status !== 'cancelled') throw conflict('Only an archived agency can be restored.');
+      const approved = a.approvalStatus !== 'pending';
+      return {
+        status: a.onboardedAt && approved ? 'active' : 'pending',
+        statusReason: null,
+        ...(a.approvalStatus === 'rejected'
+          ? { approvalStatus: 'approved' as const, reviewedAt: new Date(), reviewedBy: adminUserId }
+          : {}),
+      };
     });
   }
 
