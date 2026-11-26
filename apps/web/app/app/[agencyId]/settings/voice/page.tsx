@@ -17,7 +17,9 @@ const POLICY: Record<TranscriptPolicy, string> = {
 
 export default function VoiceSettingsPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
-  const { request } = useAuth();
+  const { request, me } = useAuth();
+  // Numbers are assigned by PropForce; only platform admins add them.
+  const isPlatformAdmin = me?.user.isPlatformAdmin === true;
   const [lines, setLines] = useState<VoiceLine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export default function VoiceSettingsPage() {
     try {
       setLines((await request<{ data: VoiceLine[] }>('/voice/lines', { tenantId: agencyId })).data);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load voice lines.');
+      setError(err instanceof ApiError ? err.message : 'Could not load calling numbers.');
     }
   }, [agencyId, request]);
 
@@ -77,19 +79,20 @@ export default function VoiceSettingsPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Phone className="h-6 w-6" aria-hidden /> AI voice
+          <Phone className="h-6 w-6" aria-hidden /> Calling numbers
         </h1>
         <p className="text-sm text-muted-foreground">
-          Connect the phone numbers your Vapi assistant answers. After each call, PropForce saves
-          the caller, duration and AI summary, and adds new callers as contacts (without marketing
-          consent). Outbound AI calling stays off until PropForce has verified the approvals.
+          The phone numbers your AI assistant answers and calls from. PropForce sets these up for
+          you. After each incoming call, PropForce saves the caller, duration and AI summary, and
+          adds new callers as contacts (without marketing consent). Outgoing calls use your call
+          scripts in AI Calling.
         </p>
       </div>
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
       <Alert tone="info">
-        Your assistant must tell callers they are speaking with an AI, and ask for consent before
-        recording. Set this in the assistant&apos;s first message and recording settings in Vapi.
+        The AI always tells people they are speaking with an AI. Calls are not recorded; only the
+        summary (and the transcript, if you choose) is kept.
       </Alert>
 
       <Card className="flex flex-col gap-3">
@@ -97,7 +100,12 @@ export default function VoiceSettingsPage() {
         {!lines ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : lines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No lines yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No number of your own yet.{' '}
+            {isPlatformAdmin
+              ? 'Add one below.'
+              : 'Outgoing AI calls use the PropForce number. Contact PropForce support for a dedicated number.'}
+          </p>
         ) : (
           <ul>
             {lines.map((l) => (
@@ -113,7 +121,8 @@ export default function VoiceSettingsPage() {
                     ) : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {l.phoneE164 ?? '–'} · Vapi ID {l.providerPhoneNumberId}
+                    {l.phoneE164 ?? '–'}
+                    {isPlatformAdmin ? ` · Provider ID ${l.providerPhoneNumberId}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -143,50 +152,54 @@ export default function VoiceSettingsPage() {
         )}
       </Card>
 
-      <Card>
-        <h2 className="mb-3 font-medium">Add a line</h2>
-        <form onSubmit={(e) => void add(e)} className="grid gap-3 sm:grid-cols-2">
-          <Field id="v-id" label="Vapi phone number ID">
-            <Input
-              id="v-id"
-              required
-              value={f.providerPhoneNumberId}
-              onChange={(e) => setF({ ...f, providerPhoneNumberId: e.target.value })}
-            />
-          </Field>
-          <Field id="v-phone" label="Phone number (optional)">
-            <Input
-              id="v-phone"
-              placeholder="+9714…"
-              value={f.phoneE164}
-              onChange={(e) => setF({ ...f, phoneE164: e.target.value })}
-            />
-          </Field>
-          <Field id="v-label" label="Label (optional)">
-            <Input
-              id="v-label"
-              value={f.label}
-              onChange={(e) => setF({ ...f, label: e.target.value })}
-            />
-          </Field>
-          <Field id="v-policy" label="Keep">
-            <Select
-              id="v-policy"
-              value={f.transcriptPolicy}
-              onChange={(e) => setF({ ...f, transcriptPolicy: e.target.value as TranscriptPolicy })}
-            >
-              {(Object.keys(POLICY) as TranscriptPolicy[]).map((p) => (
-                <option key={p} value={p}>
-                  {POLICY[p]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="sm:col-span-2">
-            <Button type="submit">Add line</Button>
-          </div>
-        </form>
-      </Card>
+      {isPlatformAdmin ? (
+        <Card>
+          <h2 className="mb-3 font-medium">Add a number (platform admin)</h2>
+          <form onSubmit={(e) => void add(e)} className="grid gap-3 sm:grid-cols-2">
+            <Field id="v-id" label="Voice provider phone number ID">
+              <Input
+                id="v-id"
+                required
+                value={f.providerPhoneNumberId}
+                onChange={(e) => setF({ ...f, providerPhoneNumberId: e.target.value })}
+              />
+            </Field>
+            <Field id="v-phone" label="Phone number (optional)">
+              <Input
+                id="v-phone"
+                placeholder="+9714…"
+                value={f.phoneE164}
+                onChange={(e) => setF({ ...f, phoneE164: e.target.value })}
+              />
+            </Field>
+            <Field id="v-label" label="Label (optional)">
+              <Input
+                id="v-label"
+                value={f.label}
+                onChange={(e) => setF({ ...f, label: e.target.value })}
+              />
+            </Field>
+            <Field id="v-policy" label="Keep">
+              <Select
+                id="v-policy"
+                value={f.transcriptPolicy}
+                onChange={(e) =>
+                  setF({ ...f, transcriptPolicy: e.target.value as TranscriptPolicy })
+                }
+              >
+                {(Object.keys(POLICY) as TranscriptPolicy[]).map((p) => (
+                  <option key={p} value={p}>
+                    {POLICY[p]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="sm:col-span-2">
+              <Button type="submit">Add number</Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
     </div>
   );
 }

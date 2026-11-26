@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { AppError } from '../common/app-error';
 import { mayContact } from '../crm/consent';
 import { PRISMA } from '../database/database.module';
+import { APP_CONFIG, type AppConfig } from '../config/env';
 import { EmailSender } from '../email/email.sender';
 import { audit } from '../tenancy/tenancy.service';
 import type { TenantRequestContext } from '../tenancy/tenant.guard';
@@ -95,7 +96,7 @@ interface Job {
   customerName: string;
   email?: { subject: string; html: string; text: string; replyTo?: string };
   sms?: string;
-  call?: { firstMessage: string; instructions: string };
+  call?: { firstMessage: string; instructions: string; fromPhoneNumberId: string | null };
   installmentId: string;
 }
 
@@ -139,6 +140,7 @@ export class PaymentRemindersService {
     private readonly email: EmailSender,
     @Inject(SMS_SENDER) private readonly sms: SmsSender,
     @Inject(REMINDER_CALLER) private readonly caller: ReminderCaller,
+    @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
   ) {}
 
   private run<T>(
@@ -192,7 +194,10 @@ export class PaymentRemindersService {
           }
         : !callsAllowed
           ? { ready: false, note: 'Outbound AI calls are not switched on for your account yet.' }
-          : { ready: true, note: 'Calls are placed between 9 AM and 6 PM Dubai time.' },
+          : {
+              ready: true,
+              note: `Calls are placed between ${this.appConfig.voice.callingHours.from}:00 and ${this.appConfig.voice.callingHours.to}:00 Dubai time.`,
+            },
     };
   }
 
@@ -499,7 +504,7 @@ export class PaymentRemindersService {
   async runTenant(tenantId: string, now: Date): Promise<RunSummary> {
     const summary = emptySummary();
     const today = dubaiToday(now);
-    const callWindow = inCallWindow(now);
+    const callWindow = inCallWindow(now, this.appConfig.voice.callingHours);
 
     const jobs = await withTenant(
       this.prisma,
@@ -512,6 +517,11 @@ export class PaymentRemindersService {
         if (agency.kind !== 'developer' || agency.status !== 'active') return [];
         const c = await this.config(tx, tenantId);
         const callsAllowed = await this.outboundCallsAllowed(tx, tenantId);
+        const line = await tx.voiceLine.findFirst({
+          where: { active: true },
+          orderBy: { createdAt: 'asc' },
+          select: { providerPhoneNumberId: true },
+        });
         const out: Job[] = [];
 
         for (const rule of c.rules.filter((r) => r.active && r.channels.length)) {
@@ -659,7 +669,10 @@ export class PaymentRemindersService {
                     to: address,
                     customerName: contact.fullName,
                     installmentId: inst.id,
-                    call: renderCall(t, values),
+                    call: {
+                      ...renderCall(t, values),
+                      fromPhoneNumberId: line?.providerPhoneNumberId ?? null,
+                    },
                   });
                 }
               }

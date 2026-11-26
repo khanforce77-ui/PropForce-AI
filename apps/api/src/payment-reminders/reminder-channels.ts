@@ -1,3 +1,5 @@
+import type { VoiceDialer } from '../voice/voice-dialer';
+
 /**
  * Outbound channel ports for payment reminders. Email uses the platform EmailSender (AWS SES in
  * production). SMS and AI calls are adapters behind these ports; until a provider is connected
@@ -30,6 +32,8 @@ export class PendingSmsSender implements SmsSender {
 export interface ReminderCallInput {
   tenantId: string;
   toE164: string;
+  /** The developer's own voice line, if any; otherwise the platform's default number. */
+  fromPhoneNumberId: string | null;
   customerName: string;
   /** The first sentence the AI says. */
   firstMessage: string;
@@ -44,7 +48,35 @@ export interface ReminderCaller {
 }
 export const REMINDER_CALLER = Symbol('REMINDER_CALLER');
 
-/** Used until the outbound AI calling adapter is connected. */
+/** Questions the AI answers after each reminder call (shown with the call summary). */
+export const REMINDER_CALL_QUESTIONS = [
+  'Did the buyer say the payment was already made?',
+  'When did the buyer say they will pay?',
+  'Did the buyer ask for a call-back from the team, and when?',
+];
+
+/** Places reminder calls through the platform's outbound AI calling adapter. */
+export class VoiceDialerReminderCaller implements ReminderCaller {
+  constructor(private readonly dialer: VoiceDialer) {}
+  get configured(): boolean {
+    return this.dialer.configured;
+  }
+  placeCall(input: ReminderCallInput): Promise<{ providerCallId: string }> {
+    return this.dialer.startCall({
+      fromPhoneNumberId: input.fromPhoneNumberId,
+      toE164: input.toE164,
+      customerName: input.customerName,
+      firstMessage: input.firstMessage,
+      instructions: input.instructions,
+      questions: REMINDER_CALL_QUESTIONS,
+      language: 'en',
+      metadata: input.metadata,
+      maxDurationSec: 300,
+    });
+  }
+}
+
+/** Not bound by default: kept for tests and for running without the voice module. */
 export class PendingReminderCaller implements ReminderCaller {
   readonly configured = false;
   placeCall(): Promise<{ providerCallId: string }> {

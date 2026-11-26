@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { LeadForm } from '@/components/crm/lead-form';
+import { AiCallCard } from '@/components/voice/ai-call-card';
 import { StageBadge } from '@/components/crm/stage-badge';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -261,6 +262,17 @@ export default function ContactPage() {
           </ul>
         )}
       </Card>
+
+      <AiCallCard
+        agencyId={agencyId}
+        contactId={contactId}
+        hasPhone={!!contact.phoneE164}
+        consentState={contact.consentState}
+        leads={contact.leads.map((l) => ({
+          id: l.id,
+          label: `${INTENT_LABEL[l.intent]} · ${budgetLabel(l)}`,
+        }))}
+      />
 
       {canManageCrm(role) ? (
         <Card className="border-red-200 dark:border-red-900">

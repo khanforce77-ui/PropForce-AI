@@ -44,6 +44,29 @@ const envSchema = z.object({
   META_APP_SECRET: z.string().optional(),
   /** Shared secret Vapi sends with server webhooks (Bearer token or X-Vapi-Secret). */
   VAPI_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /** Private API key of PropForce's voice provider account (Vapi). Enables outbound AI calls. */
+  VAPI_API_KEY: z.string().min(16).optional(),
+  /**
+   * Optional assistant whose voice and transcriber outbound calls reuse. The agency's script
+   * replaces its first message and instructions for each call. Without it a fresh assistant is used.
+   */
+  VAPI_ASSISTANT_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,100}$/)
+    .optional(),
+  /** Number outbound calls ring from when the agency has no number of its own. */
+  VAPI_DEFAULT_PHONE_NUMBER_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,100}$/)
+    .optional(),
+  VAPI_API_URL: z.url().default('https://api.vapi.ai'),
+  /** Dubai-time hours (from-to, 24h) when AI calls may be placed. UAE rules: 09:00 to 18:00. */
+  VOICE_CALLING_HOURS: z
+    .string()
+    .regex(/^\d{1,2}-\d{1,2}$/)
+    .default('9-18'),
+  /** Public base URL of this API (where the voice webhook lives). Defaults to APP_WEB_URL. */
+  API_PUBLIC_URL: z.url().optional(),
   /** Bearer secret Vercel Cron sends to scheduled jobs (daily payment reminders). Unset = jobs refuse. */
   CRON_SECRET: z.string().min(16).optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
@@ -114,7 +137,17 @@ export interface AppConfig {
     graphVersion: string;
   };
   /** Voice provider (Vapi) webhooks. Without a secret the webhook refuses every call. */
-  voice: { webhookSecret?: string };
+  voice: {
+    webhookSecret?: string;
+    apiKey?: string;
+    assistantId?: string;
+    defaultPhoneNumberId?: string;
+    apiUrl: string;
+    /** Full URL of the voice webhook, sent with each outbound call. */
+    webhookUrl: string;
+    /** Dubai-time hour window [from, to) for outbound AI calls. */
+    callingHours: { from: number; to: number };
+  };
   /** Bearer secret for scheduled jobs (Vercel Cron). */
   cronSecret?: string;
   ai: {
@@ -214,7 +247,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(e.META_SYSTEM_USER_TOKEN ? { systemUserToken: e.META_SYSTEM_USER_TOKEN } : {}),
       graphVersion: e.META_GRAPH_VERSION,
     },
-    voice: { ...(e.VAPI_WEBHOOK_SECRET ? { webhookSecret: e.VAPI_WEBHOOK_SECRET } : {}) },
+    voice: {
+      ...(e.VAPI_WEBHOOK_SECRET ? { webhookSecret: e.VAPI_WEBHOOK_SECRET } : {}),
+      ...(e.VAPI_API_KEY ? { apiKey: e.VAPI_API_KEY } : {}),
+      ...(e.VAPI_ASSISTANT_ID ? { assistantId: e.VAPI_ASSISTANT_ID } : {}),
+      ...(e.VAPI_DEFAULT_PHONE_NUMBER_ID
+        ? { defaultPhoneNumberId: e.VAPI_DEFAULT_PHONE_NUMBER_ID }
+        : {}),
+      apiUrl: e.VAPI_API_URL.replace(/\/$/, ''),
+      callingHours: {
+        from: Number(e.VOICE_CALLING_HOURS.split('-')[0]),
+        to: Number(e.VOICE_CALLING_HOURS.split('-')[1]),
+      },
+      webhookUrl: `${(e.API_PUBLIC_URL ?? e.APP_WEB_URL).replace(/\/$/, '')}/v1/webhooks/voice/vapi`,
+    },
     ...(e.CRON_SECRET ? { cronSecret: e.CRON_SECRET } : {}),
     ai: {
       provider: aiProvider,

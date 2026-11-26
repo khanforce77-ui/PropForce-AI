@@ -11,9 +11,6 @@ const DAY_MS = 86_400_000;
  */
 export const CATCH_UP_DAYS = 2;
 
-/** AI calls are only placed between these Dubai hours (start inclusive, end exclusive). */
-export const CALL_WINDOW = { startHour: 9, endHour: 18 } as const;
-
 export interface ReminderRule {
   id: string;
   /** Negative = days before the due date, 0 = on the due date, positive = days overdue. */
@@ -41,9 +38,13 @@ export function dubaiHour(now: Date): number {
   return new Date(now.getTime() + DUBAI_OFFSET_MS).getUTCHours();
 }
 
-export const inCallWindow = (now: Date) => {
+/** AI calls are only placed inside the platform's Dubai calling hours [from, to). */
+export const inCallWindow = (
+  now: Date,
+  hours: { from: number; to: number } = { from: 9, to: 18 },
+) => {
   const h = dubaiHour(now);
-  return h >= CALL_WINDOW.startHour && h < CALL_WINDOW.endHour;
+  return h >= hours.from && h < hours.to;
 };
 
 export const addDays = (d: Date, days: number) => new Date(d.getTime() + days * DAY_MS);

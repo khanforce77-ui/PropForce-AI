@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
+import { VoiceDialer } from '../voice/voice-dialer';
+import { VoiceModule } from '../voice/voice.module';
 import { PaymentPlansService } from './payment-plans.service';
 import {
   CronController,
@@ -9,22 +11,26 @@ import {
 } from './payment-reminders.controller';
 import { PaymentRemindersService } from './payment-reminders.service';
 import {
-  PendingReminderCaller,
   PendingSmsSender,
   REMINDER_CALLER,
   SMS_SENDER,
+  VoiceDialerReminderCaller,
 } from './reminder-channels';
 
 @Module({
-  imports: [AuthModule, TenancyModule],
+  imports: [AuthModule, TenancyModule, VoiceModule],
   controllers: [PaymentPlansController, PaymentRemindersController, CronController],
   providers: [
     PaymentPlansService,
     PaymentRemindersService,
     // Pending until an SMS provider is chosen and given credentials.
     { provide: SMS_SENDER, useClass: PendingSmsSender },
-    // Pending until the outbound AI calling adapter is connected.
-    { provide: REMINDER_CALLER, useClass: PendingReminderCaller },
+    // Outbound AI calls; refuses to dial until the voice provider keys are set.
+    {
+      provide: REMINDER_CALLER,
+      inject: [VoiceDialer],
+      useFactory: (dialer: VoiceDialer) => new VoiceDialerReminderCaller(dialer),
+    },
   ],
 })
 export class PaymentRemindersModule {}
