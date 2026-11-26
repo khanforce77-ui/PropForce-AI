@@ -260,6 +260,107 @@ export class BillingService {
     });
   }
 
+  /**
+   * This month's revenue and usage per agency, for the platform's revenue report: plan price
+   * (counted only for active subscriptions), AI tokens and replies, outbound WhatsApp messages and
+   * voice calls with their provider cost. Counts only; no message content is read.
+   */
+  async platformUsage(adminUserId: string) {
+    const since = monthStart();
+    const { agencies, price } = await withPlatformAdmin(
+      this.prisma,
+      { userId: adminUserId },
+      async (tx) => {
+        const plans = await tx.billingPlan.findMany({
+          select: { code: true, priceMonthlyAed: true },
+        });
+        const agencies = await tx.agency.findMany({
+          where: { isPlatformOwned: false },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            plan: true,
+            subscription: { select: { planCode: true, status: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 500,
+        });
+        return {
+          agencies,
+          price: new Map(
+            plans.map((p) => [
+              p.code,
+              p.priceMonthlyAed == null ? null : Number(p.priceMonthlyAed),
+            ]),
+          ),
+        };
+      },
+    );
+    const rows = [];
+    // One short transaction per agency: AI runs and messages are only readable inside the agency.
+    for (const a of agencies) {
+      const usage = await withTenant(
+        this.prisma,
+        { tenantId: a.id, userId: adminUserId },
+        async (tx) => {
+          const runs = await tx.aiRun.aggregate({
+            where: { createdAt: { gte: since } },
+            _count: { _all: true },
+            _sum: { inputTokens: true, outputTokens: true },
+          });
+          const captions = await tx.marketingCaption.aggregate({
+            where: { createdAt: { gte: since } },
+            _sum: { inputTokens: true, outputTokens: true },
+          });
+          const whatsapp = await tx.message.count({
+            where: { direction: 'outbound', createdAt: { gte: since } },
+          });
+          const calls = await tx.voiceCall.aggregate({
+            where: { createdAt: { gte: since } },
+            _count: { _all: true },
+            _sum: { costUsd: true, durationSec: true },
+          });
+          return {
+            aiReplies: runs._count._all,
+            aiTokens:
+              (runs._sum.inputTokens ?? 0) +
+              (runs._sum.outputTokens ?? 0) +
+              (captions._sum.inputTokens ?? 0) +
+              (captions._sum.outputTokens ?? 0),
+            whatsappOutbound: whatsapp,
+            voiceCalls: calls._count._all,
+            voiceMinutes: Math.round((calls._sum.durationSec ?? 0) / 6) / 10,
+            voiceCostUsd: calls._sum.costUsd == null ? 0 : Number(calls._sum.costUsd),
+          };
+        },
+      );
+      const sub = a.subscription;
+      const planCode = sub?.planCode ?? a.plan;
+      rows.push({
+        tenantId: a.id,
+        name: a.name,
+        agencyStatus: a.status,
+        planCode,
+        subscriptionStatus: sub?.status ?? 'trialing',
+        mrrAed: sub?.status === 'active' ? (price.get(planCode) ?? null) : 0,
+        ...usage,
+      });
+    }
+    return {
+      since,
+      agencies: rows,
+      totals: {
+        mrrAed: rows.reduce((t, r) => t + (r.mrrAed ?? 0), 0),
+        aiTokens: rows.reduce((t, r) => t + r.aiTokens, 0),
+        aiReplies: rows.reduce((t, r) => t + r.aiReplies, 0),
+        whatsappOutbound: rows.reduce((t, r) => t + r.whatsappOutbound, 0),
+        voiceCalls: rows.reduce((t, r) => t + r.voiceCalls, 0),
+        voiceCostUsd: Math.round(rows.reduce((t, r) => t + r.voiceCostUsd, 0) * 100) / 100,
+      },
+    };
+  }
+
   updatePlan(adminUserId: string, code: string, body: PlanUpdateBody) {
     return withPlatformAdmin(this.prisma, { userId: adminUserId }, async (tx) => {
       const before = await tx.billingPlan.findUnique({ where: { code }, select: planSelect });

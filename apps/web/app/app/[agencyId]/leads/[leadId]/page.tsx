@@ -207,6 +207,14 @@ export default function LeadPage() {
             <dt className="text-muted-foreground">Source</dt>
             <dd>{titleCase(lead.source)}</dd>
           </div>
+          {lead.utmSource ? (
+            <div>
+              <dt className="text-muted-foreground">Campaign</dt>
+              <dd>
+                {[lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(' / ')}
+              </dd>
+            </div>
+          ) : null}
           {lead.lostReason ? (
             <div>
               <dt className="text-muted-foreground">Lost because</dt>

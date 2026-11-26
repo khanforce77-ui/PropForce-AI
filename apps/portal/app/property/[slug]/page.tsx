@@ -43,7 +43,21 @@ import {
 const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' });
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+/** Campaign tags survive the redirect to the canonical URL, so the enquiry is attributed. */
+function utmQuery(sp: Record<string, string | string[] | undefined>): string {
+  const q = new URLSearchParams();
+  for (const k of ['utm_source', 'utm_medium', 'utm_campaign']) {
+    const v = sp[k];
+    if (typeof v === 'string' && v) q.set(k, v.slice(0, 100));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
 
 async function load(slug: string): Promise<ListingDetail> {
   const id = idFromSlug(slug);
@@ -76,11 +90,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PropertyPage({ params }: Props) {
+export default async function PropertyPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const l = await load(slug);
   const canonical = listingPath(l);
-  if (`/property/${slug}` !== canonical) permanentRedirect(canonical);
+  if (`/property/${slug}` !== canonical) {
+    permanentRedirect(`${canonical}${utmQuery(await searchParams)}`);
+  }
 
   const title = listingTitle(l);
   const [similar, site] = await Promise.all([getSimilar(l.id), getSite()]);

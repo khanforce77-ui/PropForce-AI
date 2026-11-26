@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  BadgeDollarSign,
+  Megaphone,
   Building2,
   Calculator,
   CreditCard,
@@ -86,8 +88,12 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/contacts`, label: 'Contacts', icon: Contact },
     { href: `${base}/import`, label: 'Bulk import', icon: FileUp },
     ...(['owner', 'admin', 'manager'].includes(membership.role)
-      ? [{ href: `${base}/booster`, label: 'Lead Booster', icon: Rocket }]
+      ? [
+          { href: `${base}/booster`, label: 'Lead Booster', icon: Rocket },
+          { href: `${base}/revenue`, label: 'Revenue', icon: BadgeDollarSign },
+        ]
       : []),
+    { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone },
     { href: `${base}/portal`, label: 'Property portal', icon: Globe },
     { href: `${base}/calculator`, label: 'Cost calculator', icon: Calculator },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
@@ -104,7 +110,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col border-b border-border bg-muted md:w-60 md:border-r md:border-b-0">
+      <aside className="flex shrink-0 flex-col border-b print:hidden border-border bg-muted md:w-60 md:border-r md:border-b-0">
         <div className="flex items-center gap-2 px-4 py-4">
           <Building2 className="h-5 w-5 text-primary" aria-hidden />
           <div className="min-w-0">
@@ -141,10 +147,12 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </aside>
-      <main className="flex-1 px-4 py-6 md:px-10 md:py-10">
-        <AppNoticeBar />
+      <main className="flex-1 px-4 py-6 md:px-10 md:py-10 print:p-0">
+        <div className="print:hidden">
+          <AppNoticeBar />
+        </div>
         {isPlatformAdmin ? (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 print:hidden bg-primary/5 px-4 py-2 text-sm">
             <span>
               {membership.platform
                 ? `You are viewing ${membership.agency.name} as platform admin. You can change anything here, and every change is logged.`

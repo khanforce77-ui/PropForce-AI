@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeCheck, EyeOff, Trash2 } from 'lucide-react';
+import { BadgeCheck, EyeOff, FileText, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -120,6 +120,12 @@ function ListingDetail() {
           Last verified {date(p.verifiedAt)}
           {p.status === 'active' ? ` · Re-check by ${date(p.listingExpiresAt)}` : ''}
         </p>
+        <Link
+          href={`/app/${agencyId}/listings/${p.id}/brochure`}
+          className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        >
+          <FileText className="h-4 w-4" aria-hidden /> Brochure (print or save as PDF)
+        </Link>
       </div>
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}

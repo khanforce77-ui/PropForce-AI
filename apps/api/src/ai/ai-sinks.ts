@@ -70,13 +70,24 @@ export class PrismaSpendGuard implements SpendGuard {
     if (this.monthlyTokenCap <= 0) return false;
     const n = this.now();
     const monthStart = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1));
-    const agg = await withTenant(this.prisma, { tenantId }, (tx) =>
-      tx.aiRun.aggregate({
+    // Replies and marketing captions share one monthly allowance.
+    const used = await withTenant(this.prisma, { tenantId }, async (tx) => {
+      const runs = await tx.aiRun.aggregate({
         where: { createdAt: { gte: monthStart } },
         _sum: { inputTokens: true, outputTokens: true },
-      }),
-    );
-    return (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0) < this.monthlyTokenCap;
+      });
+      const captions = await tx.marketingCaption.aggregate({
+        where: { createdAt: { gte: monthStart } },
+        _sum: { inputTokens: true, outputTokens: true },
+      });
+      return (
+        (runs._sum.inputTokens ?? 0) +
+        (runs._sum.outputTokens ?? 0) +
+        (captions._sum.inputTokens ?? 0) +
+        (captions._sum.outputTokens ?? 0)
+      );
+    });
+    return used < this.monthlyTokenCap;
   }
 }
 

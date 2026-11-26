@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AiDispatcher } from '../ai/ai-dispatcher';
 import { AiReplyService } from '../ai/ai-reply.service';
-import { aiProviders } from '../ai/ai.providers';
+import { aiProviders, LLM_PROVIDER } from '../ai/ai.providers';
 import { AuthModule } from '../auth/auth.module';
 import { PlatformAdminGuard } from '../platform/platform.guard';
 import { TenancyModule } from '../tenancy/tenancy.module';
@@ -24,6 +24,6 @@ import { WHATSAPP_CLIENT, whatsappProviders } from './whatsapp.providers';
     AiDispatcher,
     PlatformAdminGuard,
   ],
-  exports: [InboundService, ConversationsService, WHATSAPP_CLIENT],
+  exports: [InboundService, ConversationsService, WHATSAPP_CLIENT, LLM_PROVIDER],
 })
 export class WhatsAppModule {}

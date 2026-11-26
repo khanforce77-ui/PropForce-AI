@@ -211,6 +211,7 @@ model Agency {
   logo               AgencyLogo?
   brokerChecks       BrokerVerification[]
   voiceLines         VoiceLine[]
+  marketingCaptions  MarketingCaption[]
 
   @@map("agency")
 }
@@ -485,6 +486,7 @@ model Property {
   photos          PropertyPhoto[]
   viewings        Viewing[]
   deals           Deal[]
+  captions        MarketingCaption[]
 
   @@unique([tenantId, reference])
   @@unique([id, tenantId])
@@ -584,6 +586,10 @@ model PortalEnquiry {
   userAgent        String?             @map("user_agent")
   /// Set once the CRM turns this enquiry into a lead.
   leadId           String?             @map("lead_id") @db.Uuid
+  /// Campaign tags from the link the visitor arrived by (utm_source, utm_medium, utm_campaign).
+  utmSource        String?             @map("utm_source")
+  utmMedium        String?             @map("utm_medium")
+  utmCampaign      String?             @map("utm_campaign")
   createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -853,6 +859,10 @@ model Lead {
   budgetMax            Decimal?       @map("budget_max") @db.Decimal(14, 2)
   nextFollowUpAt       DateTime?      @map("next_follow_up_at") @db.Timestamptz(3)
   lostReason           String?        @map("lost_reason")
+  /// Campaign tags the lead arrived with (from a tagged portal link).
+  utmSource            String?        @map("utm_source")
+  utmMedium            String?        @map("utm_medium")
+  utmCampaign          String?        @map("utm_campaign")
   closedAt             DateTime?      @map("closed_at") @db.Timestamptz(3)
   createdBy            String         @map("created_by") @db.Uuid
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1549,4 +1559,49 @@ model VoiceCall {
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, contactId])
   @@map("voice_call")
+}
+
+enum CaptionPlatform {
+  instagram
+  facebook
+  linkedin
+  whatsapp_status
+
+  @@map("caption_platform")
+}
+
+enum CaptionStatus {
+  draft
+  approved
+  discarded
+
+  @@map("caption_status")
+}
+
+/// An AI-written social caption for a listing. Always starts as a draft; a person reviews,
+/// edits and approves it before using it. Nothing is posted anywhere by the platform.
+model MarketingCaption {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  propertyId   String          @map("property_id") @db.Uuid
+  platform     CaptionPlatform
+  /// en | ar
+  language     String
+  text         String
+  status       CaptionStatus   @default(draft)
+  model        String
+  inputTokens  Int             @map("input_tokens")
+  outputTokens Int             @map("output_tokens")
+  createdBy    String          @map("created_by") @db.Uuid
+  reviewedBy   String?         @map("reviewed_by") @db.Uuid
+  reviewedAt   DateTime?       @map("reviewed_at") @db.Timestamptz(3)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency   Agency   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, createdAt(sort: Desc)])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("marketing_caption")
 }

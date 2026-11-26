@@ -90,6 +90,21 @@ describe('billing', () => {
     const a = await createOwner('owner@a.test', 'Alpha Realty');
 
     await http().get('/v1/platform/billing').set(a.auth).expect(403);
+    await http().get('/v1/platform/billing/usage').set(a.auth).expect(403);
+    const usage = await http().get('/v1/platform/billing/usage').set(root.auth).expect(200);
+    expect(usage.body.agencies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tenantId: a.tenantId,
+          name: 'Alpha Realty',
+          aiReplies: 0,
+          aiTokens: 0,
+          whatsappOutbound: 0,
+          voiceCalls: 0,
+          mrrAed: 0,
+        }),
+      ]),
+    );
     await http()
       .put('/v1/platform/billing/plans/professional')
       .set(a.auth)

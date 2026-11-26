@@ -434,3 +434,31 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Not built: outbound calling (stays off; `outbound_voice_enabled` can only be set by the platform), live transfer and calendar booking from a call (configured in Vapi), voice minutes in billing usage.
 - **To go live:** set `VAPI_WEBHOOK_SECRET` in the API environment, add it in Vapi as a Bearer credential on the server URL `https://app.propforce.io/v1/webhooks/voice/vapi`, and add the Vapi phone number id under Settings → AI voice. The assistant itself (AI disclosure, recording consent prompt) is configured in Vapi.
 - Tested: 3 parser unit tests and 2 API e2e tests (roles, cross-agency isolation, bad credentials, duplicates, unknown and switched-off lines, transcript policy, contact creation without consent, erasure). Not yet tested against a live Vapi call. The UI is type-checked and linted but not browser-tested.
+
+## Phase 4 · Marketing studio (2026-11-26)
+
+- Migration `20261126080000_marketing`: `marketing_caption` (AI caption drafts with status draft/approved/discarded, model and token counts; never deleted, so token spend stays counted) and `utm_source`/`utm_medium`/`utm_campaign` on `portal_enquiry` and `lead`.
+- **Brochure:** Listing → "Brochure" opens a branded one-page brochure (agency logo and colour, cover and four photos with the watermark, facts, description, agent name/BRN, ORN, valid permit numbers). "Print or save as PDF" uses the browser's print dialog; the app's menus are hidden when printing. It warns when the listing is not live or has no valid permit.
+- **AI captions:** `POST /v1/marketing/captions` writes an Instagram, Facebook, LinkedIn or WhatsApp-status caption in English or Arabic from the listing's own data. The agency's title and description reach the model only inside an untrusted block. Every price, bedroom count and size in the result must match the listing, and promises of returns or visas are refused (422, stored as discarded). The permit number and ORN are appended by the server, not the model. Captions are drafts until approved; editing an approved caption returns it to draft; the web only allows copying approved captions. PropForce never posts anywhere. Caption tokens share the agency's monthly AI allowance with WhatsApp replies.
+- **Campaign links and attribution:** the Marketing page builds portal links with UTM tags. The portal keeps the tags for the browser session (and through the canonical-URL redirect), sends them with the enquiry, and the lead keeps them (shown on the lead). `GET /v1/marketing/attribution?days=` (owner/admin/manager) reports leads by campaign and by source, with how many reached qualified or later and how many were won.
+- Landing pages: each listing's portal page is its landing page, with the consent form built in; no separate landing-page builder.
+- Tested: 4 caption-check unit tests and 3 API e2e tests (grounding refusal, untrusted wrapping, review flow, cross-agency isolation, brochure data, UTM from portal enquiry to lead and report, agent refused the report). The AI caption quality with the real model, the printed brochure layout and the UI are not yet checked in a browser.
+
+## Phase 4 · Revenue reports (2026-11-26)
+
+- No migration.
+- **Agency** (owner, admin, manager): "Revenue" page, `GET /v1/deals/revenue?months=` covering the last 1–24 Dubai calendar months. It reports:
+  - Commission earned, from deals completed in the month.
+  - Commission invoiced and received, by the month each was recorded.
+  - What completed deals still owe (not invoiced, or invoiced and unpaid).
+  - The open pipeline's expected commission.
+  - Each team member's split, plus the agency's and co-brokers' shares.
+  - All amounts are AED before VAT, computed with the same commission rules as the deal page.
+- **Platform** (`/app/admin/billing`, `GET /v1/platform/billing/usage`): for each agency this month, it shows:
+  - Revenue (an active subscription's plan price).
+  - AI replies and tokens (replies plus captions).
+  - Outbound WhatsApp messages.
+  - Voice calls, with minutes and the USD cost Vapi reported.
+  - Only counts are read. Each agency is read in its own tenant transaction, because AI runs and messages have no platform-wide read policy.
+- Not built: MRR history and churn over time. There is no subscription history table yet; it comes with the payment provider's webhooks.
+- Tested: the revenue report is checked in the deals e2e test (month series, totals, splits, outstanding, pipeline, agent refused), and platform usage in the billing e2e test (admin only, per-agency row). The UI is type-checked and linted but not browser-tested.

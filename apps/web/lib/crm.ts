@@ -83,6 +83,10 @@ export interface LeadActivity {
 export interface LeadDetail extends LeadSummary {
   lostReason: string | null;
   closedAt: string | null;
+  /** Campaign tags from a tagged portal link, when the lead came from one. */
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
   activities: LeadActivity[];
 }
 
