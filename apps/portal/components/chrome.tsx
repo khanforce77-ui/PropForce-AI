@@ -200,6 +200,7 @@ export function SiteFooter({
             title="PropForce"
             links={[
               ['For agencies', '/for-agencies'],
+              ['For developers', '/developers'],
               ['Privacy', '/privacy'],
               ['Terms', '/terms'],
             ]}
