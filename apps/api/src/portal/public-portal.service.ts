@@ -528,6 +528,9 @@ export class PublicPortalService {
             consentAt: now,
             ipHash,
             userAgent: visitor.userAgent?.slice(0, 300) ?? null,
+            utmSource: input.utm?.source ?? null,
+            utmMedium: input.utm?.medium ?? null,
+            utmCampaign: input.utm?.campaign ?? null,
           },
         ],
       });

@@ -324,6 +324,9 @@ export class CrmService {
           ...leadListSelect,
           lostReason: true,
           closedAt: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
           activities: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 200 },
         },
       });

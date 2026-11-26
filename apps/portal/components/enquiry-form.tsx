@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { readUtm, type Utm } from '@/lib/utm';
 import { captchaEnabled, Turnstile } from './turnstile';
 
 type FieldErrors = Record<string, string>;
@@ -23,9 +24,11 @@ export function EnquiryForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = useState(0);
+  const utm = useRef<Utm | undefined>(undefined);
 
   useEffect(() => {
     started.current = Date.now();
+    utm.current = readUtm();
   }, []);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -52,6 +55,7 @@ export function EnquiryForm({
           website: form.get('website') || '',
           elapsedMs: started.current ? Date.now() - started.current : undefined,
           ...(captcha ? { captchaToken: captcha } : {}),
+          ...(utm.current ? { utm: utm.current } : {}),
         }),
       });
       if (res.ok) {
