@@ -101,6 +101,7 @@ describe('platform admin: agencies created by hand', () => {
       role: 'owner',
       emailed: true,
     });
+    expect(created.body.invitation.inviteUrl).toMatch(/\/accept-invite\?token=[A-Za-z0-9_-]+$/);
 
     const agency = await t.owner.agency.findUniqueOrThrow({ where: { id: agencyId } });
     expect(agency).toMatchObject({
@@ -145,6 +146,72 @@ describe('platform admin: agencies created by hand', () => {
         'platform.agency_created',
         'platform.agency_invitation_sent',
         'platform.agency_details_changed',
+      ]),
+    );
+  });
+});
+
+describe('platform admin: deleting agencies', () => {
+  it('deletes an empty agency for good, archives one with data and can restore it', async () => {
+    const boss = await admin();
+    const me = await http().get('/v1/me').set(boss).expect(200);
+    const bossId = me.body.user.id as string;
+    const create = async (name: string) =>
+      (
+        await http()
+          .post('/v1/platform/agencies')
+          .set(boss)
+          .send({ name, emirate: 'Dubai', ownerEmail: `owner@${name.split(' ')[0]}.test` })
+          .expect(201)
+      ).body.agencyId as string;
+    const empty = await create('Empty Test');
+    const busy = await create('Busy Realty');
+    await t.owner.contact.create({
+      data: { tenantId: busy, fullName: 'Fatima Buyer', email: 'f@buyer.test', createdBy: bossId },
+    });
+
+    const list = async () =>
+      (await http().get('/v1/platform/agencies').set(boss).expect(200)).body.data as {
+        id: string;
+        status: string;
+        deleteMode: string;
+      }[];
+    expect((await list()).find((a) => a.id === empty)?.status).toBe('active');
+
+    // Not for agency users.
+    const other = await register('agent@x.test', 'Xray Realty');
+    await http().delete(`/v1/platform/agencies/${empty}`).set(other.auth).expect(403);
+
+    const preview = await http()
+      .get(`/v1/platform/agencies/${busy}/delete-preview`)
+      .set(boss)
+      .expect(200);
+    expect(preview.body).toMatchObject({ mode: 'archive', contacts: 1, listings: 0 });
+
+    const del = await http().delete(`/v1/platform/agencies/${empty}`).set(boss).expect(200);
+    expect(del.body).toEqual({ result: 'deleted', name: 'Empty Test' });
+    expect(await t.owner.agency.findUnique({ where: { id: empty } })).toBeNull();
+    expect(await t.owner.invitation.count({ where: { tenantId: empty } })).toBe(0);
+
+    const arch = await http().delete(`/v1/platform/agencies/${busy}`).set(boss).expect(200);
+    expect(arch.body.result).toBe('archived');
+    const archived = await t.owner.agency.findUniqueOrThrow({ where: { id: busy } });
+    expect(archived.status).toBe('cancelled');
+    expect(await t.owner.contact.count({ where: { tenantId: busy } })).toBe(1);
+    expect(await t.owner.invitation.count({ where: { tenantId: busy, revokedAt: null } })).toBe(0);
+    await http().delete(`/v1/platform/agencies/${busy}`).set(boss).expect(409);
+
+    await http().post(`/v1/platform/agencies/${busy}/restore`).set(boss).expect(200);
+    expect((await t.owner.agency.findUniqueOrThrow({ where: { id: busy } })).status).not.toBe(
+      'cancelled',
+    );
+
+    const audit = await t.owner.platformAuditLog.findMany({ select: { action: true } });
+    expect(audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining([
+        'platform.agency_deleted',
+        'platform.agency_archived',
+        'platform.agency_restored',
       ]),
     );
   });
