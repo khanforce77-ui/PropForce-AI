@@ -85,12 +85,12 @@ export const PORTAL_DEFAULTS: PortalContent = {
   hero: {
     title: 'Find your next home in Dubai',
     subtitle:
-      'Apartments, villas and new projects to buy or rent. Every listing has a valid permit, and you talk to the agent directly on WhatsApp or phone.',
+      'Every listing carries a valid advertising permit. Talk to the agent directly on WhatsApp or phone.',
   },
   announcement: { enabled: false, text: '' },
   sections: { popularCommunities: true, latestListings: true },
   about:
-    "Search homes to buy or rent in Dubai. Every listing shows its advertising permit and the agent's licence, and you can call or WhatsApp the agent directly. Free for buyers and tenants.",
+    'Homes for sale and rent in Dubai from licensed agencies. Every listing shows a valid advertising permit, and verified agents carry a badge.',
   contact: {},
   social: {},
   seo: {},

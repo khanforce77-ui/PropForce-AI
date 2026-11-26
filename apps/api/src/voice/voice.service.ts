@@ -89,12 +89,20 @@ export class VoiceService {
     }
   }
 
-  listCalls(ctx: TenantRequestContext, q: { contactId?: string | undefined; limit: number }) {
+  listCalls(
+    ctx: TenantRequestContext,
+    q: {
+      contactId?: string | undefined;
+      direction?: 'inbound' | 'outbound' | undefined;
+      limit: number;
+    },
+  ) {
     return withTenant(this.prisma, ctx, async (tx) => {
       const all = hasPermission(ctx.role, 'crm:manage');
       const rows = await tx.voiceCall.findMany({
         where: {
           ...(q.contactId ? { contactId: q.contactId } : {}),
+          ...(q.direction ? { direction: q.direction } : {}),
           // Agents see calls from contacts they own.
           ...(all ? {} : { contact: { ownerMembershipId: ownMembershipId(ctx) } }),
         },
@@ -109,8 +117,13 @@ export class VoiceService {
           endedReason: true,
           summary: true,
           costUsd: true,
+          status: true,
+          outcome: true,
+          error: true,
+          createdAt: true,
           contact: { select: { id: true, fullName: true } },
           line: { select: { label: true, phoneE164: true } },
+          script: { select: { id: true, name: true } },
         },
       });
       return {
@@ -127,6 +140,7 @@ export class VoiceService {
         include: {
           contact: { select: { id: true, fullName: true } },
           line: { select: { label: true, phoneE164: true, transcriptPolicy: true } },
+          script: { select: { id: true, name: true, questions: true } },
         },
       });
       if (!call) throw new AppError(404, 'NOT_FOUND', 'Call not found.');
@@ -140,7 +154,19 @@ export class VoiceService {
     }));
   }
 
+  /** Numbers are assigned by PropForce: only platform admins add them to an agency. */
   async createLine(ctx: TenantRequestContext, body: LineCreateBody) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { isPlatformAdmin: true },
+    });
+    if (!user?.isPlatformAdmin) {
+      throw new AppError(
+        403,
+        'PERMISSION_DENIED',
+        'Calling numbers are set up by PropForce. Contact support to add one.',
+      );
+    }
     try {
       return await withTenant(this.prisma, ctx, async (tx) => {
         const line = await tx.voiceLine.create({

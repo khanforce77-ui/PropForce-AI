@@ -24,5 +24,57 @@ export type LineUpdateBody = z.infer<typeof lineUpdateSchema>;
 
 export const listCallsSchema = z.strictObject({
   contactId: z.uuid().optional(),
+  direction: z.enum(['inbound', 'outbound']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+/** The first thing the AI says must tell the person they are speaking with an AI. */
+const DISCLOSES_AI =
+  /\b(AI|A\.I\.|artificial intelligence|virtual assistant|digital assistant)\b|ذكاء اصطناعي|مساعد (افتراضي|ذكي)/i;
+
+const scriptFields = {
+  name: z.string().trim().min(1).max(80),
+  purpose: z.enum(['service', 'marketing']),
+  language: z.enum(['en', 'ar']),
+  firstMessage: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .refine((s) => DISCLOSES_AI.test(s), {
+      message: 'The first message must say the caller is an AI assistant (UAE disclosure rule).',
+    }),
+  instructions: z.string().trim().min(1).max(8000),
+  questions: z.array(z.string().trim().min(1).max(200)).max(10),
+  transcriptPolicy: z.enum(['summary_only', 'full_transcript']),
+  active: z.boolean(),
+};
+
+export const scriptCreateSchema = z.strictObject({
+  ...scriptFields,
+  purpose: scriptFields.purpose.default('service'),
+  language: scriptFields.language.default('en'),
+  questions: scriptFields.questions.default([]),
+  transcriptPolicy: scriptFields.transcriptPolicy.default('summary_only'),
+  active: scriptFields.active.default(true),
+});
+export type ScriptCreateBody = z.infer<typeof scriptCreateSchema>;
+
+export const scriptUpdateSchema = z.strictObject({
+  name: scriptFields.name.optional(),
+  purpose: scriptFields.purpose.optional(),
+  language: scriptFields.language.optional(),
+  firstMessage: scriptFields.firstMessage.optional(),
+  instructions: scriptFields.instructions.optional(),
+  questions: scriptFields.questions.optional(),
+  transcriptPolicy: scriptFields.transcriptPolicy.optional(),
+  active: scriptFields.active.optional(),
+});
+export type ScriptUpdateBody = z.infer<typeof scriptUpdateSchema>;
+
+export const placeCallSchema = z.strictObject({
+  contactId: z.uuid(),
+  scriptId: z.uuid(),
+  leadId: z.uuid().optional(),
+});
+export type PlaceCallBody = z.infer<typeof placeCallSchema>;

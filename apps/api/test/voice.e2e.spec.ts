@@ -50,22 +50,30 @@ describe('voice calls', () => {
     const b = await createOwner('owner@b.test', 'Bravo Homes');
     const agent = await inviteNew(a, 'agent@a.test', 'agent');
 
-    // Only owners/admins manage lines.
+    // Numbers are assigned by PropForce: agency owners and agents cannot add them.
     await http()
       .post('/v1/voice/lines')
       .set(agent.h)
       .send({ providerPhoneNumberId: 'pn_a' })
       .expect(403);
-    const line = await http()
+    await http()
       .post('/v1/voice/lines')
       .set(a.h)
+      .send({ providerPhoneNumberId: 'pn_a' })
+      .expect(403);
+    const root = await createOwner('root@platform.test', 'Platform HQ');
+    await t.owner.user.update({ where: { id: root.userId }, data: { isPlatformAdmin: true } });
+    const asRoot = (tenantId: string) => ({ ...root.auth, 'X-Tenant-Id': tenantId });
+    const line = await http()
+      .post('/v1/voice/lines')
+      .set(asRoot(a.tenantId))
       .send({ providerPhoneNumberId: 'pn_a', phoneE164: '+97142000000', label: 'Main' })
       .expect(201);
     expect(line.body.transcriptPolicy).toBe('summary_only');
     // A number belongs to one agency.
     await http()
       .post('/v1/voice/lines')
-      .set(b.h)
+      .set(asRoot(b.tenantId))
       .send({ providerPhoneNumberId: 'pn_a' })
       .expect(409);
 
