@@ -12,6 +12,7 @@ import { TenancyModule } from './tenancy/tenancy.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CrmModule } from './crm/crm.module';
 import { PlatformModule } from './platform/platform.module';
+import { VoiceModule } from './voice/voice.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { PortalModule } from './portal/portal.module';
 import { MediaModule } from './media/media.module';
@@ -67,6 +68,7 @@ export class AppModule {
         DealsModule,
         CalculatorModule,
         BillingModule,
+        VoiceModule,
         PlatformModule,
         WhatsAppModule,
         PortalModule,

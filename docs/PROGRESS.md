@@ -422,3 +422,15 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: "Plan & billing" page for owners and admins (usage bars, plan cards, limits form); `/app/admin/billing` for the platform admin.
 - **Pending:** the payment provider (PRD Q2: Stripe, Checkout.com, Telr or PayTabs). Until it is chosen and its keys are in the environment, checkout answers "not set up yet", there are no invoices, webhooks or dunning, and the platform admin sets subscriptions by hand. Plan prices need to be set by the platform admin. Trial expiry is shown but not enforced.
 - Tested: 2 billing e2e tests (usage, roles, caps, checkout refusals, plan pricing, RLS on the catalogue, manual subscription applying limits, MRR) and 1 AI-replies test for the blocking cap. The UI is type-checked and linted but not browser-tested.
+
+## Phase 4 · AI voice calls, inbound via Vapi (2026-11-26)
+
+- Migration `20261126070000_voice`: `voice_line` (agency's Vapi phone number id, optional number and label, transcript policy, on/off) and `voice_call` (one per finished call: caller, contact, times, duration, cost in USD, ended reason, AI summary, transcript only under the "full transcript" policy). Lines can be switched off but not deleted, so call history stays; the app can add calls but never edit them; erasing a contact erases its calls. Webhooks find a line's agency through a narrow RLS policy (same pattern as WhatsApp).
+- Webhook `POST /v1/webhooks/voice/vapi`, authenticated by `VAPI_WEBHOOK_SECRET` (Vapi credential as `Authorization: Bearer …` or legacy `X-Vapi-Secret`). It stores `end-of-call-report` messages idempotently by call id and acknowledges every other message type. Answers 503 while the secret is not set. Payload fields follow Vapi's documented server events.
+- New callers become contacts with source `phone` and **no consent recorded** (a call is not marketing consent).
+- API: `GET /v1/calls` and `/v1/calls/:id` (managers and above see all; agents see calls from their own contacts), `GET/POST/PATCH /v1/voice/lines` (owner/admin).
+- Web: "Calls" page (list, summary, transcript when kept) and Settings → "AI voice" (add lines, transcript policy, switch off).
+- Never stored: recordings or recording links.
+- Not built: outbound calling (stays off; `outbound_voice_enabled` can only be set by the platform), live transfer and calendar booking from a call (configured in Vapi), voice minutes in billing usage.
+- **To go live:** set `VAPI_WEBHOOK_SECRET` in the API environment, add it in Vapi as a Bearer credential on the server URL `https://app.propforce.io/v1/webhooks/voice/vapi`, and add the Vapi phone number id under Settings → AI voice. The assistant itself (AI disclosure, recording consent prompt) is configured in Vapi.
+- Tested: 3 parser unit tests and 2 API e2e tests (roles, cross-agency isolation, bad credentials, duplicates, unknown and switched-off lines, transcript policy, contact creation without consent, erasure). Not yet tested against a live Vapi call. The UI is type-checked and linted but not browser-tested.
