@@ -1287,6 +1287,7 @@ model DealTask {
 
   @@index([tenantId, dealId, position])
   @@map("deal_task")
+}
 
 // ───────────────────────── Website content (platform-managed) ─────────────────────────
 
