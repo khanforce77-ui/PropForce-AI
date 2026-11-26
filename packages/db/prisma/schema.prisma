@@ -211,6 +211,7 @@ model Agency {
   logo               AgencyLogo?
   brokerChecks       BrokerVerification[]
   voiceLines         VoiceLine[]
+  voiceScripts       VoiceScript[]
   marketingCaptions  MarketingCaption[]
 
   @@map("agency")
@@ -875,6 +876,7 @@ model Lead {
   activities LeadActivity[]
   viewings   Viewing[]
   deals      Deal[]
+  voiceCalls VoiceCall[]
 
   @@unique([id, tenantId])
   @@index([tenantId, stage])
@@ -1531,33 +1533,98 @@ enum VoiceDirection {
   outbound
 }
 
-/// One finished call, from the provider's end-of-call report. Recordings are never stored here.
+enum VoiceCallStatus {
+  queued
+  ringing
+  in_progress
+  ended
+  failed
+}
+
+enum VoiceCallOutcome {
+  interested
+  not_interested
+  callback_requested
+  viewing_requested
+  wrong_number
+  do_not_call
+  no_answer
+  voicemail
+  other
+}
+
+/// An agency-written AI call script: what the AI says and asks on outbound calls.
+model VoiceScript {
+  id               String                @id @default(uuid(7)) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  name             String
+  /// Consent purpose the call needs: service (follow-up on an enquiry) or marketing.
+  purpose          ConsentPurpose        @default(service)
+  /// en | ar
+  language         String                @default("en")
+  firstMessage     String                @map("first_message")
+  instructions     String
+  questions        String[]              @default([])
+  /// Whether full transcripts of calls with this script are kept.
+  transcriptPolicy VoiceTranscriptPolicy @default(summary_only) @map("transcript_policy")
+  active           Boolean               @default(true)
+  createdBy        String                @map("created_by") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls  VoiceCall[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@map("voice_script")
+}
+
+/// One call: inbound from the provider's end-of-call report, or outbound placed from PropForce.
+/// Recordings are never stored here.
 model VoiceCall {
-  id             String         @id @default(uuid(7)) @db.Uuid
-  tenantId       String         @map("tenant_id") @db.Uuid
-  lineId         String         @map("line_id") @db.Uuid
-  providerCallId String         @map("provider_call_id")
-  direction      VoiceDirection @default(inbound)
-  callerE164     String?        @map("caller_e164")
-  contactId      String?        @map("contact_id") @db.Uuid
-  startedAt      DateTime?      @map("started_at") @db.Timestamptz(3)
-  endedAt        DateTime?      @map("ended_at") @db.Timestamptz(3)
-  durationSec    Int?           @map("duration_sec")
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  /// Null for outbound calls on the platform's shared number.
+  lineId         String?           @map("line_id") @db.Uuid
+  providerCallId String            @map("provider_call_id")
+  direction      VoiceDirection    @default(inbound)
+  callerE164     String?           @map("caller_e164")
+  contactId      String?           @map("contact_id") @db.Uuid
+  scriptId       String?           @map("script_id") @db.Uuid
+  leadId         String?           @map("lead_id") @db.Uuid
+  /// Membership that placed an outbound call (null for platform admins).
+  requestedBy    String?           @map("requested_by") @db.Uuid
+  status         VoiceCallStatus   @default(ended)
+  outcome        VoiceCallOutcome?
+  /// Answers to the script's questions, keyed q1..q10.
+  answers        Json?
+  callbackAt     String?           @map("callback_at")
+  error          String?
+  /// Outbound: whether the transcript may be kept (copied from the line policy at dial time).
+  keepTranscript Boolean           @default(false) @map("keep_transcript")
+  startedAt      DateTime?         @map("started_at") @db.Timestamptz(3)
+  endedAt        DateTime?         @map("ended_at") @db.Timestamptz(3)
+  durationSec    Int?              @map("duration_sec")
   /// Provider cost in USD.
-  costUsd        Decimal?       @map("cost_usd") @db.Decimal(10, 4)
-  endedReason    String?        @map("ended_reason")
+  costUsd        Decimal?          @map("cost_usd") @db.Decimal(10, 4)
+  endedReason    String?           @map("ended_reason")
   summary        String?
   /// Only kept when the line's policy is full_transcript.
   transcript     String?
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  agency  Agency    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  line    VoiceLine @relation(fields: [lineId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  contact Contact?  @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  agency  Agency       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  line    VoiceLine?   @relation(fields: [lineId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  contact Contact?     @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  script  VoiceScript? @relation(fields: [scriptId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  /// The database clears only lead_id when a lead is deleted (ON DELETE SET NULL ("lead_id")).
+  lead    Lead?        @relation(fields: [leadId, tenantId], references: [id, tenantId], onDelete: NoAction)
 
   @@unique([tenantId, providerCallId])
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, contactId])
+  @@index([tenantId, scriptId])
   @@map("voice_call")
 }
 

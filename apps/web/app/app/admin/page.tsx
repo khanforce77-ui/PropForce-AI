@@ -406,7 +406,7 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         label: 'AI voice calls',
         icon: Phone,
         status: 'setup',
-        note: 'Inbound via Vapi; needs VAPI_WEBHOOK_SECRET and the Vapi server URL. Outbound off',
+        note: 'Inbound log + outbound AI Calling with agency scripts via Vapi; needs VAPI_API_KEY, VAPI_WEBHOOK_SECRET, VAPI_DEFAULT_PHONE_NUMBER_ID and the voice.outbound_calls flag',
       },
       {
         label: 'Marketing studio',

@@ -462,3 +462,18 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
   - Only counts are read. Each agency is read in its own tenant transaction, because AI runs and messages have no platform-wide read policy.
 - Not built: MRR history and churn over time. There is no subscription history table yet; it comes with the payment provider's webhooks.
 - Tested: the revenue report is checked in the deals e2e test (month series, totals, splits, outstanding, pipeline, agent refused), and platform usage in the billing e2e test (admin only, per-agency row). The UI is type-checked and linted but not browser-tested.
+
+## Phase 4 · AI Calling with agency scripts (2026-11-26)
+
+- Migration `20261126110000_ai_calling`: table `voice_script` (RLS, no deletes) and outbound columns on `voice_call`: `script_id`, `lead_id`, `requested_by`, `status`, `outcome`, `answers`, `callback_at`, `error`, `keep_transcript`. `line_id` is now nullable for outbound calls on the platform's shared number. The app role may update only the provider-reported columns.
+- White-labelled: agencies see "AI Calling", "Call log" and "Calling numbers"; the provider name is never shown to them. Only platform admins add calling numbers to an agency.
+- **Scripts** (`/v1/ai-calling/scripts`, write needs `crm:manage`): name, purpose (service or marketing consent), language (en/ar), first message (must say it is an AI), instructions, up to 10 questions, transcript policy. Placeholders `{{contact_name}}`, `{{agent_name}}`, `{{agency_name}}`. PropForce's calling rules are always appended after the agency's text.
+- **Placing a call** (`POST /v1/ai-calling/calls`, `crm:write`, agents only for their own contacts). Refused unless all of these hold:
+  - The platform flag `voice.outbound_calls` is on.
+  - `VAPI_API_KEY` and `VAPI_WEBHOOK_SECRET` are set, and the agency has a number or `VAPI_DEFAULT_PHONE_NUMBER_ID` is set.
+  - `mayContact(contact, 'phone_call', script.purpose)` passes.
+  - The time is inside `VOICE_CALLING_HOURS`, default 9 to 18 Dubai time.
+  - The contact has had fewer than 1 AI call in the last day and fewer than 2 in the last week.
+- **Results**: the webhook `POST /v1/webhooks/voice/vapi` matches our calls by `metadata.propforceCallId` + `tenantId`. It stores status, summary, outcome, answers, callback time, cost and duration, and the transcript only if the script keeps it. Recording is turned off. If the outcome is `do_not_call`, phone consent is withdrawn for both purposes. A lead note is added when the call was about a lead.
+- Adapter `VoiceDialer` (apps/api/src/voice/voice-dialer.ts). It uses `VAPI_ASSISTANT_ID` with overrides when that is set, otherwise a fresh assistant. **Not yet run against the live provider**: it needs the key in Vercel.
+- Tested: e2e `ai-calling.e2e.spec.ts` covers scripts, consent, the flag, limits, ownership, webhook progress and results, opt-out, provider failure and hours. There are unit tests for the request builder and the parser. The UI is type-checked, linted and built, but not browser-tested.
