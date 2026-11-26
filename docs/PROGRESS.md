@@ -412,3 +412,13 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - `POST /v1/calculator/affordability`: 50% debt burden ratio and loan-to-value bands (expat/national, above/below AED 5M) give the max instalment, loan and price.
 - Calculator page has ROI and "How much can my client borrow?" sections. Results are labelled estimates; unverified fee rules are flagged.
 - Tested: 9 unit tests (roi.spec.ts) and 2 e2e tests. The UI is type-checked and linted but not browser-tested.
+
+## Phase 3 · Billing and plans (2026-11-26)
+
+- Migration `20261126040000_billing`: `billing_plan` (platform catalogue: Trial, Starter, Professional, Agency, Enterprise with the draft limits from the feature matrix; **prices not set**), `subscription` (one per agency: plan, status trialing/active/past_due/cancelled, trial end, paid-until, provider ids), `spending_cap` (per agency and meter). Plans are readable by everyone and writable only by a platform admin (RLS); subscriptions and caps are tenant-isolated.
+- New permissions: `billing:read` (owner, admin) and `billing:manage` (owner only).
+- Agency API `/v1/billing`: plan, status, trial end, usage this month in Dubai time (team members incl. invitations, listings, WhatsApp numbers, AI replies, WhatsApp messages sent), caps. `PUT /v1/billing/spending-caps` sets monthly limits; a **blocking** AI-replies cap stops AI replies once reached and hands the chat to a person. `POST /v1/billing/checkout` goes through a payment provider adapter.
+- Platform API `/v1/platform/billing`: MRR (active subscriptions × plan price, before VAT), counts by status, plan editing, and setting an agency's subscription by hand, which also copies the plan's seat and listing limits onto the agency (where they are already enforced). Audited in the agency log and the platform log.
+- Web: "Plan & billing" page for owners and admins (usage bars, plan cards, limits form); `/app/admin/billing` for the platform admin.
+- **Pending:** the payment provider (PRD Q2: Stripe, Checkout.com, Telr or PayTabs). Until it is chosen and its keys are in the environment, checkout answers "not set up yet", there are no invoices, webhooks or dunning, and the platform admin sets subscriptions by hand. Plan prices need to be set by the platform admin. Trial expiry is shown but not enforced.
+- Tested: 2 billing e2e tests (usage, roles, caps, checkout refusals, plan pricing, RLS on the catalogue, manual subscription applying limits, MRR) and 1 AI-replies test for the blocking cap. The UI is type-checked and linted but not browser-tested.

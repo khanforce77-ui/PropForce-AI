@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { AiOrchestrator, TurnOutcome } from '@propforce/ai';
 import { withTenant, type PrismaClient } from '@propforce/db';
 import { checkOutboundSend, MAX_TEXT_LENGTH, type WhatsAppClient } from '@propforce/whatsapp';
+import { BillingService } from '../billing/billing.service';
 import { mayContact } from '../crm/consent';
 import { PRISMA } from '../database/database.module';
 import { EncryptionService } from '../security/encryption.service';
@@ -97,6 +98,11 @@ export class AiReplyService {
       if (!conv || conv.mode !== 'ai' || conv.account.status !== 'active') return null;
       if (conv.account.tokenExpiresAt && conv.account.tokenExpiresAt <= now) return null;
       if (conv.agency.status !== 'active') return null;
+      // The owner's monthly AI-replies cap is reached: a person takes over.
+      if (await BillingService.aiRepliesBlocked(tx, tenantId, now)) {
+        await tx.conversation.update({ where: { id: conversationId }, data: { mode: 'human' } });
+        return null;
+      }
       if (!(await mayContact(tx, conv.contactId, 'whatsapp', 'service'))) return null;
       const decision = checkOutboundSend({
         kind: 'text',
