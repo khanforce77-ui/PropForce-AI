@@ -405,3 +405,10 @@ Updated with every PR. "Tested" means covered by an automated test that passes i
 - Web: **Deals** board (Sales / Rentals, columns per stage, pipeline value and expected commission), new-deal form (also from a lead's "Create deal"), deal page with stage progress, commission breakdown, split editor, invoice status, checklist and history.
 - Tested: 2 API e2e tests (full sale with splits and payouts, permissions, checklist, completion side effects, summary; rental stages, fell-through reason, listing untouched, wrong listing type, cross-agency isolation).
 - Not done: document templates / e-signature (Phase 4, licensed provider), deadline reminders by email/WhatsApp. PropForce records commissions; it does not issue tax invoices or move money.
+
+## 2026-11-25 · ROI and affordability calculator (Phase 3)
+
+- `POST /v1/calculator/roi`: gross/net yield, cash-on-cash, first-year cash flow, N-year projection (value, rent, loan balance, equity, total return, payback year). Buying costs come from the agency's fee rules (buyer's non-refundable items only), so ROI and the cost estimate agree. Optional `propertyId` reads area and service charge from the listing.
+- `POST /v1/calculator/affordability`: 50% debt burden ratio and loan-to-value bands (expat/national, above/below AED 5M) give the max instalment, loan and price.
+- Calculator page has ROI and "How much can my client borrow?" sections. Results are labelled estimates; unverified fee rules are flagged.
+- Tested: 9 unit tests (roi.spec.ts) and 2 e2e tests. The UI is type-checked and linted but not browser-tested.

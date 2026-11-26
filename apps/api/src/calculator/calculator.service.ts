@@ -5,7 +5,13 @@ import { PRISMA } from '../database/database.module';
 import { audit } from '../tenancy/tenancy.service';
 import type { TenantRequestContext } from '../tenancy/tenant.guard';
 import { estimate, type FeeRuleInput } from './calculator';
-import type { EstimateBody, RuleOverrideInput } from './calculator.schemas';
+import type {
+  AffordabilityBody,
+  EstimateBody,
+  RoiBody,
+  RuleOverrideInput,
+} from './calculator.schemas';
+import { affordability, roi } from './roi';
 
 @Injectable()
 export class CalculatorService {
@@ -28,6 +34,54 @@ export class CalculatorService {
       const rules = await this.effectiveRules(tx, ctx, body.emirate);
       return { emirate: body.emirate, ...estimate(body, rules) };
     });
+  }
+
+  /**
+   * Buy-to-let return. Buying costs come from the agency's fee rules (cash or mortgage purchase),
+   * so they match the cost estimate; area and service charge default to the linked listing's.
+   */
+  roi(ctx: TenantRequestContext, body: RoiBody) {
+    return this.run(ctx, async (tx) => {
+      let { areaSqft, serviceChargePerSqft } = body;
+      if (body.propertyId) {
+        const p = await tx.property.findFirst({
+          where: { id: body.propertyId, deletedAt: null },
+          select: { areaSqft: true, serviceChargePerSqft: true },
+        });
+        if (!p) throw new AppError(404, 'NOT_FOUND', 'Listing not found.');
+        areaSqft ??= p.areaSqft != null ? Number(p.areaSqft) : undefined;
+        serviceChargePerSqft ??=
+          p.serviceChargePerSqft != null ? Number(p.serviceChargePerSqft) : undefined;
+      }
+      const rules = await this.effectiveRules(tx, ctx, body.emirate);
+      const costs = estimate(
+        {
+          calculator: body.mortgage ? 'mortgage' : 'ready_sale',
+          price: body.price,
+          downPaymentPct: body.mortgage?.downPaymentPct,
+          interestRatePct: body.mortgage?.interestRatePct,
+          years: body.mortgage?.years,
+          national: body.mortgage?.national,
+        },
+        rules,
+      );
+      // Only the buyer's non-refundable costs count towards the investment.
+      const buyingCosts = costs.items
+        .filter((x) => !x.refundable && x.payer !== 'seller' && x.payer !== 'landlord')
+        .reduce((a, x) => a + x.total, 0);
+      return {
+        emirate: body.emirate,
+        ...roi({ ...body, areaSqft, serviceChargePerSqft, buyingCosts }),
+        buyingCostItems: costs.items
+          .filter((x) => !x.refundable && x.payer !== 'seller' && x.payer !== 'landlord')
+          .map((x) => ({ label: x.label, total: x.total, status: x.rule.status })),
+        unverifiedCount: costs.unverifiedCount,
+      };
+    });
+  }
+
+  affordability(body: AffordabilityBody) {
+    return affordability(body);
   }
 
   /** Sets the agency's own value for a fee, optionally confirming it was checked. Audited. */
