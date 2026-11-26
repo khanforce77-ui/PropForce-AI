@@ -8,6 +8,7 @@ import {
 } from '@propforce/db';
 import { AppError } from '../common/app-error';
 import { PRISMA } from '../database/database.module';
+import { assertKycComplete } from '../kyc/kyc-rules';
 import { PRIVILEGED_ROLES } from './permissions';
 import type { TenantRequestContext } from './tenant.guard';
 
@@ -128,6 +129,7 @@ export class TenancyService {
       name?: string | undefined;
       tradeLicenseNo?: string | null | undefined;
       orn?: string | null | undefined;
+      website?: string | null | undefined;
     },
   ) {
     return this.run(ctx, async (tx) => {
@@ -152,10 +154,14 @@ export class TenancyService {
     return this.run(ctx, async (tx) => {
       const agency = await tx.agency.findUniqueOrThrow({ where: { id: ctx.tenantId } });
       if (agency.status !== 'pending' || agency.approvalStatus === 'pending') return agency;
+      // With registration documents required, every required file must be uploaded first, and
+      // PropForce then reviews them: the agency always waits for approval.
+      const kyc = await assertKycComplete(tx, ctx.tenantId);
       const approval = await tx.featureFlag.findUnique({
         where: { key: 'platform.require_agency_approval' },
       });
-      const needsApproval = approval?.enabled === true && agency.approvalStatus !== 'approved';
+      const needsApproval =
+        (kyc || approval?.enabled === true) && agency.approvalStatus !== 'approved';
       const updated = await tx.agency.update({
         where: { id: ctx.tenantId },
         data: needsApproval

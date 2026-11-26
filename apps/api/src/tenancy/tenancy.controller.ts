@@ -34,6 +34,14 @@ const updateAgencySchema = z.strictObject({
   name: z.string().trim().min(2).max(160).optional(),
   tradeLicenseNo: optionalText(64),
   orn: optionalText(32),
+  website: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((v) => (/^https?:\/\//i.test(v) ? v : `https://${v}`))
+    .pipe(z.url({ protocol: /^https?$/, hostname: z.regexes.domain }))
+    .nullable()
+    .optional(),
 });
 const updateSettingsSchema = z.strictObject({
   listingFreshnessDays: z.number().int().min(1).max(365).optional(),

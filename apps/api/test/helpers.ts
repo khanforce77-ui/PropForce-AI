@@ -62,7 +62,7 @@ export async function resetDatabase(owner: PrismaClient): Promise<void> {
   );
   await owner.$executeRawUnsafe(
     `UPDATE "feature_flag" SET enabled = (key = 'platform.allow_signups')
-     WHERE key IN ('platform.allow_signups', 'platform.require_agency_approval', 'platform.require_listing_review', 'voice.outbound_calls')`,
+     WHERE key IN ('platform.allow_signups', 'platform.require_agency_approval', 'platform.require_listing_review', 'platform.require_agency_documents', 'voice.outbound_calls')`,
   );
 }
 

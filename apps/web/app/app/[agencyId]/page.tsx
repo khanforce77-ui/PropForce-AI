@@ -85,7 +85,12 @@ export default function DashboardPage() {
       {m.agency.approvalStatus === 'pending' ? (
         <Alert tone="info">
           Setup is complete and your agency is waiting for PropForce approval. You can add draft
-          listings now; publishing and inviting your team open up once you are approved.
+          listings now; publishing and inviting your team open up once you are approved.{' '}
+          {['owner', 'admin'].includes(m.role) ? (
+            <Link href={`${base}/settings/documents`} className="font-medium underline">
+              See your documents
+            </Link>
+          ) : null}
         </Alert>
       ) : null}
       {m.agency.status === 'pending' &&

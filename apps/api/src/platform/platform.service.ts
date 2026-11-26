@@ -14,6 +14,7 @@ import { slugify } from '../auth/auth.service';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
 import { EmailSender } from '../email/email.sender';
+import { assertKycApproved } from '../kyc/kyc-rules';
 import type { AgencyCreate } from './site-content.schemas';
 import { renderEmail } from '../email/templates';
 
@@ -532,7 +533,11 @@ export class PlatformService {
 
   // ───── agency controls ─────
 
-  approveAgency(adminUserId: string, agencyId: string) {
+  async approveAgency(adminUserId: string, agencyId: string) {
+    // Registration documents (when required) must all be approved before the agency goes live.
+    await withTenant(this.prisma, { tenantId: agencyId, userId: adminUserId }, (tx) =>
+      assertKycApproved(tx, agencyId),
+    );
     return this.changeAgency(adminUserId, agencyId, 'platform.agency_approved', (a) => {
       if (a.approvalStatus !== 'pending')
         throw conflict('This agency is not waiting for approval.');
