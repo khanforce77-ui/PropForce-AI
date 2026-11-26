@@ -111,6 +111,21 @@ export async function findWhatsAppAccountForWebhook(prisma: PrismaClient, phoneN
 }
 
 /**
+ * Looks up the active voice line for a provider phone-number id before the agency is known (voice
+ * webhooks). Only the row for that id is visible. Returns null for unknown or switched-off lines.
+ */
+export async function findVoiceLineForWebhook(prisma: PrismaClient, providerPhoneNumberId: string) {
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(providerPhoneNumberId)) return null;
+  return prisma.$transaction(async (tx) => {
+    await setLocal(tx, 'app.voice_phone_number_id', providerPhoneNumberId);
+    return tx.voiceLine.findFirst({
+      where: { providerPhoneNumberId, active: true },
+      select: { id: true, tenantId: true, transcriptPolicy: true, createdBy: true },
+    });
+  });
+}
+
+/**
  * Runs `fn` as the anonymous public portal: read-only visibility of published listings (active,
  * fresh, permitted, assigned to an active agent of an active agency) across all agencies, and the
  * right to add enquiries and contact clicks for those listings. Nothing else tenant-scoped is

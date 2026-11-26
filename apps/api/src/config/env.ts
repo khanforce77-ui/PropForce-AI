@@ -42,6 +42,8 @@ const envSchema = z.object({
    */
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
+  /** Shared secret Vapi sends with server webhooks (Bearer token or X-Vapi-Secret). */
+  VAPI_WEBHOOK_SECRET: z.string().min(16).optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   /**
    * Optional never-expiring system user token of the business that owns the Meta app. Lets a
@@ -109,6 +111,8 @@ export interface AppConfig {
     systemUserToken?: string;
     graphVersion: string;
   };
+  /** Voice provider (Vapi) webhooks. Without a secret the webhook refuses every call. */
+  voice: { webhookSecret?: string };
   ai: {
     /** `none`: AI replies are off; conversations wait for an agent. */
     provider: 'openai' | 'fake' | 'none';
@@ -206,6 +210,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(e.META_SYSTEM_USER_TOKEN ? { systemUserToken: e.META_SYSTEM_USER_TOKEN } : {}),
       graphVersion: e.META_GRAPH_VERSION,
     },
+    voice: { ...(e.VAPI_WEBHOOK_SECRET ? { webhookSecret: e.VAPI_WEBHOOK_SECRET } : {}) },
     ai: {
       provider: aiProvider,
       ...(e.OPENAI_API_KEY ? { openaiApiKey: e.OPENAI_API_KEY } : {}),

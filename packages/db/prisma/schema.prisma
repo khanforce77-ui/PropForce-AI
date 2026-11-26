@@ -203,11 +203,13 @@ model Agency {
   campaigns          Campaign[]
   campaignRecipients CampaignRecipient[]
   deals              Deal[]
+  voiceCalls         VoiceCall[]
   subscription       Subscription?
   spendingCaps       SpendingCap[]
   dealSplits         DealCommissionSplit[]
   dealTasks          DealTask[]
   logo               AgencyLogo?
+  voiceLines         VoiceLine[]
 
   @@map("agency")
 }
@@ -703,6 +705,7 @@ enum ContactSource {
   referral
   website
   walk_in
+  phone
   other
 }
 
@@ -775,6 +778,7 @@ model Contact {
   conversations      Conversation[]
   campaignRecipients CampaignRecipient[]
   deals              Deal[]
+  voiceCalls         VoiceCall[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -1416,4 +1420,72 @@ model SiteBanner {
 
   @@index([placement, active, sortOrder])
   @@map("site_banner")
+}
+
+// ───── Voice (Phase 4) ─────
+
+enum VoiceTranscriptPolicy {
+  /// Keep only the AI summary and outcome.
+  summary_only
+  /// Also keep the full transcript text.
+  full_transcript
+}
+
+/// A phone number on the voice provider (e.g. a Vapi phone number) that answers for this agency.
+model VoiceLine {
+  id                    String                @id @default(uuid(7)) @db.Uuid
+  tenantId              String                @map("tenant_id") @db.Uuid
+  /// vapi
+  provider              String                @default("vapi")
+  /// The provider's id for the number (globally unique): how webhooks find the agency.
+  providerPhoneNumberId String                @unique @map("provider_phone_number_id")
+  phoneE164             String?               @map("phone_e164")
+  label                 String?
+  transcriptPolicy      VoiceTranscriptPolicy @default(summary_only) @map("transcript_policy")
+  active                Boolean               @default(true)
+  createdBy             String                @map("created_by") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls  VoiceCall[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@map("voice_line")
+}
+
+enum VoiceDirection {
+  inbound
+  outbound
+}
+
+/// One finished call, from the provider's end-of-call report. Recordings are never stored here.
+model VoiceCall {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  tenantId       String         @map("tenant_id") @db.Uuid
+  lineId         String         @map("line_id") @db.Uuid
+  providerCallId String         @map("provider_call_id")
+  direction      VoiceDirection @default(inbound)
+  callerE164     String?        @map("caller_e164")
+  contactId      String?        @map("contact_id") @db.Uuid
+  startedAt      DateTime?      @map("started_at") @db.Timestamptz(3)
+  endedAt        DateTime?      @map("ended_at") @db.Timestamptz(3)
+  durationSec    Int?           @map("duration_sec")
+  /// Provider cost in USD.
+  costUsd        Decimal?       @map("cost_usd") @db.Decimal(10, 4)
+  endedReason    String?        @map("ended_reason")
+  summary        String?
+  /// Only kept when the line's policy is full_transcript.
+  transcript     String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency  Agency    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  line    VoiceLine @relation(fields: [lineId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  contact Contact?  @relation(fields: [contactId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, providerCallId])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, contactId])
+  @@map("voice_call")
 }
