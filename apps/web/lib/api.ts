@@ -118,6 +118,84 @@ export interface Agency {
   status: string;
   tradeLicenseNo: string | null;
   orn: string | null;
+  website?: string | null;
+}
+
+// ───── agency KYC (registration documents) ─────
+
+export type KycDocType =
+  | 'trade_license'
+  | 'moa'
+  | 'ejari'
+  | 'orn_certificate'
+  | 'owner_passport'
+  | 'owner_emirates_id'
+  | 'employee_brn_card'
+  | 'employee_emirates_id'
+  | 'permit'
+  | 'employee_list';
+export type KycDocStatus = 'pending' | 'approved' | 'rejected';
+export interface KycDocument {
+  id: string;
+  type: KycDocType;
+  ownerId: string | null;
+  employeeId: string | null;
+  label: string | null;
+  documentNumber: string | null;
+  expiresAt: string | null;
+  status: KycDocStatus;
+  reason: string | null;
+  contentType: string;
+  fileName: string;
+  uploadedAt: string;
+  reviewedAt: string | null;
+  aiStatus: 'not_checked' | 'checked' | 'failed';
+  aiCheckedAt: string | null;
+}
+export interface KycOwner {
+  id: string;
+  fullName: string;
+  nationality: string | null;
+  sharePercent: number | null;
+  uaeResident: boolean;
+}
+export interface KycEmployee {
+  id: string;
+  fullName: string;
+  designation: string | null;
+  isBroker: boolean;
+  brn: string | null;
+  email: string | null;
+}
+export interface KycItem {
+  key: string;
+  label: string;
+  subject: string;
+  kind: 'field' | 'document' | 'list';
+  type?: KycDocType;
+  ownerId?: string;
+  employeeId?: string;
+  documentId?: string;
+  state: 'missing' | 'pending' | 'approved' | 'rejected' | 'expired';
+}
+export interface KycChecklist {
+  items: KycItem[];
+  complete: boolean;
+  approved: boolean;
+  missing: string[];
+}
+export interface AgencyKyc {
+  required: boolean;
+  status: string;
+  approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
+  agency: { tradeLicenseNo: string | null; orn: string | null; website: string | null };
+  instructions: string | null;
+  instructionsAt: string | null;
+  aiAvailable: boolean;
+  owners: KycOwner[];
+  employees: KycEmployee[];
+  documents: KycDocument[];
+  checklist: KycChecklist;
 }
 
 // ───── inventory ─────

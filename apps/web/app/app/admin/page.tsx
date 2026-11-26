@@ -3,6 +3,7 @@
 import {
   Activity,
   BadgeCheck,
+  FileCheck2,
   BadgeDollarSign,
   Crown,
   Bot,
@@ -33,6 +34,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { DailyBarChart } from '@/components/admin/bar-chart';
+import { AdminAgencyKyc } from '@/components/admin/agency-kyc';
 import { AdminBrokerVerifications } from '@/components/admin/broker-verifications';
 import {
   AgencyDetailsForm,
@@ -259,6 +261,7 @@ const TABS = [
   ['review', 'Listing review'],
   ['reports', 'Listing reports'],
   ['brokers', 'Agent verification'],
+  ['kyc', 'Agency documents'],
   ['users', 'Users'],
   ['website', 'Website'],
   ['settings', 'Settings'],
@@ -272,6 +275,7 @@ const TAB_SUBTITLES: Record<Tab, string> = {
   listings: 'Every listing from every agency.',
   review: 'New agencies’ listings waiting for PropForce’s check before going on the portal.',
   brokers: 'Agents’ broker cards (BRN) waiting for the Verified agent badge.',
+  kyc: 'New agencies’ registration documents, read by AI and approved by you before they go live.',
   reports: 'What visitors reported about public listings.',
   users: 'Find anyone and suspend or reactivate them.',
   website: 'Banners, adverts and text on the public website.',
@@ -286,6 +290,7 @@ const TAB_ICONS: Record<Tab, LucideIcon> = {
   review: ShieldCheck,
   reports: Flag,
   brokers: BadgeCheck,
+  kyc: FileCheck2,
   users: Users,
   website: Globe,
   settings: Settings,
@@ -1171,6 +1176,8 @@ export default function PlatformAdminPage() {
         {tab === 'reports' ? <AdminListingReports /> : null}
 
         {tab === 'brokers' ? <AdminBrokerVerifications /> : null}
+
+        {tab === 'kyc' ? <AdminAgencyKyc /> : null}
 
         {tab === 'users' ? (
           <Card>

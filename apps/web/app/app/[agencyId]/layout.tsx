@@ -6,6 +6,7 @@ import {
   Building2,
   Calculator,
   CreditCard,
+  FileCheck2,
   CalendarDays,
   Contact,
   FileUp,
@@ -100,7 +101,10 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
     { href: `${base}/calculator`, label: 'Cost calculator', icon: Calculator },
     { href: `${base}/settings/members`, label: 'Team members', icon: Users },
     ...(membership.role === 'owner' || membership.role === 'admin'
-      ? [{ href: `${base}/billing`, label: 'Plan & billing', icon: CreditCard }]
+      ? [
+          { href: `${base}/billing`, label: 'Plan & billing', icon: CreditCard },
+          { href: `${base}/settings/documents`, label: 'Company documents', icon: FileCheck2 },
+        ]
       : []),
     ...(membership.role === 'owner' || membership.role === 'admin'
       ? [
