@@ -24,6 +24,8 @@ export interface DialInput {
   /** Returned unchanged in webhooks. Keep values short strings. */
   metadata: Record<string, string>;
   maxDurationSec?: number;
+  /** Book the call with the provider for later; it rings between these times. */
+  schedule?: { earliestAt: Date; latestAt: Date };
 }
 
 /**
@@ -105,6 +107,14 @@ export class VoiceDialer {
         ? { assistantId: v.assistantId, assistantOverrides: settings }
         : { assistant: { name: 'PropForce AI Calling', ...settings } }),
       metadata: input.metadata,
+      ...(input.schedule
+        ? {
+            schedulePlan: {
+              earliestAt: input.schedule.earliestAt.toISOString(),
+              latestAt: input.schedule.latestAt.toISOString(),
+            },
+          }
+        : {}),
     };
   }
 

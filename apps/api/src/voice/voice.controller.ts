@@ -30,6 +30,7 @@ import {
   lineCreateSchema,
   lineUpdateSchema,
   listCallsSchema,
+  bulkCallSchema,
   placeCallSchema,
   scriptCreateSchema,
   scriptUpdateSchema,
@@ -129,6 +130,12 @@ export class VoiceController {
   @RequirePermission('crm:write')
   placeCall(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
     return this.calling.placeCall(ctx, parseBody(placeCallSchema, body));
+  }
+
+  @Post('ai-calling/calls/bulk')
+  @RequirePermission('crm:write')
+  placeBulk(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.calling.placeBulk(ctx, parseBody(bulkCallSchema, body));
   }
 
   @Get('calls')

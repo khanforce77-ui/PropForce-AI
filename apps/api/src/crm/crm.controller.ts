@@ -21,6 +21,7 @@ import {
 } from '../tenancy/tenant.guard';
 import {
   consentSchema,
+  contactBulkSchema,
   contactCreateSchema,
   contactUpdateSchema,
   leadAssignSchema,
@@ -58,6 +59,12 @@ export class CrmController {
   @RequirePermission('crm:write')
   createContact(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
     return this.crm.createContact(ctx, parseBody(contactCreateSchema, body));
+  }
+
+  @Post('contacts/bulk')
+  @RequirePermission('crm:write')
+  bulkAddContacts(@CurrentTenant() ctx: TenantRequestContext, @Body() body: unknown) {
+    return this.crm.bulkAddContacts(ctx, parseBody(contactBulkSchema, body));
   }
 
   @Get('contacts/:id')

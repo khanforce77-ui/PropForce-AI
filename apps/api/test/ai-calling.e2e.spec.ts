@@ -323,6 +323,114 @@ describe('AI calling', () => {
   });
 });
 
+describe('bulk numbers and scheduled calls', () => {
+  const bulkAdd = (h: Record<string, string>, body: Record<string, unknown>) =>
+    http().post('/v1/contacts/bulk').set(h).send(body).expect(201);
+
+  it('adds pasted numbers once, records confirmed consent, never re-grants a withdrawal', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    const b = await createOwner('owner@b.test', 'Bravo Homes');
+    const first = await bulkAdd(a.h, {
+      lines: ['0501234567', 'Sara Khan, +971 55 765 4321', '050 123 4567', 'not a number', ''],
+      tag: 'JVC open house',
+    });
+    expect(first.body.contacts.map((c: { status: string }) => c.status)).toEqual([
+      'created',
+      'created',
+    ]);
+    expect(first.body.invalid).toEqual(['not a number']);
+    expect(first.body.consentRecorded).toBe(0);
+    const sara = first.body.contacts.find((c: { phone: string }) => c.phone === '+971557654321');
+    expect(sara.name).toBe('Sara Khan');
+
+    // Withdraw for one person, then confirm consent for both in a second paste.
+    const other = first.body.contacts.find((c: { phone: string }) => c.phone === '+971501234567');
+    await http()
+      .post(`/v1/contacts/${other.id}/consents`)
+      .set(a.h)
+      .send({ channel: 'phone_call', purpose: 'service', status: 'withdrawn', method: 'asked' })
+      .expect(201);
+    const second = await bulkAdd(a.h, {
+      lines: ['+971501234567', '+971557654321'],
+      consent: { channels: ['phone_call', 'whatsapp'], purpose: 'service', method: 'website' },
+    });
+    expect(second.body.contacts.every((c: { status: string }) => c.status === 'existing')).toBe(
+      true,
+    );
+    // Sara: phone + WhatsApp. The other: WhatsApp only, the phone withdrawal stands.
+    expect(second.body.consentRecorded).toBe(3);
+    const records = await t.owner.consentRecord.findMany({
+      where: { contactId: other.id, channel: 'phone_call' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(records[0]!.status).toBe('withdrawn');
+
+    // Another agency gets its own contact for the same number.
+    const inB = await bulkAdd(b.h, { lines: ['0501234567'] });
+    expect(inB.body.contacts[0].status).toBe('created');
+    expect(await t.owner.contact.count({ where: { phoneE164: '+971501234567' } })).toBe(2);
+  });
+
+  it('books bulk calls a minute apart, skipping people without consent', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    await setFlag(true);
+    const script = (await http().post('/v1/ai-calling/scripts').set(a.h).send(SCRIPT).expect(201))
+      .body;
+    const withConsent = await bulkAdd(a.h, {
+      lines: ['0501111111', '0502222222'],
+      consent: { channels: ['phone_call'], purpose: 'service', method: 'website enquiry' },
+    });
+    const without = await bulkAdd(a.h, { lines: ['0503333333'] });
+    const ids = [...withConsent.body.contacts, ...without.body.contacts].map(
+      (c: { id: string }) => c.id,
+    );
+
+    const res = await http()
+      .post('/v1/ai-calling/calls/bulk')
+      .set(a.h)
+      .send({ scriptId: script.id, contactIds: ids })
+      .expect(201);
+    expect(res.body.booked).toHaveLength(2);
+    expect(res.body.skipped).toEqual([
+      { contactId: ids[2], reason: expect.stringMatching(/not agreed/) },
+    ]);
+    expect(dial).toHaveBeenCalledTimes(2);
+    // The first rings now; the next is booked with the provider a minute later.
+    expect(dial.mock.calls[0]![0].schedule).toBeUndefined();
+    const later = dial.mock.calls[1]![0].schedule!;
+    expect(later.earliestAt.getTime() - Date.now()).toBeGreaterThan(30_000);
+    const rows = await t.owner.voiceCall.findMany({ orderBy: { createdAt: 'asc' } });
+    expect(rows.map((r) => r.status)).toEqual(['ringing', 'queued']);
+    expect(rows[1]!.scheduledAt?.getTime()).toBe(later.earliestAt.getTime());
+  });
+
+  it('schedules a single call for later', async () => {
+    const a = await createOwner('owner@a.test', 'Alpha Realty');
+    await setFlag(true);
+    const script = (await http().post('/v1/ai-calling/scripts').set(a.h).send(SCRIPT).expect(201))
+      .body;
+    const l = await lead(a.h);
+    await grant(a.h, l.contactId);
+    const at = new Date(Date.now() + 2 * 86_400_000);
+    const placed = await http()
+      .post('/v1/ai-calling/calls')
+      .set(a.h)
+      .send({ contactId: l.contactId, scriptId: script.id, scheduledAt: at.toISOString() })
+      .expect(201);
+    expect(placed.body).toMatchObject({ status: 'queued', scheduledAt: at.toISOString() });
+    expect(dial.mock.calls[0]![0].schedule?.earliestAt.toISOString()).toBe(at.toISOString());
+    await http()
+      .post('/v1/ai-calling/calls')
+      .set(a.h)
+      .send({
+        contactId: l.contactId,
+        scriptId: script.id,
+        scheduledAt: new Date(Date.now() + 40 * 86_400_000).toISOString(),
+      })
+      .expect(422);
+  });
+});
+
 describe('call instructions', () => {
   it('puts PropForce rules after the agency text and lists the questions', () => {
     const text = buildInstructions(

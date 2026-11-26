@@ -76,5 +76,18 @@ export const placeCallSchema = z.strictObject({
   contactId: z.uuid(),
   scriptId: z.uuid(),
   leadId: z.uuid().optional(),
+  /** Book the call for later instead of ringing now (inside calling hours, up to 30 days). */
+  scheduledAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type PlaceCallBody = z.infer<typeof placeCallSchema>;
+
+/** Most calls one bulk request books; the page sends bigger lists in parts. */
+export const MAX_BULK_CALLS = 50;
+
+export const bulkCallSchema = z.strictObject({
+  scriptId: z.uuid(),
+  contactIds: z.array(z.uuid()).min(1).max(MAX_BULK_CALLS),
+  /** First call time; omitted means now (or the next calling-hours window). */
+  startAt: z.iso.datetime({ offset: true }).optional(),
+});
+export type BulkCallBody = z.infer<typeof bulkCallSchema>;

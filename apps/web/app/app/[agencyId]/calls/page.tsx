@@ -98,6 +98,10 @@ export default function CallsPage() {
                         <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
                           {OUTCOME_LABEL[c.outcome]}
                         </span>
+                      ) : c.status === 'queued' && c.scheduledAt ? (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
+                          Scheduled {when(c.scheduledAt)}
+                        </span>
                       ) : c.status !== 'ended' ? (
                         <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
                           {STATUS_LABEL[c.status]}

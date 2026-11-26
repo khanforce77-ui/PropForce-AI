@@ -8,6 +8,8 @@ export interface CallRow {
   summary: string | null;
   costUsd: number | null;
   status: CallStatus;
+  /** Set when the call was booked for later. */
+  scheduledAt: string | null;
   outcome: CallOutcome | null;
   error: string | null;
   createdAt: string;
@@ -115,3 +117,14 @@ export const when = (s: string | null) =>
         timeZone: 'Asia/Dubai',
       })
     : '–';
+
+/** "2026-11-27T10:30" typed in a datetime-local box, read as Dubai time. */
+export const dubaiInputToIso = (v: string) => new Date(`${v}:00+04:00`).toISOString();
+
+/** Tomorrow at the start of calling hours, Dubai time, as a datetime-local value. */
+export function nextCallingStart(fromHour: number): string {
+  const dubaiNow = new Date(Date.now() + 4 * 3_600_000);
+  const d = new Date(dubaiNow);
+  if (dubaiNow.getUTCHours() >= fromHour) d.setUTCDate(d.getUTCDate() + 1);
+  return `${d.toISOString().slice(0, 10)}T${String(fromHour).padStart(2, '0')}:00`;
+}

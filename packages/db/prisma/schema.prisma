@@ -1616,6 +1616,8 @@ model VoiceCall {
   /// Membership that placed an outbound call (null for platform admins).
   requestedBy    String?           @map("requested_by") @db.Uuid
   status         VoiceCallStatus   @default(ended)
+  /// Outbound calls booked for later: the earliest time the provider may ring.
+  scheduledAt    DateTime?         @map("scheduled_at") @db.Timestamptz(3)
   outcome        VoiceCallOutcome?
   /// Answers to the script's questions, keyed q1..q10.
   answers        Json?

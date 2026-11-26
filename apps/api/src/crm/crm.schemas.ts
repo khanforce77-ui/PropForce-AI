@@ -78,6 +78,52 @@ export const contactCreateSchema = z
   });
 export type ContactCreateInput = z.infer<typeof contactCreateSchema>;
 
+/** Most people one paste may add; larger lists go through CSV import. */
+export const MAX_BULK_CONTACTS = 500;
+
+export const contactBulkSchema = z.strictObject({
+  /** One person per line: "number", "name, number" or "number, name". */
+  lines: z.array(z.string().max(200)).min(1).max(MAX_BULK_CONTACTS),
+  tag: optionalText(40),
+  /**
+   * The agency confirms these people agreed to be contacted. Recorded per contact, with the
+   * person who confirmed it; never overrides a withdrawal or "do not contact".
+   */
+  consent: z
+    .strictObject({
+      channels: z
+        .array(z.enum(['phone_call', 'whatsapp']))
+        .min(1)
+        .max(2),
+      purpose: z.enum(consentPurposes),
+      method: text(120),
+    })
+    .optional(),
+});
+export type ContactBulkInput = z.infer<typeof contactBulkSchema>;
+
+/** Splits a pasted line into a phone number and an optional name. */
+export function parseBulkLine(line: string): { phone: string; name: string | null } | null {
+  const parts = line
+    .split(/[,;\t|]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  const at = parts.findIndex((p) => normalizePhone(p) !== null);
+  if (at === -1) {
+    // "Sara 0501234567": the number may follow the name without a comma.
+    const m = /^(.*?)(\+?[\d][\d\s().-]{6,})$/.exec(line.trim());
+    const phone = m ? normalizePhone(m[2]!) : null;
+    if (!m || !phone) return null;
+    return { phone, name: m[1]!.trim().replace(/[-:]$/, '').trim() || null };
+  }
+  const name = parts
+    .filter((_, i) => i !== at)
+    .join(' ')
+    .slice(0, 120);
+  return { phone: normalizePhone(parts[at]!)!, name: name || null };
+}
+
 export const contactUpdateSchema = z.strictObject({
   fullName: contactFields.fullName.optional(),
   phone: contactFields.phone,
