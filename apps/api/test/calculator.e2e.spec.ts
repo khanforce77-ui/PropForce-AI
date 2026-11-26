@@ -160,3 +160,47 @@ describe('cost calculator', () => {
     expect(audit.map((x) => x.action).sort()).toEqual(['fee_rule.reset', 'fee_rule.set']);
   });
 });
+
+describe('ROI and affordability', () => {
+  it('works out buy-to-let return with buying costs from the fee rules', async () => {
+    const a = await createAgency('roi@example.test', 'Roi Homes');
+    const res = await http()
+      .post('/v1/calculator/roi')
+      .set(a.h)
+      .send({
+        emirate: 'Dubai',
+        price: 2_000_000,
+        annualRent: 140_000,
+        serviceChargeYearly: 20_000,
+        mortgage: { interestRatePct: 4.5, years: 25 },
+      })
+      .expect(200);
+    expect(res.body.label).toBe('Estimate');
+    expect(res.body.yields.grossPct).toBe(7);
+    expect(res.body.buyingCosts).toBeGreaterThan(80_000);
+    expect(res.body.buyingCostItems.length).toBeGreaterThan(0);
+    expect(res.body.unverifiedCount).toBeGreaterThan(0);
+    expect(res.body.mortgage).not.toBeNull();
+    expect(res.body.projection).toHaveLength(10);
+    // Cash put in = down payment + buying costs.
+    expect(res.body.cashInvested).toBeGreaterThan(400_000);
+
+    await http()
+      .post('/v1/calculator/roi')
+      .set(a.h)
+      .send({ emirate: 'Dubai', price: -1, annualRent: 1 })
+      .expect(400);
+  });
+
+  it('caps borrowing at half of income', async () => {
+    const a = await createAgency('aff@example.test', 'Aff Homes');
+    const res = await http()
+      .post('/v1/calculator/affordability')
+      .set(a.h)
+      .send({ monthlyIncome: 40_000, monthlyDebts: 5_000 })
+      .expect(200);
+    expect(res.body.maxMonthlyPayment).toBe(15_000);
+    expect(res.body.maxLoan).toBeGreaterThan(2_000_000);
+    expect(res.body.maxPrice).toBeGreaterThan(res.body.maxLoan);
+  });
+});

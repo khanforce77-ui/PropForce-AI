@@ -4,6 +4,7 @@ import {
   Activity,
   BadgeCheck,
   BadgeDollarSign,
+  Crown,
   Bot,
   Building2,
   Calculator,
@@ -33,8 +34,15 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { DailyBarChart } from '@/components/admin/bar-chart';
 import { AdminBrokerVerifications } from '@/components/admin/broker-verifications';
+import {
+  AgencyDetailsForm,
+  CreateAgencyCard,
+  InviteToAgencyForm,
+} from '@/components/admin/create-agency';
 import { AdminListingReports } from '@/components/admin/listing-reports';
 import { AdminListingReview } from '@/components/admin/listing-review';
+import { PlatformSettingsCard } from '@/components/admin/platform-settings';
+import { WebsiteContent } from '@/components/admin/website-content';
 import { StatusBadge } from '@/components/listings/status-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -81,11 +89,34 @@ function Badge({ value, label }: { value: string; label?: string }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value?: number; hint?: string }) {
+function Stat({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value?: number | undefined;
+  hint?: string | undefined;
+  icon: LucideIcon;
+  accent: string;
+}) {
   return (
-    <Card className="p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums">{value ?? '–'}</p>
+    <Card className="relative overflow-hidden p-4">
+      <div className={cn('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', accent)} aria-hidden />
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <span
+          className={cn(
+            'grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br text-white shadow-sm',
+            accent,
+          )}
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+      </div>
+      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{value ?? '–'}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </Card>
   );
@@ -229,10 +260,24 @@ const TABS = [
   ['reports', 'Listing reports'],
   ['brokers', 'Agent verification'],
   ['users', 'Users'],
+  ['website', 'Website'],
   ['settings', 'Settings'],
   ['activity', 'Activity'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+
+const TAB_SUBTITLES: Record<Tab, string> = {
+  overview: 'Everything happening on PropForce, at a glance.',
+  agencies: 'Add agencies, approve, suspend, and set plans and limits.',
+  listings: 'Every listing from every agency.',
+  review: 'New agencies’ listings waiting for PropForce’s check before going on the portal.',
+  brokers: 'Agents’ broker cards (BRN) waiting for the Verified agent badge.',
+  reports: 'What visitors reported about public listings.',
+  users: 'Find anyone and suspend or reactivate them.',
+  website: 'Banners, adverts and text on the public website.',
+  settings: 'Platform rules, defaults for new agencies and the notice to all agencies.',
+  activity: 'Every platform admin action, newest first.',
+};
 
 const TAB_ICONS: Record<Tab, LucideIcon> = {
   overview: LayoutDashboard,
@@ -242,6 +287,7 @@ const TAB_ICONS: Record<Tab, LucideIcon> = {
   reports: Flag,
   brokers: BadgeCheck,
   users: Users,
+  website: Globe,
   settings: Settings,
   activity: Activity,
 };
@@ -338,7 +384,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Sale and rental pipelines, checklists, commission splits and invoice status',
       },
-      { label: 'Mortgage & ROI calculator', icon: Calculator, status: 'soon', note: 'Phase 3' },
+      {
+        label: 'Mortgage & ROI calculator',
+        icon: Calculator,
+        status: 'live',
+        note: 'Fees, instalments, buy-to-let yield and projection, borrowing limit',
+      },
       { label: 'Billing & plans', icon: CreditCard, status: 'soon', note: 'Phase 3' },
     ],
   },
@@ -424,6 +475,8 @@ export default function PlatformAdminPage() {
     [router],
   );
 
+  const mfaRequired = useCallback(() => router.replace('/app/security?required=1'), [router]);
+
   const loadUsers = useCallback(
     async (q: string) => {
       const u = await request<{ data: PlatformUser[] }>('/platform/users', {
@@ -506,6 +559,14 @@ export default function PlatformAdminPage() {
     }
   };
 
+  /** After a child form saved something: show its message and refresh. */
+  const done = async (message: string) => {
+    setOpen(null);
+    setError(null);
+    setNotice(message);
+    await load();
+  };
+
   if (!isAdmin) return null;
 
   const queue = agencies.filter((a) => a.approvalStatus === 'pending');
@@ -550,6 +611,12 @@ export default function PlatformAdminPage() {
           <Button size="sm" variant="ghost" onClick={() => setOpen(key('plan'))}>
             Plan &amp; limits
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setOpen(key('details'))}>
+            Edit details
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setOpen(key('invite'))}>
+            Invite {a.owner ? 'admin' : 'owner'}
+          </Button>
           <Link
             href={`/app/${a.id}`}
             className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-primary hover:bg-muted"
@@ -575,6 +642,20 @@ export default function PlatformAdminPage() {
             onSubmit={(reason) =>
               act(`/platform/agencies/${a.id}/suspend`, `${a.name} suspended.`, 'POST', { reason })
             }
+          />
+        ) : null}
+        {open === key('details') ? (
+          <AgencyDetailsForm
+            agency={a}
+            onCancel={() => setOpen(null)}
+            onSaved={(m) => void done(m)}
+          />
+        ) : null}
+        {open === key('invite') ? (
+          <InviteToAgencyForm
+            agency={a}
+            onCancel={() => setOpen(null)}
+            onSent={(m) => void done(m)}
           />
         ) : null}
         {open === key('plan') ? (
@@ -632,12 +713,16 @@ export default function PlatformAdminPage() {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col border-b border-border bg-muted md:sticky md:top-0 md:h-screen md:w-64 md:border-r md:border-b-0">
-        <div className="flex items-center gap-2 px-4 py-4">
-          <ShieldCheck className="h-6 w-6 text-primary" aria-hidden />
+      <aside className="flex shrink-0 flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 md:sticky md:top-0 md:h-screen md:w-72">
+        <div className="flex items-center gap-3 px-5 py-5">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20">
+            <ShieldCheck className="h-5 w-5" aria-hidden />
+          </span>
           <div>
-            <h1 className="text-base font-semibold tracking-tight">Platform admin</h1>
-            <p className="text-xs text-muted-foreground">PropForce AI · all agencies</p>
+            <h1 className="text-base font-semibold tracking-tight text-white">PropForce Control</h1>
+            <p className="flex items-center gap-1 text-xs text-amber-300">
+              <Crown className="h-3 w-3" aria-hidden /> Super admin
+            </p>
           </div>
         </div>
         <nav
@@ -656,8 +741,9 @@ export default function PlatformAdminPage() {
                   setOpen(null);
                 }}
                 className={cn(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap hover:bg-background',
-                  tab === value && 'bg-background font-medium',
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap text-slate-300 transition-colors hover:bg-white/5 hover:text-white',
+                  tab === value &&
+                    'bg-gradient-to-r from-amber-400/15 to-transparent font-medium text-white ring-1 ring-amber-400/30',
                 )}
               >
                 <Icon className="h-4 w-4" aria-hidden />
@@ -675,7 +761,7 @@ export default function PlatformAdminPage() {
           })}
           {ROADMAP.map((group) => (
             <div key={group.title} className="hidden md:block">
-              <p className="mt-4 px-3 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <p className="mt-4 px-3 pb-1 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
                 {group.title}
               </p>
               {group.items.map((item) =>
@@ -685,7 +771,7 @@ export default function PlatformAdminPage() {
                     href={item.href}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-background"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white"
                   >
                     <item.icon className="h-4 w-4" aria-hidden />
                     {item.label}
@@ -696,7 +782,7 @@ export default function PlatformAdminPage() {
                     key={item.label}
                     aria-disabled="true"
                     title={item.note}
-                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground"
+                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500"
                   >
                     <item.icon className="h-4 w-4" aria-hidden />
                     {item.label}
@@ -707,11 +793,12 @@ export default function PlatformAdminPage() {
             </div>
           ))}
         </nav>
-        <div className="mt-auto hidden items-center justify-between border-t border-border px-4 py-3 md:flex">
+        <div className="mt-auto hidden items-center justify-between border-t border-white/10 px-4 py-3 md:flex">
           <ThemeToggle />
           <Button
             variant="ghost"
             size="sm"
+            className="text-slate-300 hover:bg-white/10 hover:text-white"
             onClick={() => void signOut().then(() => router.replace('/login'))}
           >
             <LogOut className="h-4 w-4" aria-hidden /> Sign out
@@ -719,10 +806,24 @@ export default function PlatformAdminPage() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          {TABS.find(([value]) => value === tab)?.[1]}
-        </h2>
+      <main className="flex min-w-0 flex-1 flex-col gap-6 bg-muted/30 px-4 py-6 md:px-10 md:py-8">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {TABS.find(([value]) => value === tab)?.[1]}
+            </h2>
+            <p className="text-sm text-muted-foreground">{TAB_SUBTITLES[tab]}</p>
+          </div>
+          <div className="flex items-center gap-3 rounded-full border border-border bg-background py-1 pr-4 pl-1 shadow-sm">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-sm font-semibold text-slate-950">
+              {me.user.fullName.charAt(0).toUpperCase()}
+            </span>
+            <span className="text-sm leading-tight">
+              <span className="block font-medium">{me.user.fullName}</span>
+              <span className="block text-xs text-muted-foreground">Super admin</span>
+            </span>
+          </div>
+        </header>
         {error ? <Alert>{error}</Alert> : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
 
@@ -735,8 +836,17 @@ export default function PlatformAdminPage() {
               <Button variant="outline" onClick={() => void openDirect('')}>
                 Open PropForce Direct
               </Button>
-              <Button variant="outline" onClick={() => setTab('agencies')}>
-                Manage agencies
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTab('agencies');
+                  setOpen('create-agency');
+                }}
+              >
+                <Building2 className="h-4 w-4" aria-hidden /> Add agency
+              </Button>
+              <Button variant="outline" onClick={() => setTab('website')}>
+                <Globe className="h-4 w-4" aria-hidden /> Website & banners
               </Button>
               <Button variant="outline" onClick={() => setTab('users')}>
                 Find a user
@@ -756,31 +866,43 @@ export default function PlatformAdminPage() {
               className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
             >
               <Stat
+                icon={Building2}
+                accent="from-indigo-500 to-violet-500"
                 label="Agencies"
                 value={summary?.agencies.total}
                 hint={summary ? `${summary.agencies.newThisWeek} new this week` : undefined}
               />
               <Stat
+                icon={Activity}
+                accent="from-amber-400 to-orange-500"
                 label="Not live yet"
                 value={summary?.agencies.pending}
                 hint="Onboarding or awaiting approval"
               />
               <Stat
+                icon={Users}
+                accent="from-sky-500 to-cyan-500"
                 label="Users"
                 value={summary?.users.total}
                 hint={summary ? `${summary.users.newThisWeek} new this week` : undefined}
               />
               <Stat
+                icon={Home}
+                accent="from-emerald-500 to-teal-500"
                 label="Live listings"
                 value={summary?.listings.live}
                 hint={summary ? `${summary.listings.total} listings in total` : undefined}
               />
               <Stat
+                icon={Handshake}
+                accent="from-rose-500 to-pink-500"
                 label="Open leads"
                 value={dash?.totals.openLeads}
                 hint={dash ? `${dash.totals.leads} leads in total` : undefined}
               />
               <Stat
+                icon={MessageCircle}
+                accent="from-fuchsia-500 to-purple-500"
                 label="New portal enquiries"
                 value={dash?.totals.newEnquiries}
                 hint={dash ? `${dash.totals.enquiries} enquiries in total` : undefined}
@@ -912,9 +1034,22 @@ export default function PlatformAdminPage() {
           </>
         ) : null}
 
+        {tab === 'agencies' && open === 'create-agency' ? (
+          <CreateAgencyCard onCancel={() => setOpen(null)} onCreated={(m) => void done(m)} />
+        ) : null}
+
         {tab === 'agencies' ? (
           <Card className="p-0">
-            <h2 className="px-6 pt-5 font-medium">Agencies</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-5">
+              <h2 className="font-medium">
+                All agencies <span className="text-muted-foreground">({agencies.length})</span>
+              </h2>
+              {open !== 'create-agency' ? (
+                <Button size="sm" onClick={() => setOpen('create-agency')}>
+                  <Plus className="h-4 w-4" aria-hidden /> Add agency
+                </Button>
+              ) : null}
+            </div>
             {agencies.length === 0 ? (
               <p className="px-6 pt-2 pb-5 text-sm text-muted-foreground">No agencies yet.</p>
             ) : (
@@ -1107,9 +1242,13 @@ export default function PlatformAdminPage() {
           </Card>
         ) : null}
 
+        {tab === 'website' ? <WebsiteContent onMfaRequired={mfaRequired} /> : null}
+
+        {tab === 'settings' ? <PlatformSettingsCard onMfaRequired={mfaRequired} /> : null}
+
         {tab === 'settings' ? (
           <Card>
-            <h2 className="font-medium">Platform settings</h2>
+            <h2 className="font-medium">Rules</h2>
             <ul className="mt-3 divide-y divide-border">
               {settings.map((s) => (
                 <li key={s.key} className="flex items-center justify-between gap-4 py-3">

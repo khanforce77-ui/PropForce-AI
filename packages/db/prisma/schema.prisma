@@ -1349,3 +1349,50 @@ model DealTask {
   @@index([tenantId, dealId, position])
   @@map("deal_task")
 }
+
+// ───────────────────────── Website content (platform-managed) ─────────────────────────
+
+/// Platform-wide content and settings edited by platform admins: "portal" (public website text,
+/// contact details, announcement bar, SEO) and "platform" (support details, defaults for new
+/// agencies, notice shown inside every agency's app). Values are validated by the API.
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("site_setting")
+}
+
+/// A banner or advert on the public website, managed by platform admins. Shown only while
+/// active and inside its optional schedule.
+model SiteBanner {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  /// home_hero | home_strip | search_top | listing_sidebar
+  placement   String
+  /// banner (PropForce's own promotion) | ad (paid advert, labelled "Sponsored")
+  kind        String    @default("banner")
+  title       String
+  subtitle    String?
+  ctaLabel    String?   @map("cta_label")
+  /// https URL or a path on the portal ("/new-projects"). Clicks go through a counting redirect.
+  linkUrl     String?   @map("link_url")
+  advertiser  String?
+  active      Boolean   @default(false)
+  sortOrder   Int       @default(0) @map("sort_order")
+  startsAt    DateTime? @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime? @map("ends_at") @db.Timestamptz(3)
+  /// WebP, at most 2400 px wide, metadata removed. Null until an image is uploaded.
+  image       Bytes?
+  imageWidth  Int?      @map("image_width")
+  imageHeight Int?      @map("image_height")
+  /// SHA-256 of the image (hex); in image URLs so they can be cached for a long time.
+  imageSha256 String?   @map("image_sha256")
+  clicks      Int       @default(0)
+  createdBy   String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([placement, active, sortOrder])
+  @@map("site_banner")
+}

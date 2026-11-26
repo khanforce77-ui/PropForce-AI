@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { AppNoticeBar } from '@/components/app-notice';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { AgencyContext, type AgencyMembership } from '@/lib/agency-context';
@@ -131,6 +132,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="flex-1 px-4 py-6 md:px-10 md:py-10">
+        <AppNoticeBar />
         {isPlatformAdmin ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
             <span>

@@ -3,6 +3,7 @@
 import { Copy, MessageCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { AffordabilityCalculator, RoiCalculator } from '@/components/calculator/roi-calculator';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -571,6 +572,9 @@ export default function CalculatorPage() {
           </div>
         </Card>
       ) : null}
+
+      <RoiCalculator agencyId={agencyId} emirate={emirate} />
+      <AffordabilityCalculator agencyId={agencyId} />
 
       <Card>
         <h2 className="text-lg font-semibold">Fee rules – {emirate}</h2>

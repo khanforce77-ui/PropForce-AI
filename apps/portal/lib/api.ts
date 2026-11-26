@@ -203,3 +203,69 @@ export async function sendReport(id: string, body: unknown) {
     body: JSON.stringify(body),
   });
 }
+
+// ───── Website content managed in PropForce admin ─────
+
+export type BannerPlacement = 'home_hero' | 'home_strip' | 'search_top' | 'listing_sidebar';
+
+export interface SiteBanner {
+  id: string;
+  kind: 'banner' | 'ad';
+  title: string;
+  subtitle: string | null;
+  ctaLabel: string | null;
+  /** The destination stays on the server; links go through /go/banner/:id, which counts clicks. */
+  hasLink: boolean;
+  advertiser: string | null;
+  image: { version: string; width: number; height: number };
+}
+
+export interface SiteContent {
+  siteName?: string;
+  hero: { title: string; subtitle: string };
+  announcement: { enabled: boolean; text: string; linkUrl?: string; linkLabel?: string };
+  sections: { popularCommunities: boolean; latestListings: boolean };
+  about: string;
+  contact: { email?: string; phone?: string; whatsapp?: string; address?: string };
+  social: Partial<
+    Record<'instagram' | 'facebook' | 'linkedin' | 'x' | 'youtube' | 'tiktok', string>
+  >;
+  seo: { title?: string; description?: string };
+}
+
+export interface Site {
+  content: SiteContent;
+  banners: Record<BannerPlacement, SiteBanner[]>;
+}
+
+/** Used when the API cannot be reached, so the site still renders. */
+export const FALLBACK_SITE: Site = {
+  content: {
+    hero: {
+      title: 'Find your next home in the UAE',
+      subtitle:
+        'Listings with advertising permits from licensed agencies. Talk to the agent directly on WhatsApp or phone.',
+    },
+    announcement: { enabled: false, text: '' },
+    sections: { popularCommunities: true, latestListings: true },
+    about:
+      "Listings are published by licensed agencies. Every listing shows its advertising permit, the agent's BRN and the agency's ORN where provided.",
+    contact: {},
+    social: {},
+    seo: {},
+  },
+  banners: { home_hero: [], home_strip: [], search_top: [], listing_sidebar: [] },
+};
+
+/** Website text and live banners; never throws (falls back to the defaults). */
+export async function getSite(): Promise<Site> {
+  try {
+    return await call<Site>('/site', { revalidate: 60 });
+  } catch {
+    return FALLBACK_SITE;
+  }
+}
+
+/** Counts a banner click and returns where it goes. */
+export const clickBanner = (id: string) =>
+  call<{ url: string }>(`/site/banners/${encodeURIComponent(id)}/click`, { method: 'POST' });
