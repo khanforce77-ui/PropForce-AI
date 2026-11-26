@@ -177,35 +177,37 @@ model Agency {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  settings         AgencySettings?
-  memberships      Membership[]
-  teams            Team[]
-  invitations      Invitation[]
-  auditLogs        AuditLog[]
-  projects         Project[]
-  properties       Property[]
-  permits          PropertyPermit[]
-  contacts         Contact[]
-  consents         ConsentRecord[]
-  leads            Lead[]
-  leadEvents       LeadActivity[]
-  whatsappAccounts WhatsAppAccount[]
-  conversations    Conversation[]
-  messages         Message[]
-  aiRuns           AiRun[]
-  aiToolCalls      AiToolCall[]
-  portalEnquiries  PortalEnquiry[]
-  portalContacts   PortalContactEvent[]
-  listingReports   PortalListingReport[]
-  feeRules         FeeRule[]
-  propertyPhotos   PropertyPhoto[]
-  viewings         Viewing[]
-  campaigns        Campaign[]
+  settings           AgencySettings?
+  memberships        Membership[]
+  teams              Team[]
+  invitations        Invitation[]
+  auditLogs          AuditLog[]
+  projects           Project[]
+  properties         Property[]
+  permits            PropertyPermit[]
+  contacts           Contact[]
+  consents           ConsentRecord[]
+  leads              Lead[]
+  leadEvents         LeadActivity[]
+  whatsappAccounts   WhatsAppAccount[]
+  conversations      Conversation[]
+  messages           Message[]
+  aiRuns             AiRun[]
+  aiToolCalls        AiToolCall[]
+  portalEnquiries    PortalEnquiry[]
+  portalContacts     PortalContactEvent[]
+  listingReports     PortalListingReport[]
+  feeRules           FeeRule[]
+  propertyPhotos     PropertyPhoto[]
+  viewings           Viewing[]
+  campaigns          Campaign[]
   campaignRecipients CampaignRecipient[]
-  deals            Deal[]
-  dealSplits       DealCommissionSplit[]
-  dealTasks        DealTask[]
-  logo             AgencyLogo?
+  deals              Deal[]
+  subscription       Subscription?
+  spendingCaps       SpendingCap[]
+  dealSplits         DealCommissionSplit[]
+  dealTasks          DealTask[]
+  logo               AgencyLogo?
 
   @@map("agency")
 }
@@ -766,13 +768,13 @@ model Contact {
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agency        Agency          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owner         Membership?     @relation(fields: [ownerMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
-  consents      ConsentRecord[]
-  leads         Lead[]
-  conversations Conversation[]
+  agency             Agency              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner              Membership?         @relation(fields: [ownerMembershipId, tenantId], references: [id, tenantId], onDelete: NoAction)
+  consents           ConsentRecord[]
+  leads              Lead[]
+  conversations      Conversation[]
   campaignRecipients CampaignRecipient[]
-  deals         Deal[]
+  deals              Deal[]
 
   @@unique([tenantId, phoneE164])
   @@unique([id, tenantId])
@@ -1287,4 +1289,84 @@ model DealTask {
 
   @@index([tenantId, dealId, position])
   @@map("deal_task")
+}
+
+// ───── Billing (Phase 3) ─────
+
+/// The plan catalogue (platform-wide, not tenant data). Prices are set by the platform admin.
+model BillingPlan {
+  code             String   @id
+  name             String
+  /// Monthly price in AED before VAT. Null = not priced yet / on request.
+  priceMonthlyAed  Decimal? @map("price_monthly_aed") @db.Decimal(12, 2)
+  /// Null = unlimited (or custom).
+  seatLimit        Int?     @map("seat_limit")
+  listingLimit     Int?     @map("listing_limit")
+  aiRepliesMonthly Int?     @map("ai_replies_monthly")
+  whatsappNumbers  Int?     @map("whatsapp_numbers")
+  storageGb        Int?     @map("storage_gb")
+  leadBooster      Boolean  @default(false) @map("lead_booster")
+  /// none | inbound | inbound_outbound
+  voice            String   @default("none")
+  /// Shown to agencies and selectable.
+  active           Boolean  @default(true)
+  sortOrder        Int      @default(0) @map("sort_order")
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions Subscription[]
+
+  @@map("billing_plan")
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  cancelled
+}
+
+/// One per agency. Without a payment provider, the platform admin sets it by hand.
+model Subscription {
+  tenantId               String             @id @map("tenant_id") @db.Uuid
+  planCode               String             @map("plan_code")
+  status                 SubscriptionStatus @default(trialing)
+  trialEndsAt            DateTime?          @map("trial_ends_at") @db.Timestamptz(3)
+  currentPeriodEnd       DateTime?          @map("current_period_end") @db.Timestamptz(3)
+  cancelAtPeriodEnd      Boolean            @default(false) @map("cancel_at_period_end")
+  /// stripe | checkout | telr | paytabs | manual. Null until a provider is wired.
+  provider               String?
+  providerCustomerId     String?            @map("provider_customer_id")
+  providerSubscriptionId String?            @map("provider_subscription_id")
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   BillingPlan @relation(fields: [planCode], references: [code])
+
+  @@index([status])
+  @@map("subscription")
+}
+
+enum UsageMeter {
+  ai_replies
+  whatsapp_messages
+}
+
+enum CapAction {
+  warn
+  block
+}
+
+/// Monthly ceiling an owner sets on a usage meter.
+model SpendingCap {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  meter        UsageMeter
+  monthlyLimit Int        @map("monthly_limit")
+  action       CapAction  @default(warn)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency Agency @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, meter])
+  @@map("spending_cap")
 }

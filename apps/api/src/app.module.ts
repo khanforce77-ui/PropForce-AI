@@ -15,6 +15,7 @@ import { PlatformModule } from './platform/platform.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { PortalModule } from './portal/portal.module';
 import { MediaModule } from './media/media.module';
+import { BillingModule } from './billing/billing.module';
 import { CalculatorModule } from './calculator/calculator.module';
 import { MatchingModule } from './matching/matching.module';
 import { ImportModule } from './import/import.module';
@@ -65,6 +66,7 @@ export class AppModule {
         CampaignsModule,
         DealsModule,
         CalculatorModule,
+        BillingModule,
         PlatformModule,
         WhatsAppModule,
         PortalModule,

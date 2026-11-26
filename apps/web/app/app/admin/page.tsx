@@ -337,7 +337,13 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Fees, instalments, buy-to-let yield and projection, borrowing limit',
       },
-      { label: 'Billing & plans', icon: CreditCard, status: 'soon', note: 'Phase 3' },
+      {
+        label: 'Billing & plans',
+        icon: CreditCard,
+        status: 'live',
+        href: '/app/admin/billing',
+        note: 'Plans, usage, spending caps; online payment pending a provider',
+      },
     ],
   },
   {
