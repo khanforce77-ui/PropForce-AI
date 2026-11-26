@@ -31,33 +31,96 @@ type Draft = Pick<
   | 'transcriptPolicy'
 >;
 
-const EXAMPLE: Draft = {
-  name: 'Enquiry follow-up',
-  purpose: 'service',
-  language: 'en',
-  firstMessage:
-    'Hi {{contact_name}}, this is the AI assistant from {{agency_name}}. You enquired about a property with us. Is now a good time for two quick questions?',
-  instructions:
-    'You are a friendly assistant for {{agency_name}}, a Dubai real estate agency. Confirm what the person is looking for, then offer a viewing or a call back from {{agent_name}}.',
-  questions: [
-    'Are you looking to buy or rent?',
-    'Which areas of Dubai do you prefer?',
-    'What is your budget?',
-    'When are you planning to move?',
-  ],
-  transcriptPolicy: 'summary_only',
-};
+const COMMON_RULES =
+  'Speak like a friendly, experienced Dubai property consultant from {{agency_name}}. Keep every answer to one or two short sentences, then ask one question. If they ask general questions about buying, renting, off-plan, payment plans, DLD fees, mortgages or the Golden Visa, answer briefly from your Dubai knowledge and say {{agent_name}} will confirm details. Never mention a specific property price or availability on the call: offer to send matching options on WhatsApp.';
+
+/** PropForce starter scripts. Written in English: the AI speaks the caller's language. */
+const STARTERS: Draft[] = [
+  {
+    name: 'Enquiry follow-up',
+    purpose: 'service',
+    language: 'en',
+    firstMessage:
+      'Hi {{contact_name}}, this is the AI assistant from {{agency_name}}. You recently enquired about a property in Dubai. Is now a good time for a quick two-minute chat?',
+    instructions: `You are following up on a property enquiry. ${COMMON_RULES} Confirm what they are looking for, answer their questions, and finish by booking a viewing time or a call back from {{agent_name}}.`,
+    questions: [
+      'Are you looking to buy, rent or invest?',
+      'Which areas of Dubai do you prefer?',
+      'What type of property and how many bedrooms?',
+      'What is your budget?',
+      'Will you pay cash or use a mortgage?',
+      'When would you like to move in or buy?',
+      'When is a good time for a viewing or a call from the agent?',
+    ],
+    transcriptPolicy: 'summary_only',
+  },
+  {
+    name: 'Off-plan investor',
+    purpose: 'service',
+    language: 'en',
+    firstMessage:
+      'Hi {{contact_name}}, this is the AI assistant from {{agency_name}}. You showed interest in off-plan property in Dubai. Do you have a couple of minutes?',
+    instructions: `You are speaking with a possible off-plan buyer or investor. ${COMMON_RULES} Explain in simple words how off-plan works in Dubai if they ask (Oqood registration, escrow, payment plans, handover). Never promise returns or price growth. Learn their goal (rental income, capital growth, Golden Visa or own use) and offer that {{agent_name}} sends matching projects with their payment plans.`,
+    questions: [
+      'Is this for investment, your own home, or the Golden Visa?',
+      'Which areas or developers interest you?',
+      'What budget range are you considering?',
+      'What payment plan suits you (during construction, post-handover)?',
+      'When would you like to buy?',
+      'Should the agent send options on WhatsApp?',
+    ],
+    transcriptPolicy: 'summary_only',
+  },
+  {
+    name: 'Rental enquiry',
+    purpose: 'service',
+    language: 'en',
+    firstMessage:
+      'Hi {{contact_name}}, this is the AI assistant from {{agency_name}}. You asked about renting a home in Dubai. Is now a good time for a few quick questions?',
+    instructions: `You are helping a tenant find a rental. ${COMMON_RULES} If they ask, explain the usual costs (security deposit, agency fee, Ejari, DEWA deposit) and the number of cheques in general terms. Finish with a viewing time or a call back.`,
+    questions: [
+      'Which areas do you want to live in?',
+      'Apartment, townhouse or villa, and how many bedrooms?',
+      'What is your yearly rent budget?',
+      'How many cheques would you like to pay in?',
+      'Furnished or unfurnished?',
+      'When do you need to move in?',
+    ],
+    transcriptPolicy: 'summary_only',
+  },
+  {
+    name: 'Seller or landlord',
+    purpose: 'service',
+    language: 'en',
+    firstMessage:
+      'Hi {{contact_name}}, this is the AI assistant from {{agency_name}}. You mentioned you might sell or rent out your property in Dubai. Do you have two minutes?',
+    instructions: `You are speaking with a property owner. ${COMMON_RULES} Never give a valuation yourself: say {{agent_name}} will share a price based on recent DLD transactions. Learn about the property and their plans, and book a valuation visit or call back.`,
+    questions: [
+      'Do you want to sell or rent out the property?',
+      'Where is it and which building or community?',
+      'What type of property, bedrooms and size?',
+      'Is it vacant, tenanted or owner-occupied?',
+      'Is there a mortgage on it?',
+      'When would you like to sell or rent it?',
+    ],
+    transcriptPolicy: 'summary_only',
+  },
+];
+
+const EXAMPLE: Draft = STARTERS[0]!;
 
 function ScriptForm({
   initial,
   submitLabel,
   onSubmit,
   onCancel,
+  starters,
 }: {
   initial: Draft;
   submitLabel: string;
   onSubmit: (d: Draft) => Promise<void>;
   onCancel?: () => void;
+  starters?: Draft[];
 }) {
   const [d, setD] = useState<Draft>(initial);
   const [busy, setBusy] = useState(false);
@@ -81,6 +144,30 @@ function ScriptForm({
   };
   return (
     <form onSubmit={(e) => void submit(e)} className="grid gap-3 sm:grid-cols-2">
+      {starters ? (
+        <div className="sm:col-span-2">
+          <Field
+            id="s-starter"
+            label="Start from a PropForce script"
+            hint="Ready-made Dubai scripts. Change anything you like before saving."
+          >
+            <Select
+              id="s-starter"
+              defaultValue="0"
+              onChange={(e) => {
+                const s = starters[Number(e.target.value)];
+                if (s) setD({ ...s, questions: [...s.questions] });
+              }}
+            >
+              {starters.map((s, i) => (
+                <option key={s.name} value={i}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      ) : null}
       <Field id="s-name" label="Script name">
         <Input
           id="s-name"
@@ -100,7 +187,11 @@ function ScriptForm({
           <option value="marketing">Contacts about offers (marketing consent)</option>
         </Select>
       </Field>
-      <Field id="s-lang" label="Language">
+      <Field
+        id="s-lang"
+        label="Opening language"
+        hint="The AI switches to the caller's language by itself (Urdu, Hindi, Arabic, French, Russian, Chinese, Spanish and 20+ more)."
+      >
         <Select
           id="s-lang"
           value={d.language}
@@ -297,6 +388,7 @@ export default function AiCallingPage() {
         {editing === 'new' ? (
           <ScriptForm
             initial={EXAMPLE}
+            starters={STARTERS}
             submitLabel="Create script"
             onSubmit={(d) => save(null, d)}
             onCancel={() => setEditing(null)}

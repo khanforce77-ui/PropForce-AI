@@ -31,8 +31,10 @@ export interface FactLedger {
   readonly properties: ReadonlyMap<string, PropertyFact>;
   /** Other amounts returned by tools this turn (e.g. fee estimate lines), in AED. */
   readonly amountsAed: ReadonlySet<number>;
-  /** Raw text the client wrote this turn; numbers in it may be echoed back. */
+  /** Raw text the client wrote in this conversation; numbers in it may be echoed back. */
   readonly clientText: string;
+  /** Bedroom counts the client asked for, as passed to search or requirement tools. */
+  readonly requestedBedrooms?: ReadonlySet<number>;
 }
 
 export type GroundingResult =
@@ -83,7 +85,7 @@ export const extractSqft = (text: string): number[] =>
 export const extractBedrooms = (text: string): number[] =>
   [
     ...toLatinDigits(text).matchAll(
-      /(\d{1,2})\s?-?\s?(?:br|bed(?:room)?s?|غرف(?:ة)?(?:\s?نوم)?)(?![a-z])/giu,
+      /(\d{1,2})\s?-?\s?(?:b\/?r|bhk|bd|beds?|bedrooms?|غرف(?:ة)?(?:\s?نوم)?)(?![a-z])/giu,
     ),
   ].map((m) => Number(m[1]));
 
@@ -159,6 +161,7 @@ export const validateGrounding = (raw: unknown, ledger: FactLedger): GroundingRe
   const knownBeds = new Set([
     ...facts.flatMap((f) => (f.bedrooms !== undefined ? [f.bedrooms] : [])),
     ...extractBedrooms(ledger.clientText),
+    ...(ledger.requestedBedrooms ?? []),
   ]);
   for (const b of extractBedrooms(out.reply)) {
     if (!knownBeds.has(b)) reasons.push(`${b} bedrooms is not backed by a tool result`);

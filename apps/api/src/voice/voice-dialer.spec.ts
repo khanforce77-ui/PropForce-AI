@@ -38,6 +38,12 @@ describe('VoiceDialer', () => {
       headers: { 'X-Vapi-Secret': 's'.repeat(20) },
     });
     expect(body.assistant.artifactPlan).toEqual({ recordingEnabled: false });
+    // The caller's language is detected on every call, not only for Arabic scripts.
+    expect(body.assistant.transcriber).toEqual({
+      provider: 'deepgram',
+      model: 'nova-3',
+      language: 'multi',
+    });
     expect(
       Object.keys(
         body.assistant.analysisPlan.structuredDataPlan.schema.properties.answers.properties,

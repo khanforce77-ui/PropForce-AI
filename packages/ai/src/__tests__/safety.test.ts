@@ -36,6 +36,7 @@ describe('figure extraction', () => {
     expect(extractAedAmounts('السعر ١٬٨٥٠٬٠٠٠ درهم')).toEqual([1_850_000]);
     expect(extractSqft('1,245 sqft and 900 sq ft')).toEqual([1245, 900]);
     expect(extractBedrooms('a 2 bedroom or 3BR or 4-bed')).toEqual([2, 3, 4]);
+    expect(extractBedrooms('2bhk, 3 BHK, 1 b/r, 4 beds')).toEqual([2, 3, 1, 4]);
   });
 });
 

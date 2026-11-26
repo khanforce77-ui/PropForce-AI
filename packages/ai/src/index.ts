@@ -6,3 +6,4 @@ export * from './safety/grounding';
 export * from './llm/provider';
 export * from './llm/openai';
 export * from './orchestrator';
+export * from './knowledge/dubai';

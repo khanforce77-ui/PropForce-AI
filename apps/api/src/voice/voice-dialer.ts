@@ -3,6 +3,12 @@ import { AppError } from '../common/app-error';
 import { APP_CONFIG, type AppConfig } from '../config/env';
 import { CALL_OUTCOMES } from './call-outcomes';
 
+export const MULTILINGUAL_TRANSCRIBER = {
+  provider: 'deepgram',
+  model: 'nova-3',
+  language: 'multi',
+} as const;
+
 /** What the AI should do on one outbound call. Provider-neutral: no provider names leak out. */
 export interface DialInput {
   /** Provider number to ring from. Falls back to the platform's default number. */
@@ -85,9 +91,9 @@ export class VoiceDialer {
         headers: { 'X-Vapi-Secret': v.webhookSecret ?? '' },
       },
       serverMessages: ['end-of-call-report', 'status-update'],
-      ...(input.language === 'ar'
-        ? { transcriber: { provider: 'deepgram', model: 'nova-2', language: 'ar' } }
-        : {}),
+      // Auto-detects the caller's language (Nova 3 "multi" covers English, Arabic, Urdu, Hindi,
+      // French, Russian, Chinese, Spanish and more), so the AI can switch language mid-call.
+      transcriber: MULTILINGUAL_TRANSCRIBER,
     };
     return {
       phoneNumberId,

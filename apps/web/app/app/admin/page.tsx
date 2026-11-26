@@ -403,16 +403,11 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'live',
         note: 'Writes replies to WhatsApp clients (OpenAI connected)',
       },
-    ],
-  },
-  {
-    title: 'Needs setup',
-    items: [
       {
         label: 'WhatsApp',
         icon: MessageCircle,
-        status: 'setup',
-        note: 'Numbers connect and client messages arrive; replies wait on Meta lifting the account hold. Other agencies wait on Meta App Review',
+        status: 'live',
+        note: 'Client messages arrive and AI replies are delivered on the PropForce number. Agencies connecting their own number wait on Meta App Review',
       },
     ],
   },
@@ -480,8 +475,8 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
       {
         label: 'AI voice calls',
         icon: Phone,
-        status: 'setup',
-        note: 'Inbound log + outbound AI Calling with agency scripts via Vapi; needs VAPI_API_KEY, VAPI_WEBHOOK_SECRET, VAPI_DEFAULT_PHONE_NUMBER_ID and the voice.outbound_calls flag',
+        status: 'live',
+        note: 'Outbound AI Calling with agency scripts and 20+ languages; keys, number and the voice.outbound_calls flag are set. First real test call pending (9am to 6pm Dubai)',
       },
       {
         label: 'Marketing studio',
