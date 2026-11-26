@@ -18,6 +18,9 @@ import { notifyAgentOfEnquiry } from './enquiry-email';
 import { whatsappLink } from './phone';
 import { hitRateLimit, keyedHash } from './rate-limit';
 
+/** Fewest live listings a community needs before the portal shows its asking prices. */
+export const INSIGHT_MIN_LISTINGS = 3;
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -377,6 +380,50 @@ export class PublicPortalService {
           .map((c) => ({ emirate: c.emirate, community: c.community, count: c._count._all })),
         types: types.map((t) => ({ type: t.propertyType, count: t._count._all })),
         amenities: amenities.map((a) => ({ name: a.name, count: Number(a.count) })),
+      };
+    });
+  }
+
+  /**
+   * Asking prices of live listings per community, for the portal's price insights. Only groups
+   * with at least INSIGHT_MIN_LISTINGS listings are returned, so one odd listing never reads as
+   * "the market". These are asking prices on this portal, not transaction prices.
+   */
+  insights() {
+    return this.run(async (tx) => {
+      const rows = await tx.$queryRaw<
+        {
+          community: string;
+          emirate: string;
+          purpose: 'sale' | 'rent';
+          listings: bigint;
+          median_price: number | null;
+          median_price_per_sqft: number | null;
+        }[]
+      >`
+        SELECT community, emirate, listing_type::text AS purpose,
+          count(*) AS listings,
+          percentile_cont(0.5) WITHIN GROUP (ORDER BY price)::float8 AS median_price,
+          (percentile_cont(0.5) WITHIN GROUP (ORDER BY price / area_sqft)
+            FILTER (WHERE area_sqft > 0))::float8 AS median_price_per_sqft
+        FROM property
+        WHERE community IS NOT NULL AND price IS NOT NULL AND price > 0
+          AND (listing_type = 'sale' OR rent_period IS NULL OR rent_period = 'yearly')
+        GROUP BY community, emirate, listing_type
+        HAVING count(*) >= ${INSIGHT_MIN_LISTINGS}
+        ORDER BY count(*) DESC, community ASC
+        LIMIT 40`;
+      return {
+        minListings: INSIGHT_MIN_LISTINGS,
+        data: rows.map((r) => ({
+          community: r.community,
+          emirate: r.emirate,
+          purpose: r.purpose,
+          listings: Number(r.listings),
+          medianPrice: r.median_price == null ? null : Math.round(r.median_price),
+          medianPricePerSqft:
+            r.median_price_per_sqft == null ? null : Math.round(r.median_price_per_sqft),
+        })),
       };
     });
   }

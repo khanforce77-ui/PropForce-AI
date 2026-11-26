@@ -152,6 +152,25 @@ export async function getAgent(id: string): Promise<AgentProfile | null> {
 
 export const getFacets = () => call<Facets>('/facets', { revalidate: 300 });
 
+export interface PriceInsight {
+  community: string;
+  emirate: string;
+  purpose: Purpose;
+  listings: number;
+  /** Median asking price (yearly rent for rentals), AED. */
+  medianPrice: number | null;
+  medianPricePerSqft: number | null;
+}
+
+/** Asking-price medians per community; empty when the API is unreachable. */
+export async function getInsights(): Promise<{ minListings: number; data: PriceInsight[] }> {
+  try {
+    return await call('/insights', { revalidate: 600 });
+  } catch {
+    return { minListings: 3, data: [] };
+  }
+}
+
 export const getSitemap = () =>
   call<{
     data: {
@@ -242,14 +261,14 @@ export interface Site {
 export const FALLBACK_SITE: Site = {
   content: {
     hero: {
-      title: 'Find your next home in the UAE',
+      title: 'Find your next home in Dubai',
       subtitle:
-        'Listings with advertising permits from licensed agencies. Talk to the agent directly on WhatsApp or phone.',
+        'Every listing carries a valid advertising permit. Talk to the agent directly on WhatsApp or phone.',
     },
     announcement: { enabled: false, text: '' },
     sections: { popularCommunities: true, latestListings: true },
     about:
-      "Listings are published by licensed agencies. Every listing shows its advertising permit, the agent's BRN and the agency's ORN where provided.",
+      'Homes for sale and rent in Dubai from licensed agencies. Every listing shows a valid advertising permit, and verified agents carry a badge.',
     contact: {},
     social: {},
     seo: {},

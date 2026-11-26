@@ -62,6 +62,12 @@ export class PublicPortalController {
     return this.portal.facets();
   }
 
+  @Get('insights')
+  @Header('Cache-Control', CACHE)
+  insights() {
+    return this.portal.insights();
+  }
+
   @Get('sitemap')
   @Header('Cache-Control', CACHE)
   sitemap() {
