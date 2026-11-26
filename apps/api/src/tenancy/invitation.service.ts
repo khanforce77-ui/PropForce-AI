@@ -8,6 +8,7 @@ import { generateToken, hashPassword, hashToken } from '../auth/crypto';
 import { PRIVILEGED_ROLES } from './permissions';
 import { assertAgencyCanGrow, audit } from './tenancy.service';
 import type { TenantRequestContext } from './tenant.guard';
+import { renderEmail } from '../email/templates';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const invalidInvite = () =>
@@ -96,8 +97,24 @@ export class InvitationService {
     try {
       await this.email.send({
         to: input.email,
-        subject: `You're invited to join ${agencyName} on PropForce AI`,
-        text: `You have been invited to join ${agencyName} as ${input.role}. Accept within 7 days: ${this.config.webUrl}/accept-invite?token=${token}`,
+        subject: `You're invited to join ${agencyName} on PropForce`,
+        ...renderEmail(
+          {
+            preheader: `Join ${agencyName} on PropForce as ${input.role}.`,
+            heading: `Join ${agencyName} on PropForce`,
+            paragraphs: [
+              `You have been invited to join ${agencyName} as ${input.role.replace(/_/g, ' ')}.`,
+              'PropForce is where the team manages listings, leads and client chats.',
+            ],
+            button: {
+              label: 'Accept invitation',
+              url: `${this.config.webUrl}/accept-invite?token=${token}`,
+            },
+            footnote:
+              'This invitation expires in 7 days. If you were not expecting it, ignore this email.',
+          },
+          this.config.webUrl,
+        ),
       });
     } catch (err) {
       this.logger.error(`Invitation email failed: ${(err as Error).message}`);

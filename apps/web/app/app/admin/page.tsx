@@ -37,6 +37,7 @@ import { AdminBrokerVerifications } from '@/components/admin/broker-verification
 import {
   AgencyDetailsForm,
   CreateAgencyCard,
+  InviteLinkBox,
   InviteToAgencyForm,
 } from '@/components/admin/create-agency';
 import { AdminListingReports } from '@/components/admin/listing-reports';
@@ -480,6 +481,7 @@ export default function PlatformAdminPage() {
   const [open, setOpen] = useState<string | null>(null); // "<action>:<id>"
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const isAdmin = me?.user.isPlatformAdmin === true;
 
   useEffect(() => {
@@ -582,10 +584,11 @@ export default function PlatformAdminPage() {
   };
 
   /** After a child form saved something: show its message and refresh. */
-  const done = async (message: string) => {
+  const done = async (message: string, link?: string) => {
     setOpen(null);
     setError(null);
     setNotice(message);
+    setInviteLink(link ?? null);
     await load();
   };
 
@@ -677,7 +680,7 @@ export default function PlatformAdminPage() {
           <InviteToAgencyForm
             agency={a}
             onCancel={() => setOpen(null)}
-            onSent={(m) => void done(m)}
+            onSent={(m, link) => void done(m, link)}
           />
         ) : null}
         {open === key('plan') ? (
@@ -848,6 +851,7 @@ export default function PlatformAdminPage() {
         </header>
         {error ? <Alert>{error}</Alert> : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
+        {inviteLink ? <InviteLinkBox url={inviteLink} onClose={() => setInviteLink(null)} /> : null}
 
         {tab === 'overview' ? (
           <>
@@ -1057,7 +1061,10 @@ export default function PlatformAdminPage() {
         ) : null}
 
         {tab === 'agencies' && open === 'create-agency' ? (
-          <CreateAgencyCard onCancel={() => setOpen(null)} onCreated={(m) => void done(m)} />
+          <CreateAgencyCard
+            onCancel={() => setOpen(null)}
+            onCreated={(m, link) => void done(m, link)}
+          />
         ) : null}
 
         {tab === 'agencies' ? (

@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Mail, X } from 'lucide-react';
+import { Building2, Copy, Mail, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
@@ -21,7 +21,7 @@ export function CreateAgencyCard({
   onCreated,
   onCancel,
 }: {
-  onCreated: (message: string) => void;
+  onCreated: (message: string, inviteUrl?: string) => void;
   onCancel: () => void;
 }) {
   const { request } = useAuth();
@@ -49,14 +49,15 @@ export function CreateAgencyCard({
     try {
       const res = await request<{
         agencyId: string;
-        invitation: { email: string; emailed: boolean } | null;
+        invitation: { email: string; emailed: boolean; inviteUrl: string } | null;
       }>('/platform/agencies', { method: 'POST', body });
       onCreated(
         res.invitation
           ? res.invitation.emailed
             ? `${body.name} created. Invitation emailed to ${res.invitation.email}.`
-            : `${body.name} created, but the invitation email could not be sent. Resend it from the agency.`
+            : `${body.name} created, but the invitation email could not be sent. Copy the link below and send it on WhatsApp.`
           : `${body.name} created. Open it to add listings and team members.`,
+        res.invitation?.inviteUrl,
       );
     } catch (err) {
       setErrors(fieldErrors(err));
@@ -232,7 +233,7 @@ export function InviteToAgencyForm({
   onCancel,
 }: {
   agency: PlatformAgency;
-  onSent: (message: string) => void;
+  onSent: (message: string, inviteUrl?: string) => void;
   onCancel: () => void;
 }) {
   const { request } = useAuth();
@@ -246,14 +247,15 @@ export function InviteToAgencyForm({
     setBusy(true);
     setError(null);
     try {
-      const res = await request<{ emailed: boolean }>(
+      const res = await request<{ emailed: boolean; inviteUrl: string }>(
         `/platform/agencies/${agency.id}/invitations`,
         { method: 'POST', body: { email, role } },
       );
       onSent(
         res.emailed
           ? `Invitation emailed to ${email} (${role} of ${agency.name}).`
-          : `Invitation created for ${email}, but the email could not be sent.`,
+          : `Invitation created for ${email}, but the email could not be sent. Copy the link below and send it on WhatsApp.`,
+        res.inviteUrl,
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send the invitation.');
@@ -286,5 +288,42 @@ export function InviteToAgencyForm({
         Cancel
       </Button>
     </form>
+  );
+}
+
+/** Shows an invitation link with a copy button, for sharing on WhatsApp when email fails. */
+export function InviteLinkBox({ url, onClose }: { url: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-background p-4 shadow-sm">
+      <p className="text-sm font-medium">Invitation link (valid 7 days, works once)</p>
+      <p className="text-xs text-muted-foreground">
+        Send it only to the person invited, for example on WhatsApp. They sign up with the invited
+        email address.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Input
+          readOnly
+          value={url}
+          aria-label="Invitation link"
+          className="min-w-60 flex-1 font-mono text-xs"
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <Button type="button" onClick={() => void copy()}>
+          <Copy className="h-4 w-4" aria-hidden /> {copied ? 'Copied' : 'Copy link'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onClose} aria-label="Hide link">
+          <X className="h-4 w-4" aria-hidden />
+        </Button>
+      </div>
+    </div>
   );
 }

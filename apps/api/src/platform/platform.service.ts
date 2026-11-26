@@ -15,6 +15,7 @@ import { APP_CONFIG, type AppConfig } from '../config/env';
 import { PRISMA } from '../database/database.module';
 import { EmailSender } from '../email/email.sender';
 import type { AgencyCreate } from './site-content.schemas';
+import { renderEmail } from '../email/templates';
 
 export interface AgencyPlanInput {
   plan?: string | undefined;
@@ -478,18 +479,33 @@ export class PlatformService {
         return { invitation, agencyName: agency.name };
       },
     );
+    // Platform admins also get the link itself, so they can share it on WhatsApp when email
+    // cannot be delivered (e.g. while the email service is limited to verified addresses).
+    const inviteUrl = `${this.config.webUrl}/accept-invite?token=${token}`;
     let emailed = true;
     try {
       await this.email.send({
         to: email,
-        subject: `You're invited to ${role === 'owner' ? 'own' : 'manage'} ${agencyName} on PropForce AI`,
-        text: `PropForce has set up ${agencyName} for you as ${role}. Accept within 7 days: ${this.config.webUrl}/accept-invite?token=${token}`,
+        subject: `You're invited to ${role === 'owner' ? 'own' : 'manage'} ${agencyName} on PropForce`,
+        ...renderEmail(
+          {
+            preheader: `Your agency ${agencyName} is ready on PropForce.`,
+            heading: `Welcome to PropForce`,
+            paragraphs: [
+              `PropForce has set up ${agencyName} for you as ${role}.`,
+              'Accept the invitation to set your password, add your team and publish listings on propforce.io.',
+            ],
+            button: { label: 'Accept invitation', url: inviteUrl },
+            footnote: 'This invitation expires in 7 days and works once.',
+          },
+          this.config.webUrl,
+        ),
       });
     } catch (err) {
       emailed = false;
       this.logger.error(`Invitation email failed: ${(err as Error).message}`);
     }
-    return { ...invitation, emailed };
+    return { ...invitation, emailed, inviteUrl };
   }
 
   updateAgencyDetails(adminUserId: string, agencyId: string, input: AgencyDetailsInput) {

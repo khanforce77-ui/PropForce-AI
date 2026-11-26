@@ -101,6 +101,7 @@ describe('platform admin: agencies created by hand', () => {
       role: 'owner',
       emailed: true,
     });
+    expect(created.body.invitation.inviteUrl).toMatch(/\/accept-invite\?token=[A-Za-z0-9_-]+$/);
 
     const agency = await t.owner.agency.findUniqueOrThrow({ where: { id: agencyId } });
     expect(agency).toMatchObject({
