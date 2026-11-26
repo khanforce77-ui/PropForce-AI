@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { getSupportedEmirates } from '@/lib/env';
 
 const EMIRATES = getSupportedEmirates();
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const limit = (v: string) => (v.trim() === '' ? null : Number(v));
 
 type FieldErrors = Record<string, string>;
@@ -411,7 +412,7 @@ export function DeleteAgencyForm({
             {!preview
               ? 'Checking what this agency holds…'
               : archive
-                ? `It has ${preview.listings} listings, ${preview.contacts} contacts and ${preview.leads} leads, so it is archived instead of erased: its team loses access, its listings leave the website and pending invitations stop working. Nothing is deleted, and you can restore it later.`
+                ? `It has ${plural(preview.listings, 'listing')}, ${plural(preview.contacts, 'contact')} and ${plural(preview.leads, 'lead')}, so it is archived instead of erased: its team loses access, its listings leave the website and pending invitations stop working. Nothing is deleted, and you can restore it later.`
                 : 'It has no listings, contacts or leads. The agency, its team links and invitations are removed. This cannot be undone.'}
           </p>
         </div>
