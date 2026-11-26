@@ -27,6 +27,7 @@ import {
   listDealsSchema,
   splitsSchema,
   summarySchema,
+  revenueSchema,
   taskCreateSchema,
   taskUpdateSchema,
 } from './deals.schemas';
@@ -49,6 +50,13 @@ export class DealsController {
   @RequirePermission('crm:read')
   summary(@CurrentTenant() ctx: TenantRequestContext, @Query() q: unknown) {
     return this.deals.summary(ctx, parseBody(summarySchema, q).type);
+  }
+
+  /** Agency-wide commission revenue: managers and above. */
+  @Get('revenue')
+  @RequirePermission('crm:manage')
+  revenue(@CurrentTenant() ctx: TenantRequestContext, @Query() q: unknown) {
+    return this.deals.revenue(ctx, parseBody(revenueSchema, q).months);
   }
 
   @Post()

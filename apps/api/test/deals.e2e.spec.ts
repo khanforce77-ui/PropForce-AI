@@ -124,6 +124,37 @@ describe('deals and commissions', () => {
       value: 1_950_000,
       commission: 39_000,
     });
+
+    // Revenue report: managers and above only; this month's completed and received commission.
+    await http().get('/v1/deals/revenue').set(agent.h).expect(403);
+    await http()
+      .post('/v1/deals')
+      .set(o.h)
+      .send({ type: 'rental', leadId: l.id, price: 120_000, commissionAmount: 6_000 })
+      .expect(201);
+    const rev = await http().get('/v1/deals/revenue?months=3').set(o.h).expect(200);
+    expect(rev.body.series).toHaveLength(3);
+    expect(rev.body.series.at(-1)).toMatchObject({
+      completedDeals: 1,
+      earned: 39_000,
+      received: 39_000,
+    });
+    expect(rev.body.totals).toMatchObject({
+      completedDeals: 1,
+      earned: 39_000,
+      received: 39_000,
+      agencyShare: 7_800,
+      coBrokers: 3_900,
+    });
+    expect(rev.body.outstanding).toEqual({ notInvoiced: 0, invoicedUnpaid: 0 });
+    expect(rev.body.pipeline).toEqual({
+      sale: { deals: 0, commission: 0 },
+      rental: { deals: 1, commission: 6_000 },
+    });
+    expect(rev.body.team).toEqual([
+      expect.objectContaining({ membershipId: o.membershipId, amount: 19_500 }),
+      expect.objectContaining({ membershipId: agent.membershipId, amount: 7_800 }),
+    ]);
   });
 
   it('rental deals use their own stages; falling through needs a reason; agencies are isolated', async () => {

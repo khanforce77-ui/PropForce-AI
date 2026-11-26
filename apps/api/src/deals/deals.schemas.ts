@@ -100,3 +100,7 @@ export const listDealsSchema = z.object({
 export type ListDealsQuery = z.infer<typeof listDealsSchema>;
 
 export const summarySchema = z.object({ type: z.enum(['sale', 'rental']).default('sale') });
+
+export const revenueSchema = z.object({
+  months: z.coerce.number().int().min(1).max(24).default(12),
+});

@@ -28,6 +28,9 @@ const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
 const isClosed = (stage: string) => (CLOSED_STAGES as readonly string[]).includes(stage);
 
 const member = { select: { id: true, user: { select: { fullName: true } } } } as const;
+/** Dubai is UTC+4 all year. */
+const DUBAI_OFFSET_MS = 4 * 3_600_000;
+
 const dealSelect = {
   id: true,
   reference: true,
@@ -486,6 +489,118 @@ export class DealsService {
         b.commission += d.commission.gross;
       }
       return { type, stages: byStage };
+    });
+  }
+
+  /**
+   * Commission revenue by Dubai calendar month: deals completed (gross commission earned),
+   * commission invoiced and commission received; what is still owed; the open pipeline; and each
+   * team member's share of completed deals in the period. Amounts are AED before VAT.
+   */
+  revenue(ctx: TenantRequestContext, months: number) {
+    return this.run(ctx, async (tx) => {
+      const now = new Date();
+      const local = new Date(now.getTime() + DUBAI_OFFSET_MS);
+      const monthKey = (d: Date) => {
+        const l = new Date(d.getTime() + DUBAI_OFFSET_MS);
+        return `${l.getUTCFullYear()}-${String(l.getUTCMonth() + 1).padStart(2, '0')}`;
+      };
+      const keys: string[] = [];
+      for (let i = months - 1; i >= 0; i--) {
+        const m = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - i, 1));
+        keys.push(`${m.getUTCFullYear()}-${String(m.getUTCMonth() + 1).padStart(2, '0')}`);
+      }
+      const since = new Date(
+        Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - (months - 1), 1) - DUBAI_OFFSET_MS,
+      );
+      const rows = (
+        await tx.deal.findMany({
+          where: {
+            OR: [
+              { stage: { notIn: [...CLOSED_STAGES] } },
+              { stage: 'completed', commissionStatus: { not: 'received' } },
+              { closedAt: { gte: since } },
+              { invoicedAt: { gte: since } },
+              { commissionReceivedAt: { gte: since } },
+            ],
+          },
+          select: dealSelect,
+        })
+      ).map(present);
+
+      const byMonth = new Map(
+        keys.map((k) => [k, { month: k, completedDeals: 0, earned: 0, invoiced: 0, received: 0 }]),
+      );
+      const outstanding = { notInvoiced: 0, invoicedUnpaid: 0 };
+      const pipeline = { sale: { deals: 0, commission: 0 }, rental: { deals: 0, commission: 0 } };
+      const people = new Map<string, { membershipId: string; name: string; amount: number }>();
+      let agencyShare = 0;
+      let coBrokers = 0;
+
+      for (const d of rows) {
+        const gross = d.commission.gross;
+        if (!(CLOSED_STAGES as readonly string[]).includes(d.stage)) {
+          pipeline[d.type].deals += 1;
+          pipeline[d.type].commission += gross;
+          continue;
+        }
+        if (d.stage !== 'completed') continue;
+        if (d.commissionStatus === 'pending') outstanding.notInvoiced += gross;
+        if (d.commissionStatus === 'invoiced') outstanding.invoicedUnpaid += gross;
+        const closed = d.closedAt && byMonth.get(monthKey(d.closedAt));
+        if (closed) {
+          closed.completedDeals += 1;
+          closed.earned += gross;
+          agencyShare += d.commission.agencyAmount;
+          for (const sp of d.commission.splits) {
+            if (!sp.membershipId) {
+              coBrokers += sp.amount;
+              continue;
+            }
+            const name = d.splits.find((x) => x.membershipId === sp.membershipId)?.name ?? '';
+            const p = people.get(sp.membershipId) ?? {
+              membershipId: sp.membershipId,
+              name,
+              amount: 0,
+            };
+            p.amount += sp.amount;
+            people.set(sp.membershipId, p);
+          }
+        }
+        const inv = d.invoicedAt && byMonth.get(monthKey(d.invoicedAt));
+        if (inv) inv.invoiced += gross;
+        const rec = d.commissionReceivedAt && byMonth.get(monthKey(d.commissionReceivedAt));
+        if (rec) rec.received += gross;
+      }
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const series = [...byMonth.values()].map((m) => ({
+        ...m,
+        earned: r2(m.earned),
+        invoiced: r2(m.invoiced),
+        received: r2(m.received),
+      }));
+      return {
+        months,
+        series,
+        totals: {
+          completedDeals: series.reduce((a, m) => a + m.completedDeals, 0),
+          earned: r2(series.reduce((a, m) => a + m.earned, 0)),
+          received: r2(series.reduce((a, m) => a + m.received, 0)),
+          agencyShare: r2(agencyShare),
+          coBrokers: r2(coBrokers),
+        },
+        outstanding: {
+          notInvoiced: r2(outstanding.notInvoiced),
+          invoicedUnpaid: r2(outstanding.invoicedUnpaid),
+        },
+        pipeline: {
+          sale: { ...pipeline.sale, commission: r2(pipeline.sale.commission) },
+          rental: { ...pipeline.rental, commission: r2(pipeline.rental.commission) },
+        },
+        team: [...people.values()]
+          .map((p) => ({ ...p, amount: r2(p.amount) }))
+          .sort((a, b) => b.amount - a.amount),
+      };
     });
   }
 
