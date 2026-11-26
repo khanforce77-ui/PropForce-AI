@@ -40,7 +40,18 @@ describe('loadConfig', () => {
         JWT_PUBLIC_KEY: 'b',
         DATA_ENCRYPTION_KEY: KEY,
       }),
-    ).toThrow('SMTP_URL');
+    ).toThrow('SMTP_URL or RESEND_API_KEY');
+  });
+
+  it('accepts a Resend key instead of SMTP', () => {
+    const c = loadConfig({
+      NODE_ENV: 'staging',
+      JWT_PRIVATE_KEY: 'a',
+      JWT_PUBLIC_KEY: 'b',
+      DATA_ENCRYPTION_KEY: KEY,
+      RESEND_API_KEY: 're_test',
+    });
+    expect(c.email.resendApiKey).toBe('re_test');
   });
 
   it('uses Secure cookies only when deployed', () => {
