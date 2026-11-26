@@ -399,7 +399,12 @@ const ROADMAP: { title: string; items: RoadmapItem[] }[] = [
         status: 'setup',
         note: 'Inbound via Vapi; needs VAPI_WEBHOOK_SECRET and the Vapi server URL. Outbound off',
       },
-      { label: 'Marketing studio', icon: Megaphone, status: 'soon', note: 'Phase 4' },
+      {
+        label: 'Marketing studio',
+        icon: Megaphone,
+        status: 'live',
+        note: 'Printable branded brochures, AI captions reviewed before use, tagged campaign links and lead attribution',
+      },
       { label: 'Revenue reports', icon: BadgeDollarSign, status: 'soon', note: 'Phase 4' },
     ],
   },

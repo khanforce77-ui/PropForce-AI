@@ -81,6 +81,20 @@ export const CONSENT_CONTACT_TEXT =
   'I agree that this agency may contact me by phone, WhatsApp or email about this enquiry, and that my details are shared with them for this purpose.';
 export const CONSENT_MARKETING_TEXT = 'Send me similar property offers from this agency.';
 
+/** A UTM value: short, printable; anything else is dropped rather than refused. */
+const utmTag = z
+  .string()
+  .trim()
+  .max(500)
+  .transform((v) => {
+    const clean = v
+      .replace(/[^\p{L}\p{N} ._+\-/]/gu, '')
+      .slice(0, 100)
+      .trim();
+    return clean || undefined;
+  })
+  .optional();
+
 export const enquirySchema = z.strictObject({
   fullName: z.string().trim().min(2).max(120),
   phone,
@@ -98,6 +112,8 @@ export const enquirySchema = z.strictObject({
   elapsedMs: z.number().int().min(0).max(86_400_000).optional(),
   /** Cloudflare Turnstile token; required once TURNSTILE_SECRET_KEY is set. */
   captchaToken: z.string().max(4096).optional(),
+  /** Campaign tags from the link the visitor arrived by, for attribution. */
+  utm: z.strictObject({ source: utmTag, medium: utmTag, campaign: utmTag }).partial().optional(),
 });
 export type EnquiryInput = z.infer<typeof enquirySchema>;
 
