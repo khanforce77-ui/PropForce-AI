@@ -99,6 +99,7 @@ export class PlatformService {
           seatLimit: true,
           listingLimit: true,
           isPlatformOwned: true,
+          kind: true,
           memberships: {
             where: { status: 'active' },
             select: { role: true, user: { select: { fullName: true, email: true } } },

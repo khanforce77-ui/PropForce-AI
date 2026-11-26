@@ -44,6 +44,8 @@ const envSchema = z.object({
   META_APP_SECRET: z.string().optional(),
   /** Shared secret Vapi sends with server webhooks (Bearer token or X-Vapi-Secret). */
   VAPI_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /** Bearer secret Vercel Cron sends to scheduled jobs (daily payment reminders). Unset = jobs refuse. */
+  CRON_SECRET: z.string().min(16).optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   /**
    * Optional never-expiring system user token of the business that owns the Meta app. Lets a
@@ -113,6 +115,8 @@ export interface AppConfig {
   };
   /** Voice provider (Vapi) webhooks. Without a secret the webhook refuses every call. */
   voice: { webhookSecret?: string };
+  /** Bearer secret for scheduled jobs (Vercel Cron). */
+  cronSecret?: string;
   ai: {
     /** `none`: AI replies are off; conversations wait for an agent. */
     provider: 'openai' | 'fake' | 'none';
@@ -211,6 +215,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       graphVersion: e.META_GRAPH_VERSION,
     },
     voice: { ...(e.VAPI_WEBHOOK_SECRET ? { webhookSecret: e.VAPI_WEBHOOK_SECRET } : {}) },
+    ...(e.CRON_SECRET ? { cronSecret: e.CRON_SECRET } : {}),
     ai: {
       provider: aiProvider,
       ...(e.OPENAI_API_KEY ? { openaiApiKey: e.OPENAI_API_KEY } : {}),
