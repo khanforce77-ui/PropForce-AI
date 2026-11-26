@@ -4,6 +4,7 @@ import { PhoneOutgoing, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { BulkNumbersForm, type BulkResult } from '@/components/crm/bulk-numbers';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -11,7 +12,10 @@ import { ApiError } from '@/lib/api';
 import { useAgencyMembership } from '@/lib/agency-context';
 import { useAuth } from '@/lib/auth';
 import {
+  dubaiInputToIso,
+  nextCallingStart,
   notReadyReason,
+  when,
   type AiCallingStatus,
   type CallScript,
   type TranscriptPolicy,
@@ -302,6 +306,112 @@ function ScriptForm({
   );
 }
 
+/** Bulk calls per request; bigger lists are sent in parts. */
+const BULK_CHUNK = 50;
+
+function BulkCalls({
+  agencyId,
+  scripts,
+  status,
+}: {
+  agencyId: string;
+  scripts: CallScript[];
+  status: AiCallingStatus;
+}) {
+  const { request } = useAuth();
+  const active = scripts.filter((s) => s.active);
+  const [scriptId, setScriptId] = useState(active[0]?.id ?? '');
+  const [later, setLater] = useState(false);
+  const [at, setAt] = useState(() => nextCallingStart(status.callingHours.from));
+  const script = active.find((s) => s.id === scriptId);
+
+  async function book(r: BulkResult, consented: boolean): Promise<string> {
+    const ids = r.contacts.flatMap((c) => (c.id ? [c.id] : []));
+    if (!script || ids.length === 0) return 'No calls were booked.';
+    const base = later && at ? new Date(dubaiInputToIso(at)) : new Date();
+    let booked = 0;
+    let first: string | null = null;
+    const reasons = new Map<string, number>();
+    for (let k = 0; k < ids.length; k += BULK_CHUNK) {
+      const startAt = new Date(base.getTime() + (k / BULK_CHUNK) * BULK_CHUNK * 60_000);
+      const res = await request<{
+        booked: { at: string }[];
+        skipped: { reason: string }[];
+      }>('/ai-calling/calls/bulk', {
+        tenantId: agencyId,
+        method: 'POST',
+        body: {
+          scriptId,
+          contactIds: ids.slice(k, k + BULK_CHUNK),
+          ...(later || k > 0 ? { startAt: startAt.toISOString() } : {}),
+        },
+      });
+      booked += res.booked.length;
+      first ??= res.booked[0]?.at ?? null;
+      for (const s of res.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
+    }
+    const skipped = [...reasons].map(([reason, n]) => `${n} skipped: ${reason}`);
+    return [
+      booked
+        ? `${booked} AI call${booked === 1 ? '' : 's'} booked, one a minute${first ? ` from ${when(first)} Dubai time` : ''}. Results appear in the call log.`
+        : 'No calls were booked.',
+      ...skipped,
+      !consented && reasons.size ? 'Tick the consent box if these people agreed to calls.' : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return (
+    <BulkNumbersForm
+      agencyId={agencyId}
+      channels={['phone_call']}
+      purpose={script?.purpose ?? 'service'}
+      consentLabel={
+        script?.purpose === 'marketing'
+          ? 'These people agreed to receive property offers from us by phone.'
+          : 'These people enquired with us and agreed to be called about their enquiry.'
+      }
+      submitLabel={later ? 'Add numbers and schedule calls' : 'Add numbers and call'}
+      canSubmit={!!script}
+      onAdded={book}
+      extra={
+        <div className="flex flex-wrap items-end gap-3">
+          <Field id="bulk-script" label="Script">
+            <Select id="bulk-script" value={scriptId} onChange={(e) => setScriptId(e.target.value)}>
+              {active.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field id="bulk-when" label="When">
+            <Select
+              id="bulk-when"
+              value={later ? 'later' : 'now'}
+              onChange={(e) => setLater(e.target.value === 'later')}
+            >
+              <option value="now">Call now</option>
+              <option value="later">Schedule</option>
+            </Select>
+          </Field>
+          {later ? (
+            <Field id="bulk-at" label="Start (Dubai time)">
+              <Input
+                id="bulk-at"
+                type="datetime-local"
+                value={at}
+                onChange={(e) => setAt(e.target.value)}
+              />
+            </Field>
+          ) : null}
+        </div>
+      }
+    />
+  );
+}
+
 export default function AiCallingPage() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const { request } = useAuth();
@@ -450,6 +560,25 @@ export default function AiCallingPage() {
           </ul>
         )}
       </Card>
+
+      {status && scripts ? (
+        <Card className="flex flex-col gap-3">
+          <div>
+            <h2 className="font-medium">Bulk AI calls</h2>
+            <p className="text-sm text-muted-foreground">
+              Paste numbers, pick a script, and call now or schedule. Calls go one a minute, only{' '}
+              {status.callingHours.from}:00 to {status.callingHours.to}:00 Dubai time (later ones
+              move to the next day), and only to people with phone call consent. The numbers are
+              saved in Contacts.
+            </p>
+          </div>
+          {scripts.some((s) => s.active) ? (
+            <BulkCalls agencyId={agencyId} scripts={scripts} status={status} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Create or switch on a script first.</p>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Phone, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
@@ -160,6 +160,24 @@ export default function ContactPage() {
         <p className="text-xs text-muted-foreground">
           {titleCase(contact.source)} · owner {contact.owner?.user.fullName ?? 'none'}
         </p>
+        {contact.phoneE164 && !contact.doNotContact ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              href={`https://wa.me/${contact.phoneE164.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-green-700 hover:bg-muted dark:text-green-400"
+            >
+              <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp
+            </a>
+            <a
+              href={`tel:${contact.phoneE164}`}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
+            >
+              <Phone className="h-4 w-4" aria-hidden /> Call
+            </a>
+          </div>
+        ) : null}
       </div>
 
       {error ? <Alert>{error}</Alert> : null}

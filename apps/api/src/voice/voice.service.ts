@@ -118,6 +118,7 @@ export class VoiceService {
           summary: true,
           costUsd: true,
           status: true,
+          scheduledAt: true,
           outcome: true,
           error: true,
           createdAt: true,

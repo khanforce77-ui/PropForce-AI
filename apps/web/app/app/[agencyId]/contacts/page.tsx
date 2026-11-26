@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Search } from 'lucide-react';
+import { ListPlus, MessageCircle, Phone, Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { BulkNumbersForm } from '@/components/crm/bulk-numbers';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -183,6 +184,7 @@ export default function ContactsPage() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
+  const [bulk, setBulk] = useState(false);
 
   const load = useCallback(
     async (after?: string) => {
@@ -218,14 +220,37 @@ export default function ContactsPage() {
             {loaded ? `${total} contact${total === 1 ? '' : 's'}` : 'Loading…'}
           </p>
         </div>
-        {!adding ? (
-          <Button onClick={() => setAdding(true)}>
-            <Plus className="h-4 w-4" aria-hidden /> Add contact
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {!bulk ? (
+            <Button variant="outline" onClick={() => setBulk(true)}>
+              <ListPlus className="h-4 w-4" aria-hidden /> Add numbers in bulk
+            </Button>
+          ) : null}
+          {!adding ? (
+            <Button onClick={() => setAdding(true)}>
+              <Plus className="h-4 w-4" aria-hidden /> Add contact
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {adding ? <AddContact agencyId={agencyId} onCancel={() => setAdding(false)} /> : null}
+      {bulk ? (
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-medium">Add numbers in bulk</h2>
+          <BulkNumbersForm
+            agencyId={agencyId}
+            channels={['phone_call', 'whatsapp']}
+            consentLabel="These people agreed to be contacted by us by phone and WhatsApp about their property enquiry."
+            submitLabel="Add numbers"
+            onAdded={async () => {
+              await load();
+              return 'Use the WhatsApp and Call buttons in the list, or AI Calling to call them all.';
+            }}
+            onCancel={() => setBulk(false)}
+          />
+        </Card>
+      ) : null}
 
       <div className="relative">
         <Search
@@ -262,6 +287,9 @@ export default function ContactsPage() {
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Leads</th>
                 <th className="px-4 py-3 font-medium">Owner</th>
+                <th className="px-4 py-3 font-medium">
+                  <span className="sr-only">Contact</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -283,6 +311,30 @@ export default function ContactsPage() {
                   <td className="px-4 py-3">{c.email ?? '—'}</td>
                   <td className="px-4 py-3 tabular-nums">{c._count.leads}</td>
                   <td className="px-4 py-3">{c.owner?.user.fullName ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    {c.phoneE164 && !c.doNotContact ? (
+                      <div className="flex gap-1">
+                        <a
+                          href={`https://wa.me/${c.phoneE164.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`WhatsApp ${c.fullName}`}
+                          title="Open in WhatsApp"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-green-600 hover:bg-muted"
+                        >
+                          <MessageCircle className="h-4 w-4" aria-hidden />
+                        </a>
+                        <a
+                          href={`tel:${c.phoneE164}`}
+                          aria-label={`Call ${c.fullName}`}
+                          title="Call"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-primary hover:bg-muted"
+                        >
+                          <Phone className="h-4 w-4" aria-hidden />
+                        </a>
+                      </div>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

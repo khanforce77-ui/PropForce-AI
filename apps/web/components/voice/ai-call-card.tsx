@@ -5,11 +5,18 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, Card } from '@/components/ui/card';
-import { Field, Select } from '@/components/ui/input';
+import { Field, Input, Select } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { ConsentState } from '@/lib/crm';
-import { notReadyReason, type AiCallingStatus, type CallScript } from '@/lib/voice';
+import {
+  dubaiInputToIso,
+  nextCallingStart,
+  notReadyReason,
+  when,
+  type AiCallingStatus,
+  type CallScript,
+} from '@/lib/voice';
 
 /** "Call with AI" on a contact: pick one of the agency's scripts and place the call. */
 export function AiCallCard({
@@ -30,6 +37,8 @@ export function AiCallCard({
   const [scripts, setScripts] = useState<CallScript[] | null>(null);
   const [scriptId, setScriptId] = useState('');
   const [leadId, setLeadId] = useState('');
+  const [later, setLater] = useState(false);
+  const [at, setAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -42,6 +51,7 @@ export function AiCallCard({
           request<{ data: CallScript[] }>('/ai-calling/scripts', { tenantId: agencyId }),
         ]);
         setStatus(s);
+        setAt((cur) => cur || nextCallingStart(s.callingHours.from));
         const active = list.data.filter((x) => x.active);
         setScripts(active);
         setScriptId((cur) => cur || active[0]?.id || '');
@@ -62,12 +72,22 @@ export function AiCallCard({
     setError(null);
     setNotice(null);
     try {
+      const scheduledAt = later && at ? dubaiInputToIso(at) : null;
       await request('/ai-calling/calls', {
         tenantId: agencyId,
         method: 'POST',
-        body: { contactId, scriptId, ...(leadId ? { leadId } : {}) },
+        body: {
+          contactId,
+          scriptId,
+          ...(leadId ? { leadId } : {}),
+          ...(scheduledAt ? { scheduledAt } : {}),
+        },
       });
-      setNotice('Calling now. The result appears in the call log when the call ends.');
+      setNotice(
+        scheduledAt
+          ? `Call booked for ${when(scheduledAt)} Dubai time. It shows in the call log.`
+          : 'Calling now. The result appears in the call log when the call ends.',
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not start the call.');
     } finally {
@@ -124,12 +144,34 @@ export function AiCallCard({
                 the AI can call.
               </p>
             ) : null}
-            <div>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field id="ai-when" label="When">
+                <Select
+                  id="ai-when"
+                  value={later ? 'later' : 'now'}
+                  onChange={(e) => setLater(e.target.value === 'later')}
+                >
+                  <option value="now">Call now</option>
+                  <option value="later">Schedule for later</option>
+                </Select>
+              </Field>
+              {later ? (
+                <Field id="ai-at" label="Date and time (Dubai)">
+                  <Input
+                    id="ai-at"
+                    type="datetime-local"
+                    value={at}
+                    onChange={(e) => setAt(e.target.value)}
+                  />
+                </Field>
+              ) : null}
               <Button
                 onClick={() => void call()}
-                disabled={busy || !scriptId || !!blocked || consent?.status !== 'granted'}
+                disabled={
+                  busy || !scriptId || !!blocked || consent?.status !== 'granted' || (later && !at)
+                }
               >
-                {busy ? 'Starting…' : 'Call now'}
+                {busy ? 'Starting…' : later ? 'Schedule call' : 'Call now'}
               </Button>
             </div>
             {status ? (

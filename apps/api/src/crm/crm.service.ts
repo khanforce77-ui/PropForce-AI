@@ -12,8 +12,10 @@ import { hasPermission } from '../tenancy/permissions';
 import { audit } from '../tenancy/tenancy.service';
 import { ownMembershipId, type TenantRequestContext } from '../tenancy/tenant.guard';
 import { currentConsent } from './consent';
+import { parseBulkLine } from './crm.schemas';
 import type {
   ConsentInput,
+  ContactBulkInput,
   ContactCreateInput,
   ContactUpdateInput,
   LeadCreateInput,
@@ -190,6 +192,113 @@ export class CrmService {
         after: { source: contact.source, consents: (input.consents ?? []).length },
       });
       return contact;
+    });
+  }
+
+  /**
+   * Adds many people from pasted numbers. Numbers already in the agency are reused, never
+   * duplicated. Confirmed consent is recorded per contact unless they withdrew it or are marked
+   * "do not contact".
+   */
+  bulkAddContacts(ctx: TenantRequestContext, input: ContactBulkInput) {
+    return this.run(ctx, async (tx) => {
+      const invalid: string[] = [];
+      const parsed = new Map<string, string | null>();
+      for (const raw of input.lines) {
+        if (!raw.trim()) continue;
+        const row = parseBulkLine(raw);
+        if (!row) invalid.push(raw.trim().slice(0, 60));
+        else if (!parsed.has(row.phone) || (!parsed.get(row.phone) && row.name))
+          parsed.set(row.phone, row.name);
+      }
+      const phones = [...parsed.keys()];
+      const existing = await tx.contact.findMany({
+        where: { phoneE164: { in: phones } },
+        select: { id: true, phoneE164: true, fullName: true, doNotContact: true },
+      });
+      const visible = new Set(
+        (
+          await tx.contact.findMany({
+            where: { AND: [{ id: { in: existing.map((c) => c.id) } }, this.contactScope(ctx)] },
+            select: { id: true },
+          })
+        ).map((c) => c.id),
+      );
+      const byPhone = new Map(existing.map((c) => [c.phoneE164!, c]));
+      const tags = input.tag ? [input.tag] : [];
+
+      const contacts: {
+        id: string | null;
+        phone: string;
+        name: string;
+        status: 'created' | 'existing' | 'other_agent';
+      }[] = [];
+      let consentRecorded = 0;
+      for (const phone of phones) {
+        let row = byPhone.get(phone);
+        let status: 'created' | 'existing' | 'other_agent' = 'existing';
+        if (!row) {
+          row = await tx.contact.create({
+            data: {
+              tenantId: ctx.tenantId,
+              fullName: parsed.get(phone) ?? phone,
+              phoneE164: phone,
+              source: 'import',
+              ownerMembershipId: ctx.membershipId,
+              tags,
+              createdBy: ctx.userId,
+            },
+            select: { id: true, phoneE164: true, fullName: true, doNotContact: true },
+          });
+          status = 'created';
+        } else if (!visible.has(row.id)) {
+          // Someone else's contact: say so, but do not reveal or change it.
+          contacts.push({ id: null, phone, name: phone, status: 'other_agent' });
+          continue;
+        } else if (tags.length) {
+          await tx.contact.update({
+            where: { id: row.id },
+            data: { tags: { push: input.tag! } },
+          });
+        }
+        if (input.consent && !row.doNotContact) {
+          for (const channel of input.consent.channels) {
+            const latest = await tx.consentRecord.findFirst({
+              where: { contactId: row.id, channel, purpose: input.consent.purpose },
+              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+              select: { status: true },
+            });
+            if (latest) continue; // granted already, or withdrawn: a bulk tick never re-grants
+            await tx.consentRecord.create({
+              data: {
+                tenantId: ctx.tenantId,
+                contactId: row.id,
+                channel,
+                purpose: input.consent.purpose,
+                status: 'granted',
+                method: input.consent.method,
+                evidence: 'Confirmed by the agency when adding numbers in bulk',
+                recordedBy: ctx.userId,
+              },
+            });
+            consentRecorded++;
+          }
+        }
+        contacts.push({ id: row.id, phone, name: row.fullName, status });
+      }
+      await audit(tx, ctx, {
+        action: 'contact.bulk_added',
+        entityType: 'contact',
+        entityId: null,
+        after: {
+          created: contacts.filter((c) => c.status === 'created').length,
+          existing: contacts.filter((c) => c.status !== 'created').length,
+          invalid: invalid.length,
+          consentRecorded,
+          consent: input.consent ?? null,
+        },
+      });
+      return { contacts, invalid, consentRecorded };
     });
   }
 

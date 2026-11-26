@@ -60,6 +60,21 @@ describe('VoiceDialer', () => {
     expect(withBase.assistantOverrides.model.messages[0].content).toBe('rules');
   });
 
+  it('books a call for later with a schedule plan', () => {
+    const env = { VAPI_WEBHOOK_SECRET: 's'.repeat(20), VAPI_DEFAULT_PHONE_NUMBER_ID: 'pn_default' };
+    const earliestAt = new Date('2026-11-28T06:00:00Z');
+    const latestAt = new Date('2026-11-28T14:00:00Z');
+    const body = dialer(env).buildRequest({
+      ...input,
+      schedule: { earliestAt, latestAt },
+    }) as Loose;
+    expect(body.schedulePlan).toEqual({
+      earliestAt: '2026-11-28T06:00:00.000Z',
+      latestAt: '2026-11-28T14:00:00.000Z',
+    });
+    expect((dialer(env).buildRequest(input) as Loose).schedulePlan).toBeUndefined();
+  });
+
   it('refuses to build a call with no number', () => {
     expect(() => dialer({}).buildRequest(input)).toThrow(/No calling number/);
   });
