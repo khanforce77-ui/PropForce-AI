@@ -243,7 +243,8 @@ describe('public portal: listings', () => {
           purpose: 'rent',
           listings: 3,
           medianPrice: 120_000,
-          medianPricePerSqft: 120,
+          // The helper's listings are 1,200 sqft.
+          medianPricePerSqft: 100,
         },
       ]),
     );
